@@ -1,0 +1,60 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: #04050e;
+  height: 100%;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+.vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(2, 3, 10, 0) 55%,
+    rgba(2, 3, 10, 0.35) 88%,
+    rgba(2, 3, 10, 0.7) 100%
+  );
+  z-index: 2;
+}
+
+.hint {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  color: rgba(210, 215, 255, 0.55);
+  font: 11px/1 "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.scroll-spacer {
+  height: 600vh;
+  width: 1px;
+}
