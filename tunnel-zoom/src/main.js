@@ -27,7 +27,48 @@ const CONFIG = {
   pulseMode: true, // electric bursts travelling down each line
   pulseSpeed: 1.2,
   curvature: 1, // 0 = dead-straight lines, 1 = current organic wiggle
+  tunnelCurve: 1, // how strongly the tunnel path itself bends (0 = straight ahead)
+  lineThickness: 1, // tube radius multiplier — 0.1 gives many hair-thin lines
 };
+
+// ---------------------------------------------------------------------------
+// Tunnel path — the whole tunnel bends along a smooth sinusoidal 3D path.
+// The same math runs in JS (camera, sprites) and GLSL (tubes, dots), driven
+// by one shared uniform so the GUI slider bends everything in lockstep.
+// ---------------------------------------------------------------------------
+const tunnelCurveUniform = { value: CONFIG.tunnelCurve };
+
+const TUNNEL_PATH_GLSL = /* glsl */ `
+  uniform float uCurveAmp;
+  vec2 tunnelOffset(float z) {
+    return uCurveAmp * vec2(6.0 * sin(z * 0.025), 4.0 * sin(z * 0.017 + 2.0));
+  }
+`;
+
+function tunnelOffsetX(z) {
+  return tunnelCurveUniform.value * 6 * Math.sin(z * 0.025);
+}
+function tunnelOffsetY(z) {
+  return tunnelCurveUniform.value * 4 * Math.sin(z * 0.017 + 2.0);
+}
+
+// bend three.js built-in materials (solid tubes, dot clouds) with the same path
+function addTunnelBend(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uCurveAmp = tunnelCurveUniform;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\n' + TUNNEL_PATH_GLSL)
+      .replace(
+        '#include <project_vertex>',
+        /* glsl */ `
+        vec4 bentWorldPos = modelMatrix * vec4(transformed, 1.0);
+        bentWorldPos.xy += tunnelOffset(bentWorldPos.z);
+        vec4 mvPosition = viewMatrix * bentWorldPos;
+        gl_Position = projectionMatrix * mvPosition;
+        `
+      );
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Tunable constants
@@ -178,7 +219,7 @@ function buildStrand(rng, angle0, steps, tubularSegments, radialSegments) {
     points.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, z));
   }
   const curve = new THREE.CatmullRomCurve3(points);
-  const geo = new THREE.TubeGeometry(curve, tubularSegments, 0.14 + rng() * 0.08, radialSegments, false);
+  const geo = new THREE.TubeGeometry(curve, tubularSegments, (0.14 + rng() * 0.08) * CONFIG.lineThickness, radialSegments, false);
   taperTube(geo, curve, tubularSegments, radialSegments, rng);
   return { geo, points, curve };
 }
@@ -213,7 +254,7 @@ function buildChunk(seed) {
         pts.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, z));
       }
       const bCurve = new THREE.CatmullRomCurve3(pts);
-      const bGeo = new THREE.TubeGeometry(bCurve, 24, 0.14 + rng() * 0.08, 12, false);
+      const bGeo = new THREE.TubeGeometry(bCurve, 24, (0.14 + rng() * 0.08) * CONFIG.lineThickness, 12, false);
       taperTube(bGeo, bCurve, 24, 12, rng);
       geometries.push(bGeo);
     }
@@ -264,8 +305,10 @@ const tendrilMaterial = new THREE.ShaderMaterial({
     uTime: { value: 0 },
     uPulseOn: { value: CONFIG.pulseMode ? 1 : 0 },
     uPulseSpeed: { value: CONFIG.pulseSpeed },
+    uCurveAmp: tunnelCurveUniform,
   },
   vertexShader: /* glsl */ `
+    ${TUNNEL_PATH_GLSL}
     varying vec3 vColor;
     varying vec3 vWorldNormal;
     varying vec3 vWorldTangent;
@@ -283,6 +326,7 @@ const tendrilMaterial = new THREE.ShaderMaterial({
       vWorldNormal = normalize(mat3(modelMatrix) * normal);
       vWorldTangent = normalize(mat3(modelMatrix) * aTangent.xyz);
       vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      worldPos.xy += tunnelOffset(worldPos.z);
       vWorldPos = worldPos.xyz;
       vec4 mvPosition = viewMatrix * worldPos;
       vFogDepth = -mvPosition.z;
@@ -345,6 +389,7 @@ const solidTendrilMaterial = new THREE.MeshBasicMaterial({
   depthWrite: false,
   side: THREE.DoubleSide,
 });
+addTunnelBend(solidTendrilMaterial);
 
 function activeTubeMaterial() {
   return CONFIG.softLines ? tendrilMaterial : solidTendrilMaterial;
@@ -380,6 +425,7 @@ const moteMaterial = new THREE.PointsMaterial({
   depthWrite: false,
   color: MOTE_COLOR,
 });
+addTunnelBend(moteMaterial);
 
 // ---------------------------------------------------------------------------
 // Pool of live tunnel chunks + glowing core nodes, recycled as we travel
@@ -491,6 +537,10 @@ bloomFolder
   .onChange((v) => (bloomPass.threshold = v));
 
 const motionFolder = gui.addFolder('Motion');
+motionFolder
+  .add(CONFIG, 'tunnelCurve', 0, 3, 0.01)
+  .name('Tunnel Curve')
+  .onChange((v) => (tunnelCurveUniform.value = v));
 motionFolder.add(CONFIG, 'movementSpeed', 0.02, 0.6, 0.01).name('Movement Speed').onChange(updateScrollTarget);
 motionFolder.add(CONFIG, 'zoomMultiplier', 0.1, 2, 0.01).name('Zoom Multiplier').onChange(updateScrollTarget);
 motionFolder
@@ -505,6 +555,7 @@ const geometryFolder = gui.addFolder('Geometry');
 geometryFolder.add(CONFIG, 'lineCount', 4, 80, 1).name('Number of Lines').onFinishChange(rebuildChunks);
 geometryFolder.add(CONFIG, 'dotCount', 0, 400, 1).name('Number of Dots/Stars').onFinishChange(rebuildChunks);
 geometryFolder.add(CONFIG, 'curvature', 0, 2, 0.01).name('Line Curvature').onFinishChange(rebuildChunks);
+geometryFolder.add(CONFIG, 'lineThickness', 0.05, 3, 0.05).name('Line Thickness').onFinishChange(rebuildChunks);
 
 // ---------------------------------------------------------------------------
 // Animation loop
@@ -517,13 +568,17 @@ function animate() {
   const time = clock.elapsedTime;
 
   currentDistance += (targetDistance - currentDistance) * Math.min(1, dt * 4.5);
-  camera.position.z = -currentDistance;
   tendrilMaterial.uniforms.uTime.value = time;
 
-  // gentle organic drift
-  camera.position.x = Math.sin(time * 0.35) * 0.18;
-  camera.position.y = Math.cos(time * 0.27) * 0.14;
-  camera.rotation.z = Math.sin(time * 0.15) * 0.04;
+  // follow the curving tunnel path, with a gentle organic drift on top,
+  // looking ahead along the path so travel banks into the bends
+  const camZ = -currentDistance;
+  const driftX = Math.sin(time * 0.35) * 0.18;
+  const driftY = Math.cos(time * 0.27) * 0.14;
+  camera.position.set(tunnelOffsetX(camZ) + driftX, tunnelOffsetY(camZ) + driftY, camZ);
+  const aheadZ = camZ - 14;
+  camera.lookAt(tunnelOffsetX(aheadZ) + driftX, tunnelOffsetY(aheadZ) + driftY, aheadZ);
+  camera.rotation.z += Math.sin(time * 0.15) * 0.04;
 
   const baseIndex = Math.floor(currentDistance / SEGMENT_LENGTH) - Math.floor(POOL_SIZE / 2);
   for (let k = 0; k < POOL_SIZE; k++) {
@@ -543,7 +598,7 @@ function animate() {
 
     const core = coreSprites[k];
     const coreZ = z - SEGMENT_LENGTH;
-    core.position.set(0, 0, coreZ);
+    core.position.set(tunnelOffsetX(coreZ), tunnelOffsetY(coreZ), coreZ);
     const pulse = 1 + 0.18 * Math.sin(time * 1.6 + segIndex * 1.7);
     // shrink cores as the camera closes in so passing one reads as a soft
     // glow drifting by instead of a full-screen whiteout

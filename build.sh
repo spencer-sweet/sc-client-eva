@@ -79,6 +79,16 @@ echo "==> Generating root index"
       text-shadow: none;
       outline: none;
     }
+    .version-bar { margin-bottom: 1.25rem; }
+    select {
+      font: inherit;
+      background: #000;
+      color: #33ff33;
+      border: 1px solid #1c8f1c;
+      padding: 0.2rem 0.4rem;
+      text-shadow: inherit;
+    }
+    select:focus { outline: 1px solid #33ff33; }
     .cursor {
       display: inline-block;
       width: 0.6em;
@@ -91,6 +101,12 @@ echo "==> Generating root index"
   </style>
 </head>
 <body>
+  <div class="line version-bar">
+    <span class="prompt">version:</span>
+    <select id="versions" aria-label="Select deployed version">
+      <option value="">main (current)</option>
+    </select>
+  </div>
   <div class="line dim">last login: never — access granted</div>
   <div class="line"><span class="prompt">visitor@demos:~$</span> ls ./demos</div>
 HTML
@@ -99,6 +115,56 @@ HTML
   done
   cat <<'HTML'
   <div class="line"><span class="cursor"></span></div>
+  <script>
+    (function () {
+      var REPO = 'spencer-sweet/sc-client-eva';
+      var MAX = 15;
+      var sel = document.getElementById('versions');
+
+      sel.addEventListener('change', function () {
+        if (sel.value) window.location.href = sel.value;
+      });
+
+      function addOption(label, url) {
+        var opt = document.createElement('option');
+        opt.value = url;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      }
+
+      // Each Cloudflare Pages deploy shows up as a check run on its commit; the
+      // check run's external_id is the deployment id, whose first 8 chars are
+      // the preview subdomain: https://<id8>.<project>.pages.dev
+      var PROJECT = 'sc-client-eva';
+      fetch('https://api.github.com/repos/' + REPO + '/commits?per_page=' + MAX)
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (commits) {
+          if (!Array.isArray(commits)) return;
+          return commits.reduce(function (chain, c) {
+            return chain.then(function () {
+              return fetch('https://api.github.com/repos/' + REPO + '/commits/' + c.sha + '/check-runs')
+                .then(function (r) { return r.ok ? r.json() : {}; })
+                .then(function (data) {
+                  var run = (data.check_runs || []).filter(function (cr) {
+                    return cr.name === 'Cloudflare Pages' && cr.conclusion === 'success' && cr.external_id;
+                  })[0];
+                  if (!run) return;
+                  var hash = run.external_id.slice(0, 8);
+                  var url = 'https://' + hash + '.' + PROJECT + '.pages.dev';
+                  var msg = (c.commit.message || '').split('\n')[0].slice(0, 40);
+                  addOption(c.sha.slice(0, 7) + ' — ' + msg + ' [' + hash + ']', url);
+                });
+            });
+          }, Promise.resolve());
+        })
+        .catch(function () {
+          var opt = document.createElement('option');
+          opt.disabled = true;
+          opt.textContent = '(version history unavailable)';
+          sel.appendChild(opt);
+        });
+    })();
+  </script>
 </body>
 </html>
 HTML
