@@ -27,12 +27,12 @@ for name in "${sites[@]}"; do
   echo "==> Building $name"
   (
     cd "$ROOT/$name"
-    if [ -f package-lock.json ]; then
-      npm ci
+    if [ -f pnpm-lock.yaml ]; then
+      pnpm install --frozen-lockfile
     else
-      npm install
+      pnpm install
     fi
-    npx vite build --base="/$name/" --outDir "$DIST/$name" --emptyOutDir
+    pnpm exec vite build --base="/$name/" --outDir "$DIST/$name" --emptyOutDir
   )
 done
 
