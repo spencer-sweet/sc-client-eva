@@ -1,15 +1,16 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --glass-w: 320px;
-  --glass-h: 180px;
-  --glass-r: 90px;
+  --glass-w: 300px;
+  --glass-h: 300px;
+  --bg: #0a0f2c;
+  --fg: #ffffff;
 }
 
 body {
   font-family: Georgia, "Times New Roman", serif;
-  background: #f4f1ea;
-  color: #1d1c1a;
+  background: var(--bg);
+  color: var(--fg);
   line-height: 1.65;
   min-height: 100vh;
 }
@@ -36,13 +37,13 @@ p { margin: 0.8rem 0; }
 
 .lede {
   font-size: 1.2rem;
-  color: #4a4740;
+  color: color-mix(in srgb, var(--fg) 75%, var(--bg));
 }
 
 code {
   font-family: "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.85em;
-  background: #e8e3d8;
+  background: color-mix(in srgb, var(--fg) 12%, var(--bg));
   padding: 0.1em 0.35em;
   border-radius: 4px;
 }
@@ -50,9 +51,9 @@ code {
 blockquote {
   margin: 1.4rem 0;
   padding: 0.6rem 1.2rem;
-  border-left: 3px solid #b9b2a2;
+  border-left: 3px solid color-mix(in srgb, var(--fg) 40%, var(--bg));
   font-style: italic;
-  color: #55504a;
+  color: color-mix(in srgb, var(--fg) 70%, var(--bg));
 }
 
 ul { margin: 0.8rem 0 0.8rem 1.4rem; }
@@ -66,7 +67,7 @@ li { margin: 0.3rem 0; }
   left: calc(50% - var(--glass-w) / 2);
   width: var(--glass-w);
   height: var(--glass-h);
-  border-radius: var(--glass-r);
+  clip-path: url(#glass-clip);
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -75,15 +76,18 @@ li { margin: 0.3rem 0; }
   /* the actual effect — filter url is Chromium-only; blur is the fallback */
   backdrop-filter: url(#glass-filter) blur(0.25px) saturate(1.3) brightness(1.04);
   -webkit-backdrop-filter: blur(6px) saturate(1.3) brightness(1.04);
-
-  box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.18),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
-    inset 2px 3px 6px rgba(255, 255, 255, 0.35),
-    inset -2px -3px 6px rgba(0, 0, 0, 0.08);
 }
 
 .glass:active { cursor: grabbing; }
+
+.glass-stroke {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
 
 .glass-hint {
   position: absolute;
@@ -94,6 +98,6 @@ li { margin: 0.3rem 0; }
   font-size: 0.7rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.25);
+  color: color-mix(in srgb, var(--fg) 25%, transparent);
   pointer-events: none;
 }
