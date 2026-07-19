@@ -8,6 +8,12 @@
       "port": 5199
     },
     {
+      "name": "svg-glass",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "svg-glass", "--", "--port", "5198", "--strictPort"],
+      "port": 5198
+    },
+    {
       "name": "dist-preview",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-y", "serve", "dist", "-l", "4173"],

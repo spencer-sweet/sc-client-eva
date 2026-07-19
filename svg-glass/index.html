@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>svg glass</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <main class="content">
+    <h1>Liquid SVG Glass</h1>
+    <p class="lede">
+      A draggable pane of <strong>refractive glass</strong> floating over plain rich text.
+      The distortion is pure SVG — a <code>feDisplacementMap</code> driven by a generated
+      gradient map, applied through <code>backdrop-filter</code>.
+    </p>
+
+    <h2>How it works</h2>
+    <p>
+      An off-screen SVG defines a filter. Its first primitive, <code>feImage</code>, loads a
+      tiny data-URI SVG: a rounded rectangle painted with a <em>red gradient running
+      horizontally</em> and a <em>blue gradient running vertically</em>. Those two channels
+      become displacement vectors — red pushes pixels in X, blue pushes them in Y.
+    </p>
+    <p>
+      Three copies of the displacement run at slightly different scales, one per RGB channel,
+      then get screen-blended back together. That per-channel offset is what produces the
+      subtle <strong>chromatic aberration</strong> fringe at the edges of the lens, like real
+      thick glass splitting light.
+    </p>
+
+    <blockquote>
+      Displacement mapping reads color as geometry: brightness in the map becomes motion in
+      the image beneath it.
+    </blockquote>
+
+    <h2>Why backdrop-filter</h2>
+    <p>
+      Applying the filter with <code>backdrop-filter: url(#glass)</code> means the element
+      itself stays untouched — only whatever renders <em>behind</em> it is warped, live, as
+      you drag the pane around. Combine it with a faint <code>blur()</code> and
+      <code>saturate()</code> and the pane reads as physical material rather than a screenshot
+      trick.
+    </p>
+    <p>
+      Browser support note: filter-URL values inside <code>backdrop-filter</code> work in
+      Chromium. Safari and Firefox fall back to plain blur here.
+    </p>
+
+    <h2>Filler prose for dragging over</h2>
+    <p>
+      Typography survives refraction surprisingly well. Serifs smear, counters wobble, and
+      line breaks bend around the lens edge, yet the text stays legible near the center where
+      the displacement map is neutral gray. <em>Lorem ipsum dolor sit amet, consectetur
+      adipiscing elit</em> — sed do eiusmod tempor incididunt ut labore et dolore magna
+      aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+      aliquip ex ea commodo consequat.
+    </p>
+    <p>
+      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat
+      nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui
+      officia deserunt mollit anim id est laborum. Curabitur pretium tincidunt lacus, nulla
+      gravida orci a odio. Nullam varius, turpis et commodo pharetra, est eros bibendum elit,
+      nec luctus magna felis sollicitudin mauris.
+    </p>
+    <ul>
+      <li>Red channel → horizontal displacement</li>
+      <li>Blue channel → vertical displacement</li>
+      <li>Neutral 0x80 gray → no displacement at all</li>
+      <li>Edge falloff → the “meniscus” ring around the lens</li>
+    </ul>
+    <p>
+      Integer in mauris eu nibh euismod gravida. Duis ac tellus et risus vulputate vehicula.
+      Donec lobortis risus a elit. Etiam tempor. Ut ullamcorper, ligula eu tempor congue,
+      eros est euismod turpis, id tincidunt sapien risus a quam. Maecenas fermentum consequat
+      mi. Donec fermentum. Pellentesque malesuada nulla a mi.
+    </p>
+  </main>
+
+  <div id="glass" class="glass" aria-hidden="true">
+    <span class="glass-hint">drag me</span>
+  </div>
+
+  <!-- filter host, populated by main.js -->
+  <svg id="filter-host" width="0" height="0" style="position:absolute"></svg>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
