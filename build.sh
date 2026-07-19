@@ -150,6 +150,11 @@ HTML
         var first = sel.options[0];
         first.textContent = 'main (current) — ' + (deploy.sha || '').slice(0, 7) + ' [' + deployHash + ']';
         first.value = deploy.url;
+        // Point the demo links at the pinned deployment too, so a link shared
+        // from the canonical domain stays frozen to this exact version.
+        Array.prototype.forEach.call(document.querySelectorAll('a[href^="/"]'), function (a) {
+          a.href = deploy.url.replace(/\/$/, '') + a.getAttribute('href');
+        });
       }
 
       sel.addEventListener('change', function () {
