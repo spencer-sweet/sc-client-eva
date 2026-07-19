@@ -5,7 +5,9 @@ import GUI from 'lil-gui';
 // feDisplacementMap three times at offset scales — one per RGB channel — for
 // chromatic aberration, then the channels are screen-blended back together.
 
+const lensEl = document.getElementById('lens');
 const glassEl = document.getElementById('glass');
+const shardsSvg = document.getElementById('shards');
 const host = document.getElementById('filter-host');
 
 // 4-point star from assets/4star.svg (300x300 viewBox)
@@ -27,6 +29,7 @@ const params = {
   stroke: '#e6e6e6',
   strokeWidth: 1.25,
   strokeOpacity: 0.2,
+  broken: 0,
 };
 
 // The displacement map: the star filled with a red X-gradient + blue
@@ -86,29 +89,125 @@ function buildFilter(p) {
   document.documentElement.style.setProperty('--glass-w', `${p.size}px`);
   document.documentElement.style.setProperty('--glass-h', `${p.size}px`);
   // re-trigger backdrop-filter so Chromium picks up the rebuilt filter
-  glassEl.style.backdropFilter = 'none';
-  requestAnimationFrame(() => { glassEl.style.backdropFilter = ''; });
+  const filtered = [glassEl, ...document.querySelectorAll('.shard:not(.shard-simple)')];
+  filtered.forEach((el) => { el.style.backdropFilter = 'none'; });
+  requestAnimationFrame(() => { filtered.forEach((el) => { el.style.backdropFilter = ''; }); });
 }
 
 buildFilter(params);
 
+// ---- shattering ----
+// 50 predetermined shards: seeded PRNG so every reload breaks identically.
+const SHARD_COUNT = 18;
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function generateShards() {
+  const r = mulberry32(42);
+  const star = new Path2D(STAR_PATH);
+  const ctx = document.createElement('canvas').getContext('2d');
+  const shards = [];
+  while (shards.length < SHARD_COUNT) {
+    // rejection-sample shard centers so they originate inside the star
+    const cx = r() * STAR_BOX;
+    const cy = r() * STAR_BOX;
+    if (!ctx.isPointInPath(star, cx, cy)) continue;
+    // mostly small sharp slivers, a few big plates
+    const big = r() >= 0.8;
+    const s = big ? 22 + r() * 26 : 7 + r() * 16;
+    const n = 3 + Math.floor(r() * 3);
+    const angles = Array.from({ length: n }, () => r() * Math.PI * 2).sort((a, b) => a - b);
+    const pts = angles.map((a) => {
+      const rad = s * (0.45 + r() * 0.75);
+      return [+(cx + Math.cos(a) * rad).toFixed(2), +(cy + Math.sin(a) * rad).toFixed(2)];
+    });
+    // scatter radially away from the star center, with jitter
+    const ang = Math.atan2(cy - STAR_BOX / 2, cx - STAR_BOX / 2) + (r() - 0.5) * 1.2;
+    shards.push({
+      d: `M${pts.map((p) => p.join(',')).join('L')}Z`,
+      pts, cx, cy, big,
+      tx: Math.cos(ang) * (80 + r() * 260),
+      ty: Math.sin(ang) * (80 + r() * 260),
+      rot: (r() - 0.5) * 240,
+    });
+  }
+  return shards;
+}
+
+const shards = generateShards();
+
+// stroke outlines (SVG, scales with the lens)
+const shardEls = shards.map((s) => {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  el.setAttribute('d', s.d);
+  el.setAttribute('vector-effect', 'non-scaling-stroke');
+  shardsSvg.appendChild(el);
+  return el;
+});
+
+// refracting bodies (divs clipped to the shard polygon, same backdrop-filter
+// as the intact star — each shows its local piece of the star's refraction)
+const shardDivs = shards.map((s) => {
+  const el = document.createElement('div');
+  // only the big plates pay for the full displacement filter; small slivers
+  // get a plain blur, which reads the same at their size
+  el.className = s.big ? 'shard' : 'shard shard-simple';
+  el.style.clipPath = `polygon(${s.pts
+    .map(([x, y]) => `${((x / STAR_BOX) * 100).toFixed(2)}% ${((y / STAR_BOX) * 100).toFixed(2)}%`)
+    .join(',')})`;
+  el.style.transformOrigin = `${(s.cx / STAR_BOX) * 100}% ${(s.cy / STAR_BOX) * 100}%`;
+  lensEl.appendChild(el);
+  return el;
+});
+
+// the intact star swaps out for the shards inside the first FLIP of the slider
+const FLIP = 0.05;
+const easeOut = (t) => 1 - (1 - t) ** 3;
+function applyBroken() {
+  const b = params.broken;
+  const t = Math.min(1, b / FLIP); // crossfade progress
+  const e = easeOut(b);            // scatter progress
+  const k = params.size / STAR_BOX; // star units -> px
+
+  glassEl.style.opacity = String(1 - t);
+  glassEl.style.visibility = t >= 1 ? 'hidden' : '';
+  shardsSvg.style.display = b > 0 ? '' : 'none';
+
+  shards.forEach((s, i) => {
+    const div = shardDivs[i];
+    div.style.display = b > 0 ? '' : 'none';
+    div.style.opacity = String(t);
+    div.style.transform = `translate(${s.tx * e * k}px, ${s.ty * e * k}px) rotate(${s.rot * e}deg)`;
+    const path = shardEls[i];
+    path.setAttribute('transform', `translate(${s.tx * e} ${s.ty * e}) rotate(${s.rot * e} ${s.cx} ${s.cy})`);
+    path.setAttribute('opacity', t);
+  });
+}
+
 // ---- dragging ----
 let drag = null;
-glassEl.addEventListener('pointerdown', (e) => {
-  const rect = glassEl.getBoundingClientRect();
+lensEl.addEventListener('pointerdown', (e) => {
+  const rect = lensEl.getBoundingClientRect();
   drag = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
-  glassEl.setPointerCapture(e.pointerId);
+  lensEl.setPointerCapture(e.pointerId);
 });
-glassEl.addEventListener('pointermove', (e) => {
+lensEl.addEventListener('pointermove', (e) => {
   if (!drag) return;
-  glassEl.style.left = `${e.clientX - drag.dx}px`;
-  glassEl.style.top = `${e.clientY - drag.dy}px`;
+  lensEl.style.left = `${e.clientX - drag.dx}px`;
+  lensEl.style.top = `${e.clientY - drag.dy}px`;
 });
-glassEl.addEventListener('pointerup', () => { drag = null; });
+lensEl.addEventListener('pointerup', () => { drag = null; });
 
 // ---- controls ----
-const gui = new GUI({ title: 'glass' });
-const rebuild = () => buildFilter(params);
+const gui = new GUI({ title: 'glass', width: 380 });
+const rebuild = () => { buildFilter(params); applyBroken(); };
 gui.add(params, 'size', 120, 640, 1).onChange(rebuild);
 gui.add(params, 'core', 0, 1, 0.01).onChange(rebuild);
 gui.add(params, 'scale', 0, 200, 1).onChange(rebuild);
@@ -116,6 +215,8 @@ gui.add(params, 'aberration', 0, 60, 1).onChange(rebuild);
 gui.add(params, 'blur', 0, 4, 0.05).onChange(rebuild);
 gui.add(params, 'lightness', 0, 100, 1).onChange(rebuild);
 gui.add(params, 'alpha', 0, 1, 0.01).onChange(rebuild);
+const brokenCtrl = gui.add(params, 'broken', 0, 0.25, 0.01).onChange(applyBroken);
+brokenCtrl.domElement.classList.add('wide-slider');
 
 const applyColors = () => {
   document.documentElement.style.setProperty('--bg', params.background);
@@ -128,6 +229,11 @@ const applyColors = () => {
   // (inner) half at the requested width
   strokePath.setAttribute('stroke-width', params.strokeWidth * 2);
   strokePath.setAttribute('stroke-opacity', params.strokeOpacity);
+  shardsSvg.setAttribute('fill', 'none');
+  shardsSvg.setAttribute('stroke', params.stroke);
+  shardsSvg.setAttribute('stroke-width', params.strokeWidth);
+  shardsSvg.setAttribute('stroke-opacity', params.strokeOpacity);
+  shardDivs.forEach((el) => { el.style.background = hexToRgba(params.fill, params.fillOpacity); });
 };
 gui.addColor(params, 'background').onChange(applyColors);
 gui.addColor(params, 'text').onChange(applyColors);
@@ -137,6 +243,7 @@ gui.addColor(params, 'stroke').onChange(applyColors);
 gui.add(params, 'strokeWidth', 0, 5, 0.25).onChange(applyColors);
 gui.add(params, 'strokeOpacity', 0, 1, 0.01).onChange(applyColors);
 applyColors();
+applyBroken();
 
 function hexToRgba(hex, a) {
   const n = parseInt(hex.slice(1), 16);
