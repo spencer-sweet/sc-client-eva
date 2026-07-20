@@ -116,6 +116,31 @@ li { margin: 0.3rem 0; }
   --name-width: 60px;
 }
 
+.gui-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px 4px 6px;
+}
+
+.gui-tab {
+  flex: 1;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-color, #ebebeb);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 5px 6px;
+  cursor: pointer;
+}
+
+.gui-tab:hover { background: rgba(255, 255, 255, 0.1); }
+
+.gui-tab.active {
+  background: #3d5afe;
+  color: #fff;
+}
+
 .glass-stroke {
   position: absolute;
   inset: 0;

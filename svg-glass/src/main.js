@@ -28,8 +28,11 @@ const params = {
   fillOpacity: 0.07,
   stroke: '#e6e6e6',
   strokeWidth: 1.25,
-  strokeOpacity: 0.2,
+  strokeOpacity: 0.41,
   broken: 0,
+  fadeRange: 0.02, // fraction of `broken`'s range the intact-star/shards crossfade takes
+  mode: 'svg',   // 'svg' = displacement filter, 'blur' = plain CSS blur (cheaper, works everywhere)
+  cssBlur: 1,    // px, blur radius used only in 'blur' mode
 };
 
 // The displacement map: the star filled with a red X-gradient + blue
@@ -91,7 +94,28 @@ function buildFilter(p) {
   // re-trigger backdrop-filter so Chromium picks up the rebuilt filter
   const filtered = [glassEl, ...document.querySelectorAll('.shard:not(.shard-simple)')];
   filtered.forEach((el) => { el.style.backdropFilter = 'none'; });
-  requestAnimationFrame(() => { filtered.forEach((el) => { el.style.backdropFilter = ''; }); });
+  requestAnimationFrame(() => { filtered.forEach((el) => { applyMode(el); }); });
+}
+
+// 'svg' drives the real displacement filter (Chromium only — other engines
+// silently keep just the blur/saturate/brightness tail of the value); 'blur'
+// forces the same plain blur everywhere, including Chromium, since it's much
+// cheaper and works identically on mobile.
+// only the intact star + the "big" shard plates respect the mode toggle —
+// small shard-simple slivers always keep their own fixed cheap blur (set in
+// CSS), since that's a perf shortcut unrelated to the SVG/CSS comparison.
+function backdropFor(mode) {
+  if (mode === 'blur') return `blur(${params.cssBlur}px) saturate(1.3) brightness(1.04)`;
+  return 'url(#glass-filter) blur(0.25px) saturate(1.3) brightness(1.04)';
+}
+function applyMode(el) {
+  el.style.backdropFilter = backdropFor(params.mode);
+  // Safari/Firefox never support url() filter refs here, so they always
+  // just get the plain blur regardless of mode.
+  el.style.webkitBackdropFilter = `blur(${params.cssBlur}px) saturate(1.3) brightness(1.04)`;
+}
+function applyModeToAll() {
+  [glassEl, ...document.querySelectorAll('.shard:not(.shard-simple)')].forEach(applyMode);
 }
 
 buildFilter(params);
@@ -167,12 +191,11 @@ const shardDivs = shards.map((s) => {
   return el;
 });
 
-// the intact star swaps out for the shards inside the first FLIP of the slider
-const FLIP = 0.05;
+// the intact star swaps out for the shards inside the first `fadeRange` of the slider
 const easeOut = (t) => 1 - (1 - t) ** 3;
 function applyBroken() {
   const b = params.broken;
-  const t = Math.min(1, b / FLIP); // crossfade progress
+  const t = params.fadeRange > 0 ? Math.min(1, b / params.fadeRange) : (b > 0 ? 1 : 0); // crossfade progress
   const e = easeOut(b);            // scatter progress
   const k = params.size / STAR_BOX; // star units -> px
 
@@ -209,14 +232,52 @@ lensEl.addEventListener('pointerup', () => { drag = null; });
 const gui = new GUI({ title: 'glass', width: 380 });
 const rebuild = () => { buildFilter(params); applyBroken(); };
 gui.add(params, 'size', 120, 640, 1).onChange(rebuild);
-gui.add(params, 'core', 0, 1, 0.01).onChange(rebuild);
-gui.add(params, 'scale', 0, 200, 1).onChange(rebuild);
-gui.add(params, 'aberration', 0, 60, 1).onChange(rebuild);
-gui.add(params, 'blur', 0, 4, 0.05).onChange(rebuild);
-gui.add(params, 'lightness', 0, 100, 1).onChange(rebuild);
-gui.add(params, 'alpha', 0, 1, 0.01).onChange(rebuild);
+
+// tabbed effect switcher: each tab is a folder of controls that only apply
+// to that rendering mode, so it's clear which sliders do what.
+const tabBar = document.createElement('div');
+tabBar.className = 'gui-tabs';
+
+const svgFolder = gui.addFolder('SVG displacement');
+svgFolder.add(params, 'core', 0, 1, 0.01).onChange(rebuild);
+svgFolder.add(params, 'scale', 0, 200, 1).onChange(rebuild);
+svgFolder.add(params, 'aberration', 0, 60, 1).onChange(rebuild);
+svgFolder.add(params, 'blur', 0, 4, 0.05).onChange(rebuild);
+svgFolder.add(params, 'lightness', 0, 100, 1).onChange(rebuild);
+svgFolder.add(params, 'alpha', 0, 1, 0.01).onChange(rebuild);
+
+const blurFolder = gui.addFolder('CSS blur');
+blurFolder.add(params, 'cssBlur', 0, 20, 0.5).name('blur amount').onChange(applyModeToAll);
+
+gui.domElement.querySelector('.lil-children').insertBefore(tabBar, svgFolder.domElement);
+
+const svgTabBtn = document.createElement('button');
+svgTabBtn.type = 'button';
+svgTabBtn.className = 'gui-tab';
+svgTabBtn.textContent = 'SVG displacement';
+svgTabBtn.onclick = () => selectMode('svg');
+
+const blurTabBtn = document.createElement('button');
+blurTabBtn.type = 'button';
+blurTabBtn.className = 'gui-tab';
+blurTabBtn.textContent = 'CSS blur';
+blurTabBtn.onclick = () => selectMode('blur');
+
+tabBar.append(svgTabBtn, blurTabBtn);
+
+function selectMode(mode) {
+  params.mode = mode;
+  applyModeToAll();
+  svgFolder.show(mode === 'svg');
+  blurFolder.show(mode === 'blur');
+  svgTabBtn.classList.toggle('active', mode === 'svg');
+  blurTabBtn.classList.toggle('active', mode === 'blur');
+}
+selectMode(params.mode);
+
 const brokenCtrl = gui.add(params, 'broken', 0, 0.25, 0.01).onChange(applyBroken);
 brokenCtrl.domElement.classList.add('wide-slider');
+gui.add(params, 'fadeRange', 0, 0.15, 0.01).name('tween to pieces %').onChange(applyBroken);
 
 const applyColors = () => {
   document.documentElement.style.setProperty('--bg', params.background);
@@ -244,6 +305,7 @@ gui.add(params, 'strokeWidth', 0, 5, 0.25).onChange(applyColors);
 gui.add(params, 'strokeOpacity', 0, 1, 0.01).onChange(applyColors);
 applyColors();
 applyBroken();
+applyModeToAll();
 
 function hexToRgba(hex, a) {
   const n = parseInt(hex.slice(1), 16);
