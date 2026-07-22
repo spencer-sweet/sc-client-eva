@@ -9,23 +9,37 @@ import GUI from 'lil-gui';
 
 const params = {
   cellSize: 255,
-  cols: 4,
+  cols: 9,
   rows: 4,
   lineThickness: 1,
   radius: 250,
-  glowColor: '#7fdfff',
+  glowColor: '#ea6afb',
   baseColor: '#616161',
-  nodeColor: '#9aa0ad',
-  background: '#000000',
+  nodeColor: '#616161',
+  nodeSize: 40,
+  ringCount: 2,
+  background: '#0d0613',
   intensity: 1.6,
   showHorizontal: true,
   showVertical: true,
   showDiagonalA: true,
   showDiagonalB: true,
+  showStar: true,
+  starSize: 480,
+  starColorA: '#8a5cff',
+  starColorB: '#2a3bd8',
+  starCore: '#e8ddff',
+  panStrength: 0.18,
+  parallaxStrength: 15,
+  parallaxSmoothing: 0.08,
 };
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(params.background);
+
+// nodes + lines live in here so they can shift together for the parallax effect
+const gridGroup = new THREE.Group();
+scene.add(gridGroup);
 
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 5000);
 camera.position.set(0, 0, 800);
@@ -142,7 +156,7 @@ const EDGE_KEYS = {
 
 function buildLines() {
   for (const key of Object.keys(lineGroups)) {
-    scene.remove(lineGroups[key]);
+    gridGroup.remove(lineGroups[key]);
     lineGroups[key].geometry.dispose();
   }
   lineGroups = {};
@@ -180,109 +194,257 @@ function buildLines() {
     const mesh = new THREE.Mesh(geometry, lineMaterial);
     mesh.visible = params[EDGE_KEYS[key]];
     lineGroups[key] = mesh;
-    scene.add(mesh);
+    gridGroup.add(mesh);
   }
 }
 buildLines();
 
 // ---------------------------------------------------------------
-// Nodes: instanced billboard circles (ring + crosshair, drawn on a canvas)
+// Nodes: real flat geometry (not a canvas texture), so the ring stays crisp
+// at any size instead of aliasing like a magnified raster image. Two
+// instanced meshes per node: an opaque "cover" disc that blocks the grid
+// lines converging underneath it, and one or more thin ring bands (drawn on
+// top of the cover, in the node/glow color) for the reticle look.
 // ---------------------------------------------------------------
-function makeNodeTexture() {
-  const size = 128;
+
+// radii (as a fraction of the outer radius) for each ring-count preset
+const RING_RADII_BY_COUNT = {
+  0: [],
+  1: [1],
+  2: [1, 0.6],
+  3: [1, 0.75, 0.5],
+};
+
+// a flat disc, built as a triangle fan
+function buildDiscGeometry(radius, segments = 48) {
+  const verts = [];
+  for (let i = 0; i < segments; i++) {
+    const a0 = (i / segments) * Math.PI * 2;
+    const a1 = ((i + 1) / segments) * Math.PI * 2;
+    verts.push(
+      0, 0, 0,
+      radius * Math.cos(a0), radius * Math.sin(a0), 0,
+      radius * Math.cos(a1), radius * Math.sin(a1), 0
+    );
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  return geometry;
+}
+
+// one or more concentric ring bands (annuli), merged into a single geometry
+function buildRingsGeometry(radii, halfWidth, segments = 64) {
+  const verts = [];
+  for (const radius of radii) {
+    const inner = radius - halfWidth;
+    const outer = radius + halfWidth;
+    for (let i = 0; i < segments; i++) {
+      const a0 = (i / segments) * Math.PI * 2;
+      const a1 = ((i + 1) / segments) * Math.PI * 2;
+      const ci0 = Math.cos(a0), si0 = Math.sin(a0);
+      const ci1 = Math.cos(a1), si1 = Math.sin(a1);
+      verts.push(
+        inner * ci0, inner * si0, 0,
+        outer * ci0, outer * si0, 0,
+        outer * ci1, outer * si1, 0,
+
+        inner * ci0, inner * si0, 0,
+        outer * ci1, outer * si1, 0,
+        inner * ci1, inner * si1, 0
+      );
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  return geometry;
+}
+
+function instanceAtPoints(mesh) {
+  const m = new THREE.Matrix4();
+  graph.points.forEach((p, i) => {
+    m.setPosition(p);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+}
+
+let nodeCoverMesh;
+let nodeRingMesh;
+function buildNodes() {
+  if (nodeCoverMesh) {
+    gridGroup.remove(nodeCoverMesh);
+    nodeCoverMesh.geometry.dispose();
+    nodeCoverMesh.material.dispose();
+  }
+  if (nodeRingMesh) {
+    gridGroup.remove(nodeRingMesh);
+    nodeRingMesh.geometry.dispose();
+    nodeRingMesh.material.dispose();
+  }
+
+  const outerR = params.nodeSize / 2;
+  const radii = (RING_RADII_BY_COUNT[params.ringCount] ?? RING_RADII_BY_COUNT[2]).map((f) => f * outerR);
+
+  const coverGeometry = buildDiscGeometry(outerR);
+  const coverMaterial = new THREE.ShaderMaterial({
+    uniforms: { uHoleColor: { value: new THREE.Color(params.background) } },
+    vertexShader: `
+      void main() {
+        vec4 worldPosition = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uHoleColor;
+      void main() {
+        gl_FragColor = vec4(uHoleColor, 1.0);
+      }
+    `,
+    // must be in the same transparent render queue as the (transparent) grid
+    // lines, otherwise the opaque queue draws first regardless of renderOrder
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  });
+  nodeCoverMesh = new THREE.InstancedMesh(coverGeometry, coverMaterial, graph.points.length);
+  nodeCoverMesh.renderOrder = 6;
+  instanceAtPoints(nodeCoverMesh);
+  gridGroup.add(nodeCoverMesh);
+
+  if (radii.length) {
+    const ringGeometry = buildRingsGeometry(radii, params.lineThickness / 2);
+    const ringMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        ...uniforms,
+        uBaseColor: { value: new THREE.Color(params.nodeColor) },
+      },
+      vertexShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          vec4 worldPosition = modelMatrix * instanceMatrix * vec4(position, 1.0);
+          vWorldPos = worldPosition.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+      `,
+      fragmentShader: `
+        ${glowChunk}
+        uniform vec3 uBaseColor;
+        void main() {
+          float g = glowFactor();
+          vec3 color = mix(uBaseColor, uGlowColor, g * uIntensity);
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    });
+    nodeRingMesh = new THREE.InstancedMesh(ringGeometry, ringMaterial, graph.points.length);
+    nodeRingMesh.renderOrder = 7;
+    instanceAtPoints(nodeRingMesh);
+    gridGroup.add(nodeRingMesh);
+  } else {
+    nodeRingMesh = null;
+  }
+}
+buildNodes();
+
+// ---------------------------------------------------------------
+// Star mask: the 4-point star from svg-glass/assets/4star.svg acts as a
+// fixed stencil floating in front of the grid. Its silhouette (baked once
+// into an alpha-only texture) never moves; what's shown *through* it is a
+// procedural gradient + sparkle field sampled with a mouse-driven offset,
+// so panning the mouse pans the "background" visible through the hole.
+// ---------------------------------------------------------------
+const STAR_PATH =
+  'M418.94 6.082C421.263 -2.02639 434.026 -2.02638 436.349 6.08202C454.591 69.7607 501.161 210.898 572.777 282.514C644.393 354.13 785.53 400.7 849.209 418.942C857.317 421.265 857.317 434.028 849.209 436.351C785.53 454.593 644.393 501.163 572.777 572.779C501.161 644.395 454.591 785.532 436.349 849.211C434.026 857.319 421.263 857.319 418.94 849.211C400.698 785.532 354.128 644.395 282.512 572.779C210.896 501.163 69.7587 454.593 6.08005 436.351C-2.02835 434.028 -2.02833 421.265 6.08007 418.942C69.7587 400.7 210.896 354.13 282.512 282.514C354.128 210.898 400.698 69.7606 418.94 6.082Z';
+const STAR_BOX = 856;
+
+function makeStarMaskTexture() {
+  const size = 512;
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
-  const cx = size / 2;
-  const r = size * 0.28;
-
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = size * 0.03;
-
-  // crosshair ticks, reaching almost to the edge, gapped at the ring
-  ctx.beginPath();
-  ctx.moveTo(cx - size * 0.48, cx);
-  ctx.lineTo(cx - r * 0.7, cx);
-  ctx.moveTo(cx + r * 0.7, cx);
-  ctx.lineTo(cx + size * 0.48, cx);
-  ctx.moveTo(cx, cx - size * 0.48);
-  ctx.lineTo(cx, cx - r * 0.7);
-  ctx.moveTo(cx, cx + r * 0.7);
-  ctx.lineTo(cx, cx + size * 0.48);
-  ctx.stroke();
-
-  // single thin ring, like a survey/target reticle
-  ctx.beginPath();
-  ctx.arc(cx, cx, r, 0, Math.PI * 2);
-  ctx.stroke();
+  ctx.scale(size / STAR_BOX, size / STAR_BOX);
+  ctx.fillStyle = '#fff';
+  ctx.fill(new Path2D(STAR_PATH));
 
   const tex = new THREE.CanvasTexture(c);
   tex.needsUpdate = true;
   return tex;
 }
 
-const nodeTexture = makeNodeTexture();
+const starMaskTexture = makeStarMaskTexture();
 
-let nodeMesh;
-function buildNodes() {
-  if (nodeMesh) {
-    scene.remove(nodeMesh);
-    nodeMesh.geometry.dispose();
-    nodeMesh.material.dispose();
+const starUniforms = {
+  uMaskTex: { value: starMaskTexture },
+  uPanOffset: { value: new THREE.Vector2(0, 0) },
+  uCore: { value: new THREE.Color(params.starCore) },
+  uColorA: { value: new THREE.Color(params.starColorA) },
+  uColorB: { value: new THREE.Color(params.starColorB) },
+};
+
+const starMaterial = new THREE.ShaderMaterial({
+  uniforms: starUniforms,
+  transparent: true,
+  depthTest: false,
+  depthWrite: false,
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform sampler2D uMaskTex;
+    uniform vec2 uPanOffset;
+    uniform vec3 uCore;
+    uniform vec3 uColorA;
+    uniform vec3 uColorB;
+
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+
+    void main() {
+      float maskAlpha = texture2D(uMaskTex, vUv).a;
+      if (maskAlpha < 0.05) discard;
+
+      vec2 uv = vUv + uPanOffset;
+      float d = distance(uv, vec2(0.5));
+      vec3 color = mix(uCore, uColorA, smoothstep(0.0, 0.45, d));
+      color = mix(color, uColorB, smoothstep(0.45, 1.0, d));
+
+      // procedural sparkle dust, panning along with the background
+      vec2 grid = uv * 18.0;
+      vec2 cellUv = fract(grid);
+      float h = hash(floor(grid));
+      float dist = distance(cellUv, vec2(0.5));
+      float sparkle = step(0.92, h) * smoothstep(0.5, 0.0, dist) * (h - 0.92) * 12.0;
+      color += vec3(sparkle);
+
+      gl_FragColor = vec4(color, maskAlpha);
+    }
+  `,
+});
+
+let starMesh;
+function buildStar() {
+  if (starMesh) {
+    gridGroup.remove(starMesh);
+    starMesh.geometry.dispose();
   }
 
-  const nodeSize = 26;
-  const geometry = new THREE.PlaneGeometry(nodeSize, nodeSize);
-  const material = new THREE.ShaderMaterial({
-    uniforms: {
-      ...uniforms,
-      uBaseColor: { value: new THREE.Color(params.nodeColor) },
-      uMap: { value: nodeTexture },
-    },
-    vertexShader: `
-      varying vec3 vWorldPos;
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        vec4 center = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-        vWorldPos = center.xyz;
-
-        // billboard: keep the quad facing the camera regardless of instance rotation
-        vec3 instancePos = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
-        vec3 camRight = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
-        vec3 camUp = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
-        vec3 worldPos = instancePos + camRight * position.x + camUp * position.y;
-
-        gl_Position = projectionMatrix * viewMatrix * vec4(worldPos, 1.0);
-      }
-    `,
-    fragmentShader: `
-      ${glowChunk}
-      varying vec2 vUv;
-      uniform vec3 uBaseColor;
-      uniform sampler2D uMap;
-      void main() {
-        vec4 tex = texture2D(uMap, vUv);
-        if (tex.a < 0.05) discard;
-        float g = glowFactor();
-        vec3 color = mix(uBaseColor, uGlowColor, g * uIntensity);
-        gl_FragColor = vec4(color, tex.a);
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-  });
-
-  nodeMesh = new THREE.InstancedMesh(geometry, material, graph.points.length);
-  const m = new THREE.Matrix4();
-  graph.points.forEach((p, i) => {
-    m.setPosition(p);
-    nodeMesh.setMatrixAt(i, m);
-  });
-  nodeMesh.instanceMatrix.needsUpdate = true;
-  scene.add(nodeMesh);
+  const geometry = new THREE.PlaneGeometry(params.starSize, params.starSize);
+  starMesh = new THREE.Mesh(geometry, starMaterial);
+  starMesh.position.set(0, 0, 5);
+  starMesh.visible = params.showStar;
+  starMesh.renderOrder = 10;
+  gridGroup.add(starMesh);
 }
-buildNodes();
+buildStar();
 
 // ---------------------------------------------------------------
 // Mouse tracking: unproject onto the z=0 plane
@@ -291,23 +453,44 @@ const raycaster = new THREE.Raycaster();
 const pointerNDC = new THREE.Vector2(1e5, 1e5);
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 const hitPoint = new THREE.Vector3();
+let pointerActive = false;
+
+// smoothed toward the target each frame so the parallax drifts back to
+// center (rather than snapping) once the pointer leaves the window
+const smoothedPointer = new THREE.Vector2(0, 0);
 
 window.addEventListener('pointermove', (e) => {
+  pointerActive = true;
   pointerNDC.x = (e.clientX / window.innerWidth) * 2 - 1;
   pointerNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
 });
 
 window.addEventListener('pointerleave', () => {
-  pointerNDC.set(1e5, 1e5);
+  pointerActive = false;
 });
 
 function updateMouseWorld() {
   raycaster.setFromCamera(pointerNDC, camera);
-  if (raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
+  if (pointerActive && raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
     uniforms.uMouse.value.set(hitPoint.x, hitPoint.y);
   } else {
     uniforms.uMouse.value.set(1e5, 1e5);
   }
+
+  const targetX = pointerActive ? THREE.MathUtils.clamp(pointerNDC.x, -1, 1) : 0;
+  const targetY = pointerActive ? THREE.MathUtils.clamp(pointerNDC.y, -1, 1) : 0;
+  smoothedPointer.x += (targetX - smoothedPointer.x) * params.parallaxSmoothing;
+  smoothedPointer.y += (targetY - smoothedPointer.y) * params.parallaxSmoothing;
+
+  starUniforms.uPanOffset.value.set(
+    smoothedPointer.x * params.panStrength,
+    smoothedPointer.y * params.panStrength
+  );
+  gridGroup.position.set(
+    smoothedPointer.x * params.parallaxStrength,
+    smoothedPointer.y * params.parallaxStrength,
+    0
+  );
 }
 
 // ---------------------------------------------------------------
@@ -337,19 +520,37 @@ gui.addColor(params, 'baseColor').name('inactive color').onChange((v) => {
   lineMaterial.uniforms.uBaseColor.value.set(v);
 });
 gui.addColor(params, 'nodeColor').name('node color').onChange((v) => {
-  nodeMesh.material.uniforms.uBaseColor.value.set(v);
+  if (nodeRingMesh) nodeRingMesh.material.uniforms.uBaseColor.value.set(v);
 });
-gui.addColor(params, 'background').name('background').onChange((v) => scene.background.set(v));
+gui.add(params, 'nodeSize', 6, 80, 1).name('circle size').onFinishChange(buildNodes);
+gui.add(params, 'ringCount', 0, 3, 1).name('num circles').onFinishChange(buildNodes);
+gui.addColor(params, 'background').name('background').onChange((v) => {
+  scene.background.set(v);
+  nodeCoverMesh.material.uniforms.uHoleColor.value.set(v);
+});
 gui.add(params, 'cellSize', 60, 320, 5).name('grid spacing').onFinishChange(regenerate);
 gui.add(params, 'cols', 2, 40, 1).name('columns').onFinishChange(regenerate);
 gui.add(params, 'rows', 2, 40, 1).name('rows').onFinishChange(regenerate);
-gui.add(params, 'lineThickness', 0.5, 12, 0.5).name('line thickness').onFinishChange(buildLines);
+gui.add(params, 'lineThickness', 0.5, 12, 0.5).name('line thickness').onFinishChange(() => {
+  buildLines();
+  buildNodes();
+});
 
 const pathsFolder = gui.addFolder('paths');
 pathsFolder.add(params, 'showHorizontal').name('horizontal').onChange((v) => (lineGroups.horizontal.visible = v));
 pathsFolder.add(params, 'showVertical').name('vertical').onChange((v) => (lineGroups.vertical.visible = v));
 pathsFolder.add(params, 'showDiagonalA').name('diagonal \\').onChange((v) => (lineGroups.diagonalA.visible = v));
 pathsFolder.add(params, 'showDiagonalB').name('diagonal /').onChange((v) => (lineGroups.diagonalB.visible = v));
+
+const starFolder = gui.addFolder('star mask');
+starFolder.add(params, 'showStar').name('visible').onChange((v) => (starMesh.visible = v));
+starFolder.add(params, 'starSize', 100, 1000, 10).name('size').onFinishChange(buildStar);
+starFolder.addColor(params, 'starCore').name('core color').onChange((v) => starUniforms.uCore.value.set(v));
+starFolder.addColor(params, 'starColorA').name('gradient A').onChange((v) => starUniforms.uColorA.value.set(v));
+starFolder.addColor(params, 'starColorB').name('gradient B').onChange((v) => starUniforms.uColorB.value.set(v));
+starFolder.add(params, 'panStrength', 0, 0.6, 0.01).name('pan strength');
+starFolder.add(params, 'parallaxStrength', 0, 80, 1).name('grid parallax');
+starFolder.add(params, 'parallaxSmoothing', 0.02, 1, 0.01).name('parallax smoothing');
 
 // ---------------------------------------------------------------
 // Render loop
