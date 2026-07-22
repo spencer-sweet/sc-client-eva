@@ -3,15 +3,27 @@
   "configurations": [
     {
       "name": "aura-zoom",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "aura-zoom", "--", "--port", "5199", "--strictPort"],
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-C", "aura-zoom", "run", "dev", "--", "--port", "5199", "--strictPort"],
       "port": 5199
     },
     {
       "name": "svg-glass",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "svg-glass", "--", "--port", "5198", "--strictPort"],
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-C", "svg-glass", "run", "dev", "--", "--port", "5198", "--strictPort"],
       "port": 5198
+    },
+    {
+      "name": "paths-grid",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-C", "paths-grid", "run", "dev", "--", "--port", "5197", "--strictPort"],
+      "port": 5197
+    },
+    {
+      "name": "tunnel-zoom",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-C", "tunnel-zoom", "run", "dev", "--", "--port", "5196", "--strictPort"],
+      "port": 5196
     },
     {
       "name": "dist-preview",
