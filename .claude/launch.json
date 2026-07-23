@@ -4,31 +4,31 @@
     {
       "name": "aura-zoom",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "aura-zoom", "run", "dev", "--", "--port", "5199", "--strictPort"],
+      "runtimeArgs": ["-C", "aura-zoom", "run", "dev"],
       "port": 5199
     },
     {
       "name": "svg-glass",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "svg-glass", "run", "dev", "--", "--port", "5198", "--strictPort"],
+      "runtimeArgs": ["-C", "svg-glass", "run", "dev"],
       "port": 5198
     },
     {
       "name": "paths-grid",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "paths-grid", "run", "dev", "--", "--port", "5197", "--strictPort"],
+      "runtimeArgs": ["-C", "paths-grid", "run", "dev"],
       "port": 5197
     },
     {
       "name": "tunnel-zoom",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "tunnel-zoom", "run", "dev", "--", "--port", "5196", "--strictPort"],
+      "runtimeArgs": ["-C", "tunnel-zoom", "run", "dev"],
       "port": 5196
     },
     {
       "name": "spiraling",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "spiraling", "run", "dev", "--", "--port", "5195", "--strictPort"],
+      "runtimeArgs": ["-C", "spiraling", "run", "dev"],
       "port": 5195
     },
     {
