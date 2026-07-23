@@ -26,6 +26,9 @@ const params = {
   showDiagonalB: true,
   showStar: true,
   starSize: 480,
+  starSize2: 300,
+  starOffsetX: 255,
+  starOffsetY: 255,
   starColorA: '#8a5cff',
   starColorB: '#2a3bd8',
   starCore: '#e8ddff',
@@ -259,13 +262,24 @@ function buildRingsGeometry(radii, halfWidth, segments = 64) {
   return geometry;
 }
 
-function instanceAtPoints(mesh) {
+function instanceAtPoints(mesh, points) {
   const m = new THREE.Matrix4();
-  graph.points.forEach((p, i) => {
+  points.forEach((p, i) => {
     m.setPosition(p);
     mesh.setMatrixAt(i, m);
   });
   mesh.instanceMatrix.needsUpdate = true;
+}
+
+// Nodes that fall inside a star's silhouette get fully hidden underneath it
+// anyway, so skip instancing them there rather than letting their rings poke
+// out past the star's narrow points.
+function visibleNodePoints() {
+  const instances = params.showStar ? getStarInstances() : [];
+  if (!instances.length) return graph.points;
+  return graph.points.filter(
+    (p) => !instances.some((s) => pointInStar(p.x - s.x, p.y - s.y, s.size))
+  );
 }
 
 let nodeCoverMesh;
@@ -306,9 +320,11 @@ function buildNodes() {
     depthTest: false,
     depthWrite: false,
   });
-  nodeCoverMesh = new THREE.InstancedMesh(coverGeometry, coverMaterial, graph.points.length);
+  const points = visibleNodePoints();
+
+  nodeCoverMesh = new THREE.InstancedMesh(coverGeometry, coverMaterial, points.length);
   nodeCoverMesh.renderOrder = 6;
-  instanceAtPoints(nodeCoverMesh);
+  instanceAtPoints(nodeCoverMesh, points);
   gridGroup.add(nodeCoverMesh);
 
   if (radii.length) {
@@ -339,15 +355,14 @@ function buildNodes() {
       depthTest: false,
       depthWrite: false,
     });
-    nodeRingMesh = new THREE.InstancedMesh(ringGeometry, ringMaterial, graph.points.length);
+    nodeRingMesh = new THREE.InstancedMesh(ringGeometry, ringMaterial, points.length);
     nodeRingMesh.renderOrder = 7;
-    instanceAtPoints(nodeRingMesh);
+    instanceAtPoints(nodeRingMesh, points);
     gridGroup.add(nodeRingMesh);
   } else {
     nodeRingMesh = null;
   }
 }
-buildNodes();
 
 // ---------------------------------------------------------------
 // Star mask: the 4-point star from svg-glass/assets/4star.svg acts as a
@@ -359,6 +374,27 @@ buildNodes();
 const STAR_PATH =
   'M418.94 6.082C421.263 -2.02639 434.026 -2.02638 436.349 6.08202C454.591 69.7607 501.161 210.898 572.777 282.514C644.393 354.13 785.53 400.7 849.209 418.942C857.317 421.265 857.317 434.028 849.209 436.351C785.53 454.593 644.393 501.163 572.777 572.779C501.161 644.395 454.591 785.532 436.349 849.211C434.026 857.319 421.263 857.319 418.94 849.211C400.698 785.532 354.128 644.395 282.512 572.779C210.896 501.163 69.7587 454.593 6.08005 436.351C-2.02835 434.028 -2.02833 421.265 6.08007 418.942C69.7587 400.7 210.896 354.13 282.512 282.514C354.128 210.898 400.698 69.7606 418.94 6.082Z';
 const STAR_BOX = 856;
+const starHitPath = new Path2D(STAR_PATH);
+const starHitCtx = document.createElement('canvas').getContext('2d');
+
+// The three star instances (main + two smaller ones below), shared between
+// the mesh builder and the node-visibility filter so they never drift apart.
+function getStarInstances() {
+  return [
+    { x: 0, y: 0, size: params.starSize },
+    { x: -params.starOffsetX, y: -params.starOffsetY, size: params.starSize2 },
+    { x: params.starOffsetX, y: -params.starOffsetY, size: params.starSize2 },
+  ];
+}
+
+// Hit-tests a point (relative to a star's center) against the exact star
+// silhouette, reusing the same path used to bake the mask texture.
+function pointInStar(dx, dy, size) {
+  const u = dx / size + 0.5;
+  const v = dy / size + 0.5;
+  if (u < 0 || u > 1 || v < 0 || v > 1) return false;
+  return starHitCtx.isPointInPath(starHitPath, u * STAR_BOX, v * STAR_BOX);
+}
 
 function makeStarMaskTexture() {
   const size = 512;
@@ -430,21 +466,26 @@ const starMaterial = new THREE.ShaderMaterial({
   `,
 });
 
-let starMesh;
+let starMeshes = [];
 function buildStar() {
-  if (starMesh) {
-    gridGroup.remove(starMesh);
-    starMesh.geometry.dispose();
+  for (const mesh of starMeshes) {
+    gridGroup.remove(mesh);
+    mesh.geometry.dispose();
   }
+  starMeshes = [];
 
-  const geometry = new THREE.PlaneGeometry(params.starSize, params.starSize);
-  starMesh = new THREE.Mesh(geometry, starMaterial);
-  starMesh.position.set(0, 0, 5);
-  starMesh.visible = params.showStar;
-  starMesh.renderOrder = 10;
-  gridGroup.add(starMesh);
+  for (const { x, y, size } of getStarInstances()) {
+    const geometry = new THREE.PlaneGeometry(size, size);
+    const mesh = new THREE.Mesh(geometry, starMaterial);
+    mesh.position.set(x, y, 5);
+    mesh.visible = params.showStar;
+    mesh.renderOrder = 10;
+    gridGroup.add(mesh);
+    starMeshes.push(mesh);
+  }
 }
 buildStar();
+buildNodes();
 
 // ---------------------------------------------------------------
 // Mouse tracking: unproject onto the z=0 plane
@@ -543,8 +584,18 @@ pathsFolder.add(params, 'showDiagonalA').name('diagonal \\').onChange((v) => (li
 pathsFolder.add(params, 'showDiagonalB').name('diagonal /').onChange((v) => (lineGroups.diagonalB.visible = v));
 
 const starFolder = gui.addFolder('star mask');
-starFolder.add(params, 'showStar').name('visible').onChange((v) => (starMesh.visible = v));
-starFolder.add(params, 'starSize', 100, 1000, 10).name('size').onFinishChange(buildStar);
+function rebuildStar() {
+  buildStar();
+  buildNodes();
+}
+starFolder.add(params, 'showStar').name('visible').onChange((v) => {
+  for (const mesh of starMeshes) mesh.visible = v;
+  buildNodes();
+});
+starFolder.add(params, 'starSize', 100, 1000, 10).name('size').onFinishChange(rebuildStar);
+starFolder.add(params, 'starSize2', 60, 800, 10).name('size (small)').onFinishChange(rebuildStar);
+starFolder.add(params, 'starOffsetX', 0, 600, 5).name('offset x').onFinishChange(rebuildStar);
+starFolder.add(params, 'starOffsetY', 0, 600, 5).name('offset y').onFinishChange(rebuildStar);
 starFolder.addColor(params, 'starCore').name('core color').onChange((v) => starUniforms.uCore.value.set(v));
 starFolder.addColor(params, 'starColorA').name('gradient A').onChange((v) => starUniforms.uColorA.value.set(v));
 starFolder.addColor(params, 'starColorB').name('gradient B').onChange((v) => starUniforms.uColorB.value.set(v));
