@@ -13,12 +13,12 @@ const params = {
   rows: 4,
   lineThickness: 1,
   radius: 250,
-  glowColor: '#ea6afb',
-  baseColor: '#616161',
-  nodeColor: '#616161',
+  glowColor: '#fdb4b4',
+  baseColor: '#586393',
+  nodeColor: '#586393',
   nodeSize: 40,
   ringCount: 2,
-  background: '#0d0613',
+  background: '#0a0f2c',
   intensity: 1.6,
   showHorizontal: true,
   showVertical: true,
@@ -32,9 +32,12 @@ const params = {
   starColorA: '#8a5cff',
   starColorB: '#2a3bd8',
   starCore: '#e8ddff',
-  panStrength: 0.18,
-  parallaxStrength: 15,
+  panStrength: 0.06,
+  parallaxStrength: 8,
   parallaxSmoothing: 0.08,
+  starParallaxMultiplier2: 3,
+  starParallaxMultiplier3: 2,
+  cameraZ: 800,
 };
 
 const scene = new THREE.Scene();
@@ -45,7 +48,7 @@ const gridGroup = new THREE.Group();
 scene.add(gridGroup);
 
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 5000);
-camera.position.set(0, 0, 800);
+camera.position.set(0, 0, params.cameraZ);
 
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -312,6 +315,7 @@ function buildNodes() {
       uniform vec3 uHoleColor;
       void main() {
         gl_FragColor = vec4(uHoleColor, 1.0);
+        #include <colorspace_fragment>
       }
     `,
     // must be in the same transparent render queue as the (transparent) grid
@@ -478,6 +482,7 @@ function buildStar() {
     const geometry = new THREE.PlaneGeometry(size, size);
     const mesh = new THREE.Mesh(geometry, starMaterial);
     mesh.position.set(x, y, 5);
+    mesh.userData.basePos = { x, y };
     mesh.visible = params.showStar;
     mesh.renderOrder = 10;
     gridGroup.add(mesh);
@@ -532,6 +537,17 @@ function updateMouseWorld() {
     smoothedPointer.y * params.parallaxStrength,
     0
   );
+
+  // small stars get their own parallax multiplier layered on top of the
+  // shared gridGroup movement (main star just moves with the grid at 1x)
+  const starMultipliers = [1, params.starParallaxMultiplier2, params.starParallaxMultiplier3];
+  for (let i = 0; i < starMeshes.length; i++) {
+    const mesh = starMeshes[i];
+    const base = mesh.userData.basePos;
+    const extra = (starMultipliers[i] ?? 1) - 1;
+    mesh.position.x = base.x + smoothedPointer.x * params.parallaxStrength * extra;
+    mesh.position.y = base.y + smoothedPointer.y * params.parallaxStrength * extra;
+  }
 }
 
 // ---------------------------------------------------------------
@@ -572,6 +588,9 @@ gui.addColor(params, 'background').name('background').onChange((v) => {
 gui.add(params, 'cellSize', 60, 320, 5).name('grid spacing').onFinishChange(regenerate);
 gui.add(params, 'cols', 2, 40, 1).name('columns').onFinishChange(regenerate);
 gui.add(params, 'rows', 2, 40, 1).name('rows').onFinishChange(regenerate);
+gui.add(params, 'cameraZ', 100, 3000, 10).name('camera zoom (z)').onChange((v) => {
+  camera.position.z = v;
+});
 gui.add(params, 'lineThickness', 0.5, 12, 0.5).name('line thickness').onFinishChange(() => {
   buildLines();
   buildNodes();
@@ -602,6 +621,8 @@ starFolder.addColor(params, 'starColorB').name('gradient B').onChange((v) => sta
 starFolder.add(params, 'panStrength', 0, 0.6, 0.01).name('pan strength');
 starFolder.add(params, 'parallaxStrength', 0, 80, 1).name('grid parallax');
 starFolder.add(params, 'parallaxSmoothing', 0.02, 1, 0.01).name('parallax smoothing');
+starFolder.add(params, 'starParallaxMultiplier2', 0, 3, 0.05).name('parallax x (star 2)');
+starFolder.add(params, 'starParallaxMultiplier3', 0, 3, 0.05).name('parallax x (star 3)');
 
 // ---------------------------------------------------------------
 // Render loop
