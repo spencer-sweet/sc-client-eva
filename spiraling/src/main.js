@@ -15,11 +15,17 @@ import GUI from 'lil-gui';
 // the viewport and resolved live, so the composition survives any resize.
 
 const params = {
-  count: 12,
+  count: 32,
   seed: 7,
 
-  lifeOrbits: 4,        // how many times a star orbits before it fades out
-  lifeFade: 0.22,       // fraction of life spent fading in / out (ephemerality)
+  lifeOrbits: 0.5,      // how many times a star orbits before it fades out
+  lifeFade: 0.44,       // fraction of life spent fading in / out (ephemerality)
+
+  tunnel: 0,            // 0 = flat orbit, 1 = zoom forward through a tunnel
+
+  rotX: -60,            // scene rotation (degrees) — tilt to view the tunnel
+  rotY: 0,              //   from the side / above
+  rotZ: 0,
 
   speed: 0.76,          // global angular speed
   orbitScale: 0.53,     // base orbit radius as a fraction of the short side
@@ -45,15 +51,31 @@ const params = {
 // path every frame (not recorded from past frames), so it's always full-length
 // and completely independent of framerate / tab throttling.
 const SAMPLES = 256;
-const scratch = new Float32Array(SAMPLES * 2); // reused center-point buffer
+const scratch = new Float32Array(SAMPLES * 3); // reused center-point buffer (x,y,z)
+
+// Tunnel depth: in tunnel mode a star travels along the view axis (Z) from
+// Z_BACK (deep in the scene) toward Z_FRONT (near the camera). These are
+// fractions of the camera distance; perspective then produces the zoom, and
+// because the depth is real the tunnel can be viewed from any angle.
+const Z_FRONT = 0.6;  // × camDist, just in front of the z=0 plane
+const Z_BACK = -1.25; // × camDist, into the scene (less compression = longer streaks)
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(params.background);
 
+// Perspective camera calibrated so the z=0 plane maps 1:1 to pixels — the
+// head-on (un-rotated) view is identical to the old orthographic one.
+const FOV = 55;
 let halfW = window.innerWidth / 2;
 let halfH = window.innerHeight / 2;
-const camera = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, -1000, 1000);
-camera.position.z = 10;
+let camDist = halfH / Math.tan((FOV * Math.PI) / 360);
+const camera = new THREE.PerspectiveCamera(FOV, window.innerWidth / window.innerHeight, 1, 1e6);
+camera.position.set(0, 0, camDist);
+camera.lookAt(0, 0, 0);
+
+// reusable temporaries for per-frame billboarding math
+const _q = new THREE.Quaternion();
+const _v = new THREE.Vector3();
 
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -232,11 +254,10 @@ function buildStars() {
 
     const s = { ribbon, sprite, positions };
     randomizeOrbit(s);
-    // stagger initial lives so they don't all fade together, and place the
-    // birth in the past so each already has a matching, full-grown trail
-    const life = params.lifeOrbits * s.lifeMul;
-    s.age = spawnRng() * life;
-    s.birthT = time - orbitTime(s) * s.age;
+    // stagger initial lives so they don't all fade together, and give each a
+    // full-grown trail right away (born far enough in the past to fill it)
+    s.age = spawnRng() * params.lifeOrbits * s.lifeMul;
+    s.birthT = time - params.trailLength;
     stars.push(s);
   }
 }
@@ -254,49 +275,106 @@ function randomizeOrbit(s) {
   s.speedMul = 0.6 + rng() * 0.9;
   s.dir = rng() < 0.5 ? -1 : 1;
   s.phase = rng() * Math.PI * 2;
+  s.head = s.phase; // accumulated head angle (advanced each frame)
+  s.omega = 0;      // current signed angular rate (set per frame)
   // epicycle: a small circle riding the main orbit -> gentle swirl, not loops
   s.epiFreq = 1 + Math.floor(rng() * 2); // 1–2 -> a slow sway rather than petals
   s.epiMul = 0.55 + rng() * 0.5;
   s.epiDir = rng() < 0.5 ? -1 : 1;
   s.epiPhase = rng() * Math.PI * 2;
   s.lifeMul = 0.6 + rng() * 0.8; // per-star lifespan variation
+  // tunnel mode: fixed heading out from center + how far out it flies
+  s.warpAngle = rng() * Math.PI * 2;
+  s.warpRad = 0.7 + rng() * 0.7;
 }
 
-// Parametric time for one full main-orbit revolution of a star.
-function orbitTime(s) {
-  return (Math.PI * 2) / Math.max(1e-4, params.speed * s.speedMul);
-}
-
-// Position of a star at parametric time t, in current pixel space.
-// Main elliptical orbit + a smaller epicyclic circle for looping,
-// circular oscillations along the way.
+// Position of a star at parametric time t, in current pixel space. Blends its
+// flat elliptical orbit (with epicyclic swirl) into a tunnel-zoom path as
+// `params.tunnel` rises. Returns the star's age fraction at time t (0=birth,
+// 1=death), which the tunnel path uses as its forward depth.
 function starPositionInto(s, t, out, o) {
   const minHalf = Math.min(halfW, halfH);
   const cx = s.ncx * halfW;
   const cy = s.ncy * halfH;
   const rBase = params.orbitScale * minHalf * s.radMul;
-  const rx = rBase;
-  const ry = rBase * s.aspect;
 
-  const theta = t * params.speed * s.speedMul * s.dir + s.phase;
+  // age fraction at time t (extrapolated from the current age)
+  const life = Math.max(0.01, params.lifeOrbits * s.lifeMul);
+  const rate = (Math.abs(params.speed) * s.speedMul) / (Math.PI * 2); // revs / t-unit
+  let a = (s.age + (t - time) * rate) / life;
+  a = a < 0 ? 0 : a > 1 ? 1 : a;
+
+  // travel direction: speed > 0 flies out toward the camera, speed < 0 flies
+  // in toward the vanishing point (down the tunnel). "depth" is proximity to
+  // the camera (0 = deep in the scene, 1 = near the camera).
+  const depth = params.speed < 0 ? 1 - a : a;
+
+  const w = params.tunnel;
+
+  // One unified trajectory rather than a blend of two moving points (which
+  // beat against each other and curl into loops mid-transition):
+  //  - angular speed eases from the orbit rate down to the tunnel's slow spin
+  //  - the flat ellipse becomes a fixed-radius ring travelling along Z
+  //  - the ellipse rounds to a circle, epicycle + centre offset fade out
+  //
+  // The head angle (s.head) is *accumulated* per frame, not recomputed from
+  // absolute time, so changing speed/tunnel eases the motion smoothly instead
+  // of teleporting every star (omega * large-t would jump on any change).
+  // Trail samples are offset back from the head by the current angular rate.
+  const theta = s.head + (t - time) * s.omega;
+
+  // in-plane radius blends ellipse -> tunnel ring; depth becomes a real Z so
+  // perspective (not a fake 1/z) does the zoom, and the tunnel has true depth.
+  const ringR = minHalf * 0.5 * s.warpRad;
+  const R = rBase + (ringR - rBase) * w;
+  const asp = 1 + (s.aspect - 1) * (1 - w);
+  const zAxis = w * camDist * (Z_BACK + (Z_FRONT - Z_BACK) * depth);
+
   const phi = theta * s.epiFreq * s.epiDir + s.epiPhase;
-  const er = params.wobble * rBase * s.epiMul;
+  const er = params.wobble * rBase * s.epiMul * (1 - w);
 
-  out[o] = cx + rx * Math.cos(theta) + er * Math.cos(phi);
-  out[o + 1] = cy + ry * Math.sin(theta) + er * Math.sin(phi);
+  out[o] = cx * (1 - w) + R * Math.cos(theta) + er * Math.cos(phi);
+  out[o + 1] = cy * (1 - w) + R * asp * Math.sin(theta) + er * Math.sin(phi);
+  out[o + 2] = zAxis;
+  return depth;
 }
 
 // ---------------------------------------------------------------
 // Per-frame update: resample each orbit path backwards in time into a
 // tapered ribbon, then place the head glow at the leading sample.
 // ---------------------------------------------------------------
+const DEG = Math.PI / 180;
+
+// numeric params that feed the position math; a non-finite one (e.g. an empty
+// GUI text field) would spread NaN into every vertex, so they're clamped first
+const NUMERIC_PARAMS = [
+  'speed', 'tunnel', 'orbitScale', 'orbitSpread', 'ovalness', 'wobble',
+  'trailLength', 'trailWidth', 'trailFade', 'trailIntensity',
+  'glowSize', 'glowIntensity', 'lifeOrbits', 'lifeFade', 'rotX', 'rotY', 'rotZ',
+];
+
 function updateStars(dt) {
   time += dt;
   const denom = SAMPLES - 1;
 
+  // safety net: never let a stray non-finite value reach the geometry
+  for (const k of NUMERIC_PARAMS) {
+    if (!Number.isFinite(params[k])) params[k] = 0;
+  }
+
+  // apply the scene rotation, then find the camera's "toward-camera" direction
+  // in the group's local space so trail ribbons can billboard to face it
+  starGroup.rotation.set(params.rotX * DEG, params.rotY * DEG, params.rotZ * DEG);
+  _q.copy(starGroup.quaternion).invert();
+  _v.set(0, 0, 1).applyQuaternion(_q);
+  const vx = _v.x;
+  const vy = _v.y;
+  const vz = _v.z;
+
   for (const s of stars) {
     // --- lifecycle: age in revolutions, fade in/out, respawn when spent ---
-    s.age += (params.speed * s.speedMul * dt) / (Math.PI * 2);
+    // always ages forward, regardless of travel direction (speed sign)
+    s.age += (Math.abs(params.speed) * s.speedMul * dt) / (Math.PI * 2);
     const life = Math.max(0.01, params.lifeOrbits * s.lifeMul);
     if (s.age >= life) {
       randomizeOrbit(s); // reborn as a fresh star on a new path
@@ -306,6 +384,11 @@ function updateStars(dt) {
     const p = s.age / life;
     const lifeAlpha = smoothstep(0, params.lifeFade, p) * (1 - smoothstep(1 - params.lifeFade, 1, p));
 
+    // advance the accumulated head angle at the current (speed/tunnel-eased)
+    // rate; sampling reads s.omega so changes stay smooth, never a jump
+    s.omega = params.speed * s.speedMul * (1 - 0.5 * params.tunnel) * s.dir;
+    s.head += s.omega * dt;
+
     // trail only reaches back to the star's birth, so a newborn's trail grows
     // in from nothing rather than appearing fully formed
     const span = Math.min(params.trailLength, time - s.birthT);
@@ -313,24 +396,34 @@ function updateStars(dt) {
     // sample the path: k=0 is the head (now), k=denom is the tail (oldest)
     for (let k = 0; k < SAMPLES; k++) {
       const tk = time - (k / denom) * span;
-      starPositionInto(s, tk, scratch, k * 2);
+      starPositionInto(s, tk, scratch, k * 3);
     }
 
-    // build the ribbon by offsetting each sample ±perp with a tapering width
+    // Build the ribbon by offsetting each sample ±perp with a tapering width.
+    // perp = tangent × view, so the ribbon always faces the camera (from any
+    // scene rotation); perspective alone handles near-thick / far-thin.
     let px = 0;
-    let py = 1; // fallback perpendicular
+    let py = 1;
+    let pz = 0; // fallback perpendicular
     for (let k = 0; k < SAMPLES; k++) {
-      const cx = scratch[k * 2];
-      const cy = scratch[k * 2 + 1];
+      const cx = scratch[k * 3];
+      const cy = scratch[k * 3 + 1];
+      const cz = scratch[k * 3 + 2];
       const pk = k > 0 ? k - 1 : k;
       const nk = k < denom ? k + 1 : k;
       // tangent along the path (prev sample is toward the head)
-      let tx = scratch[pk * 2] - scratch[nk * 2];
-      let ty = scratch[pk * 2 + 1] - scratch[nk * 2 + 1];
-      const tl = Math.hypot(tx, ty);
-      if (tl > 1e-4) {
-        px = -ty / tl; // perpendicular
-        py = tx / tl;
+      const tx = scratch[pk * 3] - scratch[nk * 3];
+      const ty = scratch[pk * 3 + 1] - scratch[nk * 3 + 1];
+      const tz = scratch[pk * 3 + 2] - scratch[nk * 3 + 2];
+      // perp = tangent × viewDir (local space)
+      let ex = ty * vz - tz * vy;
+      let ey = tz * vx - tx * vz;
+      let ez = tx * vy - ty * vx;
+      const el = Math.hypot(ex, ey, ez);
+      if (el > 1e-4) {
+        px = ex / el;
+        py = ey / el;
+        pz = ez / el;
       }
       const frac = k / denom;
       const halfWidth = params.trailWidth * (0.12 + 0.88 * (1 - frac));
@@ -338,10 +431,10 @@ function updateStars(dt) {
       const a = k * 6;
       s.positions[a] = cx + px * halfWidth;
       s.positions[a + 1] = cy + py * halfWidth;
-      s.positions[a + 2] = 0;
+      s.positions[a + 2] = cz + pz * halfWidth;
       s.positions[a + 3] = cx - px * halfWidth;
       s.positions[a + 4] = cy - py * halfWidth;
-      s.positions[a + 5] = 0;
+      s.positions[a + 5] = cz - pz * halfWidth;
     }
 
     const geo = s.ribbon.geometry;
@@ -350,8 +443,8 @@ function updateStars(dt) {
     s.ribbon.material.uniforms.uFade.value = params.trailFade;
     s.ribbon.material.uniforms.uIntensity.value = params.trailIntensity * lifeAlpha;
 
-    // head glow at the leading sample
-    s.sprite.position.set(scratch[0], scratch[1], 1);
+    // head glow at the leading sample (perspective scales it with depth)
+    s.sprite.position.set(scratch[0], scratch[1], scratch[2]);
     s.sprite.scale.setScalar(params.glowSize);
     s.sprite.material.color.copy(s.color);
     s.sprite.material.opacity = params.glowIntensity * lifeAlpha;
@@ -364,13 +457,14 @@ function updateStars(dt) {
 const gui = new GUI({ title: 'spiraling stars' });
 gui.add(params, 'count', 1, 40, 1).name('star count').onFinishChange(buildStars);
 gui.add(params, 'seed', 1, 999, 1).name('seed').onFinishChange(buildStars);
+gui.add(params, 'tunnel', 0, 1, 0.01).name('orbit → tunnel');
 
 const life = gui.addFolder('life');
 life.add(params, 'lifeOrbits', 0.5, 20, 0.5).name('orbits before fade');
 life.add(params, 'lifeFade', 0.05, 0.5, 0.01).name('fade in / out');
 
 const motion = gui.addFolder('motion');
-motion.add(params, 'speed', 0.02, 1.5, 0.01).name('speed');
+motion.add(params, 'speed', -1.5, 1.5, 0.01).name('speed (– = into tunnel)');
 motion.add(params, 'orbitScale', 0.05, 0.6, 0.01).name('orbit size');
 motion.add(params, 'orbitSpread', 0, 0.7, 0.01).name('orbit scatter').onFinishChange(buildStars);
 motion.add(params, 'ovalness', 0, 1, 0.01).name('ovalness').onFinishChange(buildStars);
@@ -386,6 +480,11 @@ const glow = gui.addFolder('glow');
 glow.add(params, 'glowSize', 10, 160, 1).name('size');
 glow.add(params, 'glowIntensity', 0.1, 2.5, 0.05).name('brightness');
 
+const view = gui.addFolder('scene rotation');
+view.add(params, 'rotX', -180, 180, 1).name('rotate X');
+view.add(params, 'rotY', -180, 180, 1).name('rotate Y');
+view.add(params, 'rotZ', -180, 180, 1).name('rotate Z');
+
 const color = gui.addFolder('color');
 color.addColor(params, 'colorA').name('palette A').onFinishChange(buildStars);
 color.addColor(params, 'colorB').name('palette B').onFinishChange(buildStars);
@@ -398,10 +497,9 @@ color.addColor(params, 'background').name('background').onChange((v) => scene.ba
 function onResize() {
   halfW = window.innerWidth / 2;
   halfH = window.innerHeight / 2;
-  camera.left = -halfW;
-  camera.right = halfW;
-  camera.top = halfH;
-  camera.bottom = -halfH;
+  camDist = halfH / Math.tan((FOV * Math.PI) / 360);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.position.z = camDist;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
