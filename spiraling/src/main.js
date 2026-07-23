@@ -15,8 +15,11 @@ import GUI from 'lil-gui';
 // the viewport and resolved live, so the composition survives any resize.
 
 const params = {
-  count: 6,
+  count: 12,
   seed: 7,
+
+  lifeOrbits: 4,        // how many times a star orbits before it fades out
+  lifeFade: 0.22,       // fraction of life spent fading in / out (ephemerality)
 
   speed: 0.76,          // global angular speed
   orbitScale: 0.53,     // base orbit radius as a fraction of the short side
@@ -133,6 +136,13 @@ scene.add(starGroup);
 
 let stars = [];
 let time = 0;
+// respawns draw from a persistent stream so a given seed stays reproducible
+let spawnRng = mulberry32(1);
+
+function smoothstep(a, b, x) {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
 
 function paletteColor(rng) {
   // pick one of the three palette anchors, then nudge its hue a little so
@@ -158,7 +168,9 @@ function disposeStars() {
 
 function buildStars() {
   disposeStars();
-  const rng = mulberry32(params.seed * 2654435761);
+  // reseed the shared spawn stream so the field (and its respawns) is
+  // reproducible for a given seed
+  spawnRng = mulberry32(params.seed * 2654435761);
 
   for (let i = 0; i < params.count; i++) {
     // --- trail ribbon: 2 verts per sample, indexed triangle strip ---
@@ -218,26 +230,41 @@ function buildStars() {
     const sprite = new THREE.Sprite(spriteMat);
     starGroup.add(sprite);
 
-    stars.push({
-      ribbon,
-      sprite,
-      positions,
-      color: paletteColor(rng),
-      // normalized orbit params (resolved to pixels every frame)
-      ncx: (rng() * 2 - 1) * params.orbitSpread,
-      ncy: (rng() * 2 - 1) * params.orbitSpread,
-      radMul: 0.55 + rng() * 0.6,
-      aspect: 1 + (rng() * 2 - 1) * params.ovalness,
-      speedMul: 0.6 + rng() * 0.9,
-      dir: rng() < 0.5 ? -1 : 1,
-      phase: rng() * Math.PI * 2,
-      // epicycle: a small circle riding the main orbit -> gentle swirl, not loops
-      epiFreq: 1 + Math.floor(rng() * 2), // 1–2 -> a slow sway rather than petals
-      epiMul: 0.55 + rng() * 0.5,
-      epiDir: rng() < 0.5 ? -1 : 1,
-      epiPhase: rng() * Math.PI * 2,
-    });
+    const s = { ribbon, sprite, positions };
+    randomizeOrbit(s);
+    // stagger initial lives so they don't all fade together, and place the
+    // birth in the past so each already has a matching, full-grown trail
+    const life = params.lifeOrbits * s.lifeMul;
+    s.age = spawnRng() * life;
+    s.birthT = time - orbitTime(s) * s.age;
+    stars.push(s);
   }
+}
+
+// (Re)roll a star's orbit + lifespan. Used at build time and on every respawn,
+// so a dying star is replaced by a fresh one on a slightly different path.
+function randomizeOrbit(s) {
+  const rng = spawnRng;
+  s.color = paletteColor(rng);
+  // normalized orbit params (resolved to pixels every frame)
+  s.ncx = (rng() * 2 - 1) * params.orbitSpread;
+  s.ncy = (rng() * 2 - 1) * params.orbitSpread;
+  s.radMul = 0.55 + rng() * 0.6;
+  s.aspect = 1 + (rng() * 2 - 1) * params.ovalness;
+  s.speedMul = 0.6 + rng() * 0.9;
+  s.dir = rng() < 0.5 ? -1 : 1;
+  s.phase = rng() * Math.PI * 2;
+  // epicycle: a small circle riding the main orbit -> gentle swirl, not loops
+  s.epiFreq = 1 + Math.floor(rng() * 2); // 1–2 -> a slow sway rather than petals
+  s.epiMul = 0.55 + rng() * 0.5;
+  s.epiDir = rng() < 0.5 ? -1 : 1;
+  s.epiPhase = rng() * Math.PI * 2;
+  s.lifeMul = 0.6 + rng() * 0.8; // per-star lifespan variation
+}
+
+// Parametric time for one full main-orbit revolution of a star.
+function orbitTime(s) {
+  return (Math.PI * 2) / Math.max(1e-4, params.speed * s.speedMul);
 }
 
 // Position of a star at parametric time t, in current pixel space.
@@ -268,9 +295,24 @@ function updateStars(dt) {
   const denom = SAMPLES - 1;
 
   for (const s of stars) {
+    // --- lifecycle: age in revolutions, fade in/out, respawn when spent ---
+    s.age += (params.speed * s.speedMul * dt) / (Math.PI * 2);
+    const life = Math.max(0.01, params.lifeOrbits * s.lifeMul);
+    if (s.age >= life) {
+      randomizeOrbit(s); // reborn as a fresh star on a new path
+      s.age = 0;
+      s.birthT = time;
+    }
+    const p = s.age / life;
+    const lifeAlpha = smoothstep(0, params.lifeFade, p) * (1 - smoothstep(1 - params.lifeFade, 1, p));
+
+    // trail only reaches back to the star's birth, so a newborn's trail grows
+    // in from nothing rather than appearing fully formed
+    const span = Math.min(params.trailLength, time - s.birthT);
+
     // sample the path: k=0 is the head (now), k=denom is the tail (oldest)
     for (let k = 0; k < SAMPLES; k++) {
-      const tk = time - (k / denom) * params.trailLength;
+      const tk = time - (k / denom) * span;
       starPositionInto(s, tk, scratch, k * 2);
     }
 
@@ -306,13 +348,13 @@ function updateStars(dt) {
     geo.attributes.position.needsUpdate = true;
     s.ribbon.material.uniforms.uColor.value.copy(s.color);
     s.ribbon.material.uniforms.uFade.value = params.trailFade;
-    s.ribbon.material.uniforms.uIntensity.value = params.trailIntensity;
+    s.ribbon.material.uniforms.uIntensity.value = params.trailIntensity * lifeAlpha;
 
     // head glow at the leading sample
     s.sprite.position.set(scratch[0], scratch[1], 1);
     s.sprite.scale.setScalar(params.glowSize);
     s.sprite.material.color.copy(s.color);
-    s.sprite.material.opacity = params.glowIntensity;
+    s.sprite.material.opacity = params.glowIntensity * lifeAlpha;
   }
 }
 
@@ -322,6 +364,10 @@ function updateStars(dt) {
 const gui = new GUI({ title: 'spiraling stars' });
 gui.add(params, 'count', 1, 40, 1).name('star count').onFinishChange(buildStars);
 gui.add(params, 'seed', 1, 999, 1).name('seed').onFinishChange(buildStars);
+
+const life = gui.addFolder('life');
+life.add(params, 'lifeOrbits', 0.5, 20, 0.5).name('orbits before fade');
+life.add(params, 'lifeFade', 0.05, 0.5, 0.01).name('fade in / out');
 
 const motion = gui.addFolder('motion');
 motion.add(params, 'speed', 0.02, 1.5, 0.01).name('speed');
