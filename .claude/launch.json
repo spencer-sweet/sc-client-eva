@@ -26,6 +26,12 @@
       "port": 5196
     },
     {
+      "name": "spiraling",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-C", "spiraling", "run", "dev", "--", "--port", "5195", "--strictPort"],
+      "port": 5195
+    },
+    {
       "name": "dist-preview",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-y", "serve", "dist", "-l", "4173"],
