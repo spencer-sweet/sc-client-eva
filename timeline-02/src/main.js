@@ -14,11 +14,15 @@ import GUI from 'lil-gui';
 // filled star shape).
 //
 // Depth order along -z, camera starts on the +z side looking down the axis:
-//   camera (starts far) -> WALL_Z (opaque, 3 star-shaped holes)
-//                        -> GLASS_Z (the shatter glb, sitting behind the
-//                           center hole so it reads as "seen through the
-//                           window")
+//   camera (starts far) -> GLASS_Z (the shatter glb, closest to camera --
+//                           sits just in front of the wall's center hole)
+//                        -> WALL_Z (opaque, 3 star-shaped holes)
 //                        -> space scene (aura veils + starfield, far back)
+//
+// Everything behind the glass is deliberately kept in the renderer's OPAQUE
+// queue (see the wall / wisp / starfield materials), because three.js renders
+// only opaque objects into the backdrop that transmissive materials refract.
+// Anything left in the transparent queue is invisible through the shards.
 //
 // One scroll timeline drives three overlapping phases: zoom into the center
 // window, shatter the glass, then push the camera through the (now-fading)
@@ -47,7 +51,7 @@ const CONFIG = {
   parallaxDamping: 4,
 
   // -- wall + star windows (ported from paths-grid's 3-star layout) --
-  wallColor: '#170a2c',
+  wallColor: '#0a0f2c',
   starSize: 6,
   starSize2: 3.6,
   starOffsetX: 3.1,
@@ -57,12 +61,12 @@ const CONFIG = {
   gridCellSize: 4.8,
   gridCols: 17,
   gridRows: 11,
-  gridLineThickness: 0.025,
+  gridLineThickness: 0.01,
   gridGlowRadius: 2.4,
   gridGlowColor: '#00fff0', // neon cyan hotspot under the cursor
   gridIntensity: 2,
-  gridBaseColor: '#ff2bd6', // neon magenta lattice
-  gridNodeColor: '#05d9e8', // neon cyan reticles
+  gridBaseColor: '#2f3551', // muted slate lattice, only lit up by the cursor glow
+  gridNodeColor: '#2f3551', // reticles match the lines so the lattice reads as one piece
   gridNodeSize: 0.32,
   gridRingCount: 2,
 
@@ -88,6 +92,15 @@ const CONFIG = {
   attenuationColor: '#ffb066',
   attenuationDistance: 25,
 
+  // -- glass edge fresnel -- a white rim that ramps up at grazing angles.
+  // The glb's material is physically fine but the shards are small and flat,
+  // so their real Fresnel response only shows on the few facets angled just
+  // right; this puts a consistent white edge on every shard so the silhouettes
+  // read as glass instead of dissolving into whatever is behind them
+  rimColor: '#eaf4ff',
+  rimStrength: 0.55,
+  rimPower: 4.5,
+
   // -- space scene behind the wall --
   showBackgroundStars: true,
   bgStarCount: 260,
@@ -104,10 +117,10 @@ const CONFIG = {
   bloomThreshold: 0.25,
 };
 
-const MODEL_URL = `${import.meta.env.BASE_URL}star-shatter-01.glb`;
+const MODEL_URL = `${import.meta.env.BASE_URL}star-shatter-glass-animated.glb`;
 
 const WALL_Z = 0;
-const GLASS_Z = -0.6;
+const GLASS_Z = 0.6;
 const SPACE_NEAR_Z = GLASS_Z - 14;
 const SPACE_FAR_Z = GLASS_Z - 85;
 const WALL_W = 34;
@@ -158,7 +171,16 @@ camera.position.set(0, 0, CONFIG.cameraStartZ);
 // reflection capture; the main camera needs both layers to still see it
 camera.layers.enable(1);
 
-const composer = new EffectComposer(renderer);
+// the composer draws into its own render target, which bypasses the canvas's
+// `antialias: true` entirely -- so give that target real MSAA. Beyond just
+// antialiasing the scene, the wall's window cutouts below depend on
+// alpha-to-coverage, which is a no-op on a single-sampled buffer.
+const composerTarget = new THREE.WebGLRenderTarget(
+  window.innerWidth * renderer.getPixelRatio(),
+  window.innerHeight * renderer.getPixelRatio(),
+  { type: THREE.HalfFloatType, samples: 4 }
+);
+const composer = new EffectComposer(renderer, composerTarget);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
@@ -191,8 +213,16 @@ function makeStarMaskTexture() {
   c.width = c.height = size;
   const ctx = c.getContext('2d');
   ctx.scale(size / STAR_BOX, size / STAR_BOX);
+  const path = new Path2D(STAR_PATH);
   ctx.fillStyle = '#fff';
-  ctx.fill(new Path2D(STAR_PATH));
+  ctx.fill(path);
+  // canvas's fill antialiasing leaves partial-coverage pixels along the
+  // path's sharpest cusps (the star's inner waist points), which read as a
+  // sub-pixel gap once sampled/thresholded downstream -- stroking over the
+  // same path closes that seam
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke(path);
   const tex = new THREE.CanvasTexture(c);
   tex.needsUpdate = true;
   return tex;
@@ -233,8 +263,17 @@ syncWindowUniforms();
 
 const wallMaterial = new THREE.ShaderMaterial({
   uniforms: wallUniforms,
-  transparent: true,
-  depthWrite: false,
+  // Opaque on purpose. three.js builds the backdrop that transmissive
+  // materials refract from the OPAQUE render queue only, so anything left in
+  // the transparent queue is simply invisible through the glass. Keeping the
+  // wall opaque puts it (and, via the depth it writes, the space scene showing
+  // through its windows) into what the shards actually see.
+  //
+  // alphaToCoverage is what lets it stay opaque and still punch holes: the
+  // shader's mask alpha becomes MSAA sample coverage, so the window edges stay
+  // antialiased instead of going stair-stepped the way a hard discard would.
+  transparent: false,
+  alphaToCoverage: true,
   // double-sided so the glass's reflection camera (looking back from behind
   // the wall, toward the main camera) still sees it instead of culling it as
   // a backface -- otherwise the glass has nothing colorful to reflect there
@@ -273,8 +312,23 @@ const wallMaterial = new THREE.ShaderMaterial({
 
 const wallMesh = new THREE.Mesh(new THREE.PlaneGeometry(WALL_W, WALL_H), wallMaterial);
 wallMesh.position.z = WALL_Z;
-wallMesh.renderOrder = 10; // in front of glass/space in the transparent queue
+// no renderOrder: as an opaque mesh it sorts front-to-back naturally, which
+// draws it before the space scene and lets its depth reject those far wisps
+// everywhere except inside the window cutouts
 scene.add(wallMesh);
+
+// The pass-through fade is the one moment the wall needs genuine alpha
+// blending -- alpha-to-coverage would dither a partial fade into a visible
+// screen door at 4 samples. It leaves the opaque queue only for that stretch,
+// by which point the glass has already shattered and no longer needs it in
+// the backdrop.
+function setWallFading(fading) {
+  if (wallMaterial.transparent === fading) return;
+  wallMaterial.transparent = fading;
+  wallMaterial.alphaToCoverage = !fading;
+  wallMaterial.depthWrite = !fading;
+  wallMaterial.needsUpdate = true;
+}
 
 // ---------------------------------------------------------------------------
 // Wall grid -- paths-grid's node/line lattice, etched onto the wall's surface
@@ -400,8 +454,11 @@ function buildGridLines() {
         gl_FragColor = vec4(color, 1.0);
       }
     `,
-    transparent: true,
-    depthWrite: false,
+    // fragments are either discarded (window cutouts) or fully opaque -- no
+    // partial alpha, so this can be a real opaque material. That matters
+    // because the glass's transmission only samples the renderer's *opaque*
+    // list for what's "behind" it; leaving this transparent silently made
+    // the grid invisible through the glass and left it out of depth testing
     side: THREE.DoubleSide,
   });
   gridLineMesh = new THREE.Mesh(geometry, material);
@@ -479,9 +536,10 @@ function buildGridNodes() {
         gl_FragColor = vec4(color, 1.0);
       }
     `,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
+    // opaque for the same reason as the grid lines above -- this also fixes
+    // depthTest:false previously making the node rings draw on top of
+    // literally everything (including glass shards flying in front of them)
+    // regardless of actual depth
     side: THREE.DoubleSide,
   });
 
@@ -557,7 +615,12 @@ seedBgStars();
 const bgStarMaterial = new THREE.PointsMaterial({
   size: 0.35,
   map: makeGlowTexture(),
-  transparent: true,
+  // `transparent: false` puts these in the opaque queue so the glass's
+  // transmission backdrop picks them up -- it does NOT make them opaque,
+  // because three only forces NoBlending when blending is *also* the default
+  // NormalBlending. Additive survives, and being order-independent it doesn't
+  // care that the opaque queue sorts front-to-back instead of back-to-front.
+  transparent: false,
   opacity: 0.85,
   blending: THREE.AdditiveBlending,
   depthWrite: false,
@@ -587,7 +650,10 @@ const wispMaterial = new THREE.ShaderMaterial({
     uOpacity: wispUniforms.uOpacity,
     uSeed: { value: 0 },
   },
-  transparent: true,
+  // opaque queue for the same reason as the starfield above -- additive
+  // blending is preserved, and depthWrite stays off so the veils still stack
+  // and sum into each other rather than occluding one another
+  transparent: false,
   blending: THREE.AdditiveBlending,
   depthWrite: false,
   side: THREE.DoubleSide,
@@ -704,7 +770,8 @@ scene.add(eyeStar);
 
 // ---------------------------------------------------------------------------
 // Glass -- the star-shatter glb, fit to the center window and parked at
-// GLASS_Z so it reads as sitting just behind that hole in the wall.
+// GLASS_Z, just in front of the wall's center hole, so it reads as the pane
+// sitting in the window rather than something seen behind it.
 //
 // A live CubeCamera parked at the glass's position feeds the material a real
 // reflection of the actual scene (wall grid, other shards, space) instead of
@@ -720,23 +787,43 @@ const reflectionCamera = new THREE.CubeCamera(0.1, 100, reflectionTarget);
 reflectionCamera.position.set(0, 0, GLASS_Z);
 scene.add(reflectionCamera);
 
-const glassMaterial = new THREE.MeshPhysicalMaterial({
-  color: 0xffffff,
-  metalness: 0,
-  roughness: CONFIG.roughness,
-  transmission: CONFIG.transmission,
-  thickness: CONFIG.thickness,
-  ior: CONFIG.ior,
-  envMap: reflectionTarget.texture,
-  envMapIntensity: CONFIG.envMapIntensity,
-  clearcoat: CONFIG.clearcoat,
-  clearcoatRoughness: CONFIG.clearcoatRoughness,
-  // colors the light that survives a long path through the glass, so only
-  // the thicker parts of the bunny/star pick up a warm tint while thin edges
-  // stay clear -- this is what reads as "glossy glass" rather than tinted plastic
-  attenuationColor: new THREE.Color(CONFIG.attenuationColor),
-  attenuationDistance: CONFIG.attenuationDistance,
-});
+// populated from the glb's own material once it loads (KHR_materials_transmission
+// / _volume / _clearcoat authored in Blender) -- see the GLTFLoader callback below
+let glassMaterial = null;
+
+// Fresnel rim, patched into whatever material the glb ships rather than baked
+// into the file, so it stays tunable from the GUI alongside the authored
+// values. Kept as standalone uniform objects so those GUI handlers can write
+// to them without needing to reach into the compiled shader.
+const rimUniforms = {
+  uRimColor: { value: new THREE.Color(CONFIG.rimColor) },
+  uRimStrength: { value: CONFIG.rimStrength },
+  uRimPower: { value: CONFIG.rimPower },
+};
+
+function addFresnelRim(material) {
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, rimUniforms);
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        'void main() {',
+        `uniform vec3 uRimColor;
+         uniform float uRimStrength;
+         uniform float uRimPower;
+         void main() {`
+      )
+      // geometryNormal / geometryViewDir are declared by <lights_fragment_begin>
+      // in main()'s scope, so they're still live by the time the final color is
+      // assembled here -- no need to recompute the view vector
+      .replace(
+        '#include <opaque_fragment>',
+        `float rimFresnel = pow(1.0 - saturate(dot(geometryNormal, geometryViewDir)), uRimPower);
+         outgoingLight += uRimColor * rimFresnel * uRimStrength;
+         #include <opaque_fragment>`
+      );
+  };
+  material.needsUpdate = true;
+}
 
 const modelGroup = new THREE.Group();
 modelGroup.position.z = GLASS_Z;
@@ -752,7 +839,10 @@ new GLTFLoader().load(
   (gltf) => {
     gltf.scene.traverse((child) => {
       if (child.isMesh) {
-        child.material = glassMaterial;
+        // all shards share the glb's single authored material ("Thick Glossy
+        // Glass") -- grab a reference to it once so the GUI/reflection setup
+        // below can still tweak it live
+        glassMaterial = child.material;
         child.frustumCulled = true;
         // the shatter chunks are low-poly with hard per-face normals, which
         // makes a transmissive material read as flat opaque mirror tiles
@@ -765,6 +855,27 @@ new GLTFLoader().load(
         child.layers.set(1);
       }
     });
+
+    // the glb material has no envMap of its own -- feed it the live scene
+    // reflection so shards still pick up the wall/other-shard/space reflection
+    if (glassMaterial) {
+      glassMaterial.envMap = reflectionTarget.texture;
+      glassMaterial.envMapIntensity = CONFIG.envMapIntensity;
+      addFresnelRim(glassMaterial);
+
+      // mirror the glb-authored values back into CONFIG so the GUI sliders
+      // reflect what's actually on the material instead of the old hand-tuned
+      // defaults, then refresh the displayed slider positions
+      CONFIG.transmission = glassMaterial.transmission;
+      CONFIG.roughness = glassMaterial.roughness;
+      CONFIG.thickness = glassMaterial.thickness;
+      CONFIG.ior = glassMaterial.ior;
+      CONFIG.clearcoat = glassMaterial.clearcoat;
+      CONFIG.clearcoatRoughness = glassMaterial.clearcoatRoughness;
+      CONFIG.attenuationColor = `#${glassMaterial.attenuationColor.getHexString()}`;
+      CONFIG.attenuationDistance = glassMaterial.attenuationDistance;
+      glassFolder.controllers.forEach((c) => c.updateDisplay());
+    }
 
     const box = new THREE.Box3().setFromObject(gltf.scene);
     const center = box.getCenter(new THREE.Vector3());
@@ -794,7 +905,7 @@ new GLTFLoader().load(
     }
   },
   undefined,
-  (err) => console.error('Failed to load star-shatter-01.glb', err)
+  (err) => console.error('Failed to load star-shatter glb', err)
 );
 
 function setShatterProgress(p) {
@@ -841,6 +952,7 @@ function applyTimeline(t) {
   // clipping/pop when the camera's z crosses the wall's z=0 plane
   wallUniforms.uOpacity.value = 1 - passT;
   wallMesh.visible = passT < 0.995;
+  setWallFading(passT > 0.001);
 }
 camera.userData.targetZ = CONFIG.cameraStartZ;
 
@@ -909,27 +1021,51 @@ gridFolder.add(CONFIG, 'gridCols', 4, 40, 1).name('Columns').onFinishChange(rege
 gridFolder.add(CONFIG, 'gridRows', 4, 30, 1).name('Rows').onFinishChange(regenerateGrid);
 
 const glassFolder = gui.addFolder('Glass Material');
-glassFolder.add(CONFIG, 'transmission', 0, 1, 0.01).name('Transmission').onChange((v) => (glassMaterial.transmission = v));
-glassFolder.add(CONFIG, 'roughness', 0, 0.5, 0.005).name('Roughness').onChange((v) => (glassMaterial.roughness = v));
-glassFolder.add(CONFIG, 'thickness', 0, 2, 0.01).name('Thickness').onChange((v) => (glassMaterial.thickness = v));
-glassFolder.add(CONFIG, 'ior', 1, 2.33, 0.01).name('IOR').onChange((v) => (glassMaterial.ior = v));
+glassFolder
+  .add(CONFIG, 'transmission', 0, 1, 0.01)
+  .name('Transmission')
+  .onChange((v) => glassMaterial && (glassMaterial.transmission = v));
+glassFolder
+  .add(CONFIG, 'roughness', 0, 0.5, 0.005)
+  .name('Roughness')
+  .onChange((v) => glassMaterial && (glassMaterial.roughness = v));
+glassFolder
+  .add(CONFIG, 'thickness', 0, 2, 0.01)
+  .name('Thickness')
+  .onChange((v) => glassMaterial && (glassMaterial.thickness = v));
+glassFolder
+  .add(CONFIG, 'ior', 1, 2.33, 0.01)
+  .name('IOR')
+  .onChange((v) => glassMaterial && (glassMaterial.ior = v));
 glassFolder
   .add(CONFIG, 'envMapIntensity', 0, 6, 0.05)
   .name('Env Intensity')
-  .onChange((v) => (glassMaterial.envMapIntensity = v));
-glassFolder.add(CONFIG, 'clearcoat', 0, 1, 0.01).name('Clearcoat').onChange((v) => (glassMaterial.clearcoat = v));
+  .onChange((v) => glassMaterial && (glassMaterial.envMapIntensity = v));
+glassFolder
+  .add(CONFIG, 'clearcoat', 0, 1, 0.01)
+  .name('Clearcoat')
+  .onChange((v) => glassMaterial && (glassMaterial.clearcoat = v));
 glassFolder
   .add(CONFIG, 'clearcoatRoughness', 0, 0.5, 0.005)
   .name('Clearcoat Roughness')
-  .onChange((v) => (glassMaterial.clearcoatRoughness = v));
+  .onChange((v) => glassMaterial && (glassMaterial.clearcoatRoughness = v));
 glassFolder
   .addColor(CONFIG, 'attenuationColor')
   .name('Tint Color')
-  .onChange((v) => glassMaterial.attenuationColor.set(v));
+  .onChange((v) => glassMaterial && glassMaterial.attenuationColor.set(v));
 glassFolder
   .add(CONFIG, 'attenuationDistance', 0.5, 30, 0.5)
   .name('Tint Distance')
-  .onChange((v) => (glassMaterial.attenuationDistance = v));
+  .onChange((v) => glassMaterial && (glassMaterial.attenuationDistance = v));
+glassFolder.addColor(CONFIG, 'rimColor').name('Edge Color').onChange((v) => rimUniforms.uRimColor.value.set(v));
+glassFolder
+  .add(CONFIG, 'rimStrength', 0, 3, 0.05)
+  .name('Edge Fresnel')
+  .onChange((v) => (rimUniforms.uRimStrength.value = v));
+glassFolder
+  .add(CONFIG, 'rimPower', 0.5, 8, 0.1)
+  .name('Edge Falloff')
+  .onChange((v) => (rimUniforms.uRimPower.value = v));
 
 const spaceFolder = gui.addFolder('Space Scene');
 spaceFolder.add(CONFIG, 'showBackgroundStars').name('Show Stars').onChange((v) => (bgStars.visible = v));
