@@ -31,7 +31,7 @@ const CONFIG = {
   bgStarRadius: 55,
 };
 
-const MODEL_URL = '/star-shatter-01.glb';
+const MODEL_URL = `${import.meta.env.BASE_URL}star-shatter-01.glb`;
 
 // ---------------------------------------------------------------------------
 // Renderer / scene / camera. Real refraction (shards bending the shards

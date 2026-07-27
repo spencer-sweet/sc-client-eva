@@ -104,7 +104,7 @@ const CONFIG = {
   bloomThreshold: 0.25,
 };
 
-const MODEL_URL = '/star-shatter-01.glb';
+const MODEL_URL = `${import.meta.env.BASE_URL}star-shatter-01.glb`;
 
 const WALL_Z = 0;
 const GLASS_Z = -0.6;
