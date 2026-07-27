@@ -23,6 +23,12 @@ const CONFIG = {
   envMapIntensity: 1.3,
   parallaxStrength: 1.6, // world-unit camera offset, not a rotation -- see note by its use below
   parallaxDamping: 4,
+  // background starfield, brought in from timeline-01/aura-zoom -- a static
+  // sqrt-distributed field sitting behind the shatter, unlike timeline-01's
+  // version there's no tunnel to pool it per-segment, so it's just one field
+  showBackgroundStars: true,
+  bgStarCount: 260,
+  bgStarRadius: 55,
 };
 
 const MODEL_URL = '/star-shatter-01.glb';
@@ -70,6 +76,62 @@ camera.position.set(0, 0, CONFIG.cameraDistance);
 
 const modelGroup = new THREE.Group();
 scene.add(modelGroup);
+
+// ---------------------------------------------------------------------------
+// Background starfield, ported from timeline-01/aura-zoom -- a sqrt-radius
+// distribution so density reads as uniform rather than clumped at center.
+// It's static (no pooled segments, unlike the tunnel scenes) since the camera
+// never travels through it here, only dollies slightly for mouse parallax.
+// ---------------------------------------------------------------------------
+const MAX_BG_STARS = 400;
+const BG_STAR_DEPTH_NEAR = -20;
+const BG_STAR_DEPTH_FAR = -90;
+
+function makeBgStarTexture() {
+  const size = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.4, 'rgba(220,235,255,0.8)');
+  g.addColorStop(1, 'rgba(220,235,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(c);
+}
+
+const bgStarPositions = new Float32Array(MAX_BG_STARS * 3);
+const bgStarGeo = new THREE.BufferGeometry();
+bgStarGeo.setAttribute('position', new THREE.BufferAttribute(bgStarPositions, 3));
+
+function seedBgStars() {
+  const pos = bgStarGeo.attributes.position;
+  for (let i = 0; i < MAX_BG_STARS; i++) {
+    const r = Math.sqrt(Math.random()) * CONFIG.bgStarRadius;
+    const a = Math.random() * Math.PI * 2;
+    const z = THREE.MathUtils.lerp(BG_STAR_DEPTH_NEAR, BG_STAR_DEPTH_FAR, Math.random());
+    pos.setXYZ(i, Math.cos(a) * r, Math.sin(a) * r, z);
+  }
+  pos.needsUpdate = true;
+  bgStarGeo.setDrawRange(0, CONFIG.bgStarCount);
+}
+seedBgStars();
+
+const bgStarMaterial = new THREE.PointsMaterial({
+  size: 0.35,
+  map: makeBgStarTexture(),
+  transparent: true,
+  opacity: 0.85,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  color: 0xdcebff,
+  fog: false, // an infinitely distant starfield shouldn't fade into scene.fog like the nearby shards do
+  sizeAttenuation: true,
+});
+const bgStars = new THREE.Points(bgStarGeo, bgStarMaterial);
+bgStars.visible = CONFIG.showBackgroundStars;
+scene.add(bgStars);
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -230,6 +292,14 @@ glassFolder
   .add(CONFIG, 'envMapIntensity', 0, 3, 0.05)
   .name('Env Intensity')
   .onChange((v) => (glassMaterial.envMapIntensity = v));
+
+const bgStarFolder = gui.addFolder('Background Stars');
+bgStarFolder
+  .add(CONFIG, 'showBackgroundStars')
+  .name('Show')
+  .onChange((v) => (bgStars.visible = v));
+bgStarFolder.add(CONFIG, 'bgStarCount', 0, MAX_BG_STARS, 1).name('Star Count').onFinishChange(seedBgStars);
+bgStarFolder.add(CONFIG, 'bgStarRadius', 8, 100, 1).name('Field Radius').onFinishChange(seedBgStars);
 
 // ---------------------------------------------------------------------------
 // Animation loop
