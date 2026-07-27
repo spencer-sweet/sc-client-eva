@@ -35,7 +35,8 @@
       "name": "timeline-01",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["-C", "timeline-01", "run", "dev"],
-      "port": 5200
+      "port": 5200,
+      "autoPort": true
     },
     {
       "name": "star-shatter",

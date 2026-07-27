@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import GUI from 'lil-gui';
 import { getProject, types } from '@theatre/core';
 import studio from '@theatre/studio';
+import timelineState from './timeline-01-state.json';
 
 // ---------------------------------------------------------------------------
 // Live-tunable config, driven by the lil-gui panel. The camera dolly itself
@@ -706,7 +707,11 @@ if (import.meta.env.DEV) {
 
 const SEQUENCE_LENGTH = 24; // seconds -- just the scroll(0..1) -> position(0..SEQUENCE_LENGTH) mapping range
 
-const dollySheet = getProject('Timeline 01').sheet('Tunnel Camera');
+// Studio (dev-only) manages its own state via localStorage autosave, so only
+// production needs the exported state passed in explicitly -- without it,
+// @theatre/core throws once it detects no studio and no state after 1s.
+const dollySheet = getProject('Timeline 01', import.meta.env.DEV ? {} : { state: timelineState })
+  .sheet('Tunnel Camera');
 const dollyTrack = dollySheet.object('Dolly', {
   zoomCurve: types.number(1, { range: [0, 3], nudgeMultiplier: 0.01 }), // multiplies the scroll-driven travel distance
   fov: types.number(65, { range: [40, 100] }),
@@ -715,11 +720,18 @@ const dollyTrack = dollySheet.object('Dolly', {
     y: types.number(0, { range: [-0.6, 0.6] }),
     z: types.number(0, { range: [-0.6, 0.6] }),
   }),
+  // red-ish at the start of the sequence, settling into the tunnel's default
+  // blue (3658ff) by the end -- keyframed in timeline-01-state.json
+  lineColor: types.rgba({ r: 1, g: 0.21176470588235294, b: 0.34509803921568627, a: 1 }),
 });
 
+const lineColorScratch = new THREE.Color();
 let dollyValues = dollyTrack.value;
 dollyTrack.onValuesChange((v) => {
   dollyValues = v;
+  const { r, g, b } = v.lineColor;
+  CONFIG.color = `#${lineColorScratch.setRGB(r, g, b).getHexString()}`;
+  refreshColors();
 });
 
 // ---------------------------------------------------------------------------
@@ -778,7 +790,8 @@ layersFolder.add(CONFIG, 'showStars').name('Stars (dots)').onChange(setStarsVisi
 layersFolder.add(CONFIG, 'showAuras').name('Aura Veils').onChange(setAurasVisible);
 layersFolder.add(CONFIG, 'showBackgroundStars').name('Background Stars').onChange(setBackgroundStarsVisible);
 
-gui.addColor(CONFIG, 'color').name('Line Color').onChange(refreshColors);
+// Line Color is Theatre-driven (scroll-scrubbed red -> blue), not a static
+// GUI slider -- see the `lineColor` prop on the dolly track above.
 gui.add(CONFIG, 'softLines').name('✨ SOFT LINES (fresnel) — off = solid tubes').onChange(applyTubeMaterial);
 gui.add(CONFIG, 'wireframe').name('Wireframe').onChange(applyTubeMaterial);
 

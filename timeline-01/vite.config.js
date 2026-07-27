@@ -1,11 +1,11 @@
 import { defineConfig } from 'vite';
 
-// Port is pinned here (not via CLI args) so the dev server always binds the
-// port the launcher expects. strictPort makes a conflict fail loudly instead
-// of silently drifting to another port.
+// Port comes from the PORT env var (set by the launcher via autoPort) with
+// 5200 as a local-CLI fallback. strictPort still fails loudly on a genuine
+// conflict rather than silently drifting to a different port.
 export default defineConfig({
   server: {
-    port: 5200,
+    port: Number(process.env.PORT) || 5200,
     strictPort: true,
   },
 });
