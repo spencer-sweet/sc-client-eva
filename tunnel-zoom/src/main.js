@@ -10,25 +10,37 @@ import GUI from 'lil-gui';
 // Live-tunable config, driven by the lil-gui panel
 // ---------------------------------------------------------------------------
 const CONFIG = {
-  color: '#3658ff',
-  bloomStrength: 0.85,
-  bloomRadius: 1.25,
-  bloomThreshold: 0.42,
-  movementSpeed: 0.16,
-  zoomMultiplier: 0.6,
-  motionBlur: 0.5,
-  lineCount: 24,
-  dotCount: 90,
+  color: '#ff6b6b',
+  bloomStrength: 1.05,
+  bloomRadius: 1.19,
+  bloomThreshold: 0.47,
+  movementSpeed: 0.6,
+  zoomMultiplier: 0.26,
+  motionBlur: 0.01,
+  lineCount: 49,
+  dotCount: 41,
   softLines: true, // fresnel soft-streak material vs the original solid tubes
-  wireframe: false,
-  edgeSoftness: 1.6,
-  tubeBrightness: 1.8,
-  tubeOpacity: 0.92,
+  wireframe: true,
+  edgeSoftness: 3.55,
+  tubeBrightness: 1.7,
+  tubeOpacity: 0.25,
   pulseMode: true, // electric bursts travelling down each line
-  pulseSpeed: 1.2,
-  curvature: 1, // 0 = dead-straight lines, 1 = current organic wiggle
-  tunnelCurve: 1, // how strongly the tunnel path itself bends (0 = straight ahead)
-  lineThickness: 1, // tube radius multiplier — 0.1 gives many hair-thin lines
+  pulseSpeed: 0.95,
+  curvature: 2, // 0 = dead-straight lines, 1 = current organic wiggle
+  tunnelCurve: 0, // how strongly the tunnel path itself bends (0 = straight ahead)
+  lineThickness: 2, // tube radius multiplier — 0.1 gives many hair-thin lines
+  // background starfield, brought in from aura-zoom -- a wider, sparser
+  // sqrt-distributed field than the tube-hugging dots, so it reads as a
+  // distant backdrop rather than debris clinging to the tunnel walls
+  bgStarCount: 240,
+  bgStarRadius: 32,
+  // layer visibility toggles
+  showTubes: true,
+  showDots: true,
+  showBackgroundStars: true,
+  // mouse-driven parallax tilt
+  parallaxStrength: 0.12,
+  parallaxDamping: 4,
 };
 
 // ---------------------------------------------------------------------------
@@ -428,6 +440,69 @@ const moteMaterial = new THREE.PointsMaterial({
 addTunnelBend(moteMaterial);
 
 // ---------------------------------------------------------------------------
+// Background starfield, brought in from aura-zoom -- unlike the tube-hugging
+// motes above (radius capped near the tunnel walls), this uses a sqrt-radius
+// distribution spanning well past the tubes so it reads as a distant backdrop
+// rather than debris riding along the tendrils.
+// ---------------------------------------------------------------------------
+const MAX_BG_STARS = 400;
+
+function makeBgStarTexture() {
+  const size = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.4, 'rgba(220,235,255,0.8)');
+  g.addColorStop(1, 'rgba(220,235,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(c);
+}
+const bgStarMaterial = new THREE.PointsMaterial({
+  size: 0.16,
+  map: makeBgStarTexture(),
+  transparent: true,
+  opacity: 0.7,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  color: 0xdcebff,
+});
+addTunnelBend(bgStarMaterial);
+
+const bgStarSlots = [];
+for (let k = 0; k < POOL_SIZE; k++) {
+  const positions = new Float32Array(MAX_BG_STARS * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setDrawRange(0, CONFIG.bgStarCount);
+  const points = new THREE.Points(geo, bgStarMaterial);
+  scene.add(points);
+  bgStarSlots.push({ points, geo, segIndex: null });
+}
+
+function seedBgStars(slot, segIndex) {
+  slot.segIndex = segIndex;
+  slot.points.position.z = -segIndex * SEGMENT_LENGTH;
+  const rng = mulberry32(segIndex * 2003 + 77);
+  const pos = slot.geo.attributes.position;
+  for (let i = 0; i < MAX_BG_STARS; i++) {
+    const r = Math.sqrt(rng()) * CONFIG.bgStarRadius;
+    const a = rng() * Math.PI * 2;
+    pos.setXYZ(i, Math.cos(a) * r, Math.sin(a) * r, -rng() * SEGMENT_LENGTH);
+  }
+  pos.needsUpdate = true;
+  slot.geo.setDrawRange(0, CONFIG.bgStarCount);
+}
+
+function reseedBgStars() {
+  bgStarSlots.forEach((slot) => {
+    if (slot.segIndex !== null) seedBgStars(slot, slot.segIndex);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Pool of live tunnel chunks + glowing core nodes, recycled as we travel
 // ---------------------------------------------------------------------------
 const tendrilMeshes = [];
@@ -487,13 +562,51 @@ window.addEventListener('resize', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Mouse-driven parallax tilt -- a small extra camera rotation layered on top
+// of the scroll dolly, damped toward the cursor position so the depth of the
+// tunnel reads through parallax as you move the mouse.
+// ---------------------------------------------------------------------------
+let targetMouseX = 0;
+let targetMouseY = 0;
+let mouseX = 0;
+let mouseY = 0;
+
+window.addEventListener('pointermove', (e) => {
+  targetMouseX = (e.clientX / window.innerWidth) * 2 - 1;
+  targetMouseY = (e.clientY / window.innerHeight) * 2 - 1;
+});
+
+// ---------------------------------------------------------------------------
 // lil-gui control panel
 // ---------------------------------------------------------------------------
 const gui = new GUI({ title: 'Tunnel Controls' });
 
+function setTubesVisible(v) {
+  tendrilMeshes.forEach((m) => (m.visible = v));
+  coreSprites.forEach((s) => (s.visible = v));
+}
+function setDotsVisible(v) {
+  moteClouds.forEach((m) => (m.visible = v));
+}
+function setBackgroundStarsVisible(v) {
+  bgStarSlots.forEach((slot) => (slot.points.visible = v));
+}
+setTubesVisible(CONFIG.showTubes);
+setDotsVisible(CONFIG.showDots);
+setBackgroundStarsVisible(CONFIG.showBackgroundStars);
+
+const layersFolder = gui.addFolder('Layers');
+layersFolder.add(CONFIG, 'showTubes').name('Tubes / Lines').onChange(setTubesVisible);
+layersFolder.add(CONFIG, 'showDots').name('Dots / Stars').onChange(setDotsVisible);
+layersFolder.add(CONFIG, 'showBackgroundStars').name('Background Stars').onChange(setBackgroundStarsVisible);
+
 gui.addColor(CONFIG, 'color').name('Line Color').onChange(refreshColors);
 gui.add(CONFIG, 'softLines').name('✨ SOFT LINES (fresnel) — off = solid tubes').onChange(applyTubeMaterial);
 gui.add(CONFIG, 'wireframe').name('Wireframe').onChange(applyTubeMaterial);
+// sync the material to CONFIG's initial values -- onChange only fires on user
+// interaction, so without this the wireframe/soft-lines defaults silently
+// don't apply until the checkbox is toggled once
+applyTubeMaterial();
 
 const tubeFolder = gui.addFolder('Tube Material (Fresnel)');
 tubeFolder
@@ -550,12 +663,17 @@ motionFolder
     afterimagePass.uniforms['damp'].value = v;
     afterimagePass.enabled = v > 0;
   });
+motionFolder.add(CONFIG, 'parallaxStrength', 0, 0.4, 0.005).name('Mouse Parallax');
 
 const geometryFolder = gui.addFolder('Geometry');
 geometryFolder.add(CONFIG, 'lineCount', 4, 80, 1).name('Number of Lines').onFinishChange(rebuildChunks);
 geometryFolder.add(CONFIG, 'dotCount', 0, 400, 1).name('Number of Dots/Stars').onFinishChange(rebuildChunks);
 geometryFolder.add(CONFIG, 'curvature', 0, 2, 0.01).name('Line Curvature').onFinishChange(rebuildChunks);
 geometryFolder.add(CONFIG, 'lineThickness', 0.05, 3, 0.05).name('Line Thickness').onFinishChange(rebuildChunks);
+
+const bgStarFolder = gui.addFolder('Background Stars');
+bgStarFolder.add(CONFIG, 'bgStarCount', 0, MAX_BG_STARS, 1).name('Star Count').onFinishChange(reseedBgStars);
+bgStarFolder.add(CONFIG, 'bgStarRadius', 8, 80, 1).name('Field Radius').onFinishChange(reseedBgStars);
 
 // ---------------------------------------------------------------------------
 // Animation loop
@@ -570,6 +688,9 @@ function animate() {
   currentDistance += (targetDistance - currentDistance) * Math.min(1, dt * 4.5);
   tendrilMaterial.uniforms.uTime.value = time;
 
+  mouseX += (targetMouseX - mouseX) * Math.min(1, dt * CONFIG.parallaxDamping);
+  mouseY += (targetMouseY - mouseY) * Math.min(1, dt * CONFIG.parallaxDamping);
+
   // follow the curving tunnel path, with a gentle organic drift on top,
   // looking ahead along the path so travel banks into the bends
   const camZ = -currentDistance;
@@ -579,6 +700,10 @@ function animate() {
   const aheadZ = camZ - 14;
   camera.lookAt(tunnelOffsetX(aheadZ) + driftX, tunnelOffsetY(aheadZ) + driftY, aheadZ);
   camera.rotation.z += Math.sin(time * 0.15) * 0.04;
+  // mouse parallax tilt, layered on top of the lookAt orientation so moving
+  // the cursor reveals depth without fighting the scroll-driven dolly
+  camera.rotation.x += -mouseY * CONFIG.parallaxStrength;
+  camera.rotation.y += mouseX * CONFIG.parallaxStrength;
 
   const baseIndex = Math.floor(currentDistance / SEGMENT_LENGTH) - Math.floor(POOL_SIZE / 2);
   for (let k = 0; k < POOL_SIZE; k++) {
@@ -605,6 +730,9 @@ function animate() {
     const coreDist = Math.abs(coreZ - camera.position.z);
     const proximityFade = THREE.MathUtils.smoothstep(coreDist, 6, 30);
     core.scale.setScalar(3.4 * pulse * proximityFade);
+
+    const bgStarSlot = bgStarSlots[((segIndex % POOL_SIZE) + POOL_SIZE) % POOL_SIZE];
+    if (bgStarSlot.segIndex !== segIndex) seedBgStars(bgStarSlot, segIndex);
   }
 
   composer.render();
