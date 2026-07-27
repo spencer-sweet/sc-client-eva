@@ -41,7 +41,14 @@
       "name": "star-shatter",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["-C", "star-shatter", "run", "dev"],
-      "port": 5201
+      "port": 5201,
+      "autoPort": true
+    },
+    {
+      "name": "timeline-02",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-C", "timeline-02", "run", "dev"],
+      "port": 5202
     },
     {
       "name": "dist-preview",
