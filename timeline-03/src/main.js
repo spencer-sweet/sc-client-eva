@@ -175,7 +175,20 @@ const CONFIG = {
   bloomThreshold: 0.25,
 };
 
-const MODEL_URL = `${import.meta.env.BASE_URL}star-shatter-glass-animated.glb`;
+// `import.meta.env.BASE_URL` is root-relative (e.g. "/timeline-03/"), which
+// the browser resolves against whatever page loaded the script -- fine when
+// this page's own index.html is what's running it, but wrong the moment the
+// built bundle is imported cross-origin, e.g. a Webflow page pulling it from
+// its Cloudflare Pages deployment: the browser then requests
+// "https://<webflow-site>/timeline-03/star-shatter-glass-animated.glb"
+// instead of the actual host, a guaranteed 404.
+//
+// Simplest fix for a single known deployment target: hardcode the production
+// URL, and only use the local/relative path for the dev server. Update the
+// hardcoded URL if the Cloudflare Pages deployment it points to changes.
+const MODEL_URL = import.meta.env.DEV
+  ? `${import.meta.env.BASE_URL}star-shatter-glass-animated.glb`
+  : 'https://6b0cc8b9.sc-client-eva.pages.dev/timeline-03/star-shatter-glass-animated.glb';
 
 const WALL_Z = 0;
 const GLASS_Z = 0.6;
