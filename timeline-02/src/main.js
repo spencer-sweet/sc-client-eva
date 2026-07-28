@@ -35,10 +35,15 @@ const CONFIG = {
   scrub: true,
   scrollDamping: 4.5,
   cameraDamping: 3.5,
-  zoomPhaseEnd: 0.35, // scroll fraction where the zoom-into-window dolly finishes
-  shatterStart: 0.3, // shatter timeline starts scrubbing here (overlaps zoom's tail)
-  shatterEnd: 0.7,
-  passStart: 0.65, // camera resumes moving (through the wall) here (overlaps shatter's tail)
+  // These fractions are measured against the .scroll-spacer in style.css, which
+  // was lengthened from 600vh to 700vh to give the closing galaxy fly-through
+  // more runway. They were rescaled by the same factor so the zoom and shatter
+  // beats still land at the same *absolute* scroll distance as before -- all of
+  // the added length goes to the pass phase, not to slowing the earlier beats.
+  zoomPhaseEnd: 0.29, // scroll fraction where the zoom-into-window dolly finishes
+  shatterStart: 0.25, // shatter timeline starts scrubbing here (overlaps zoom's tail)
+  shatterEnd: 0.58,
+  passStart: 0.54, // camera resumes moving (through the wall) here (overlaps shatter's tail)
   clipStart: 0.13, // shatter clip: only this window of the glb's timeline is scrubbed through
   clipEnd: 0.29,
   autoRotateSpeed: 0,
@@ -46,19 +51,38 @@ const CONFIG = {
   // -- camera path (world z) --
   cameraStartZ: 15,
   cameraMidZ: 8,
-  cameraEndZ: -34,
+  // the shatter window used to hold the camera dead still at cameraMidZ --
+  // this is where it creeps to instead, so the dolly keeps a faint forward
+  // crawl through the whole shatter rather than fully stopping. Rate works
+  // out to roughly half the zoom-in phase's, which reads as "slowed down",
+  // not "stopped".
+  cameraShatterEndZ: 5,
+  // deep enough to keep travelling for the whole lengthened pass phase, but
+  // still well short of SPACE_FAR_Z so the camera settles inside the galaxy
+  // rather than flying out the far side of it
+  cameraEndZ: -42,
   parallaxStrength: 0.3,
   parallaxDamping: 4,
 
   // -- wall + star windows (ported from paths-grid's 3-star layout) --
   wallColor: '#0a0f2c',
+  // Proportions taken off the reference mockup, where the windows sit on grid
+  // intersections rather than floating between them: the center star is on the
+  // node at world origin (cols/rows are odd and the grid origin is centered, so
+  // there is always a node at 0,0) and each side star is exactly one cell
+  // diagonally down from it. Keep starOffset* equal to gridCellSize or they
+  // drift off the lattice again.
+  //
+  // Measured off the mockup: center star = 1.55 cells wide, side stars = 0.87
+  // of the center. starSize is left at 6 and the cell size moved instead, so
+  // the glass fit and camera framing that hang off it stay put.
   starSize: 6,
-  starSize2: 3.6,
-  starOffsetX: 3.1,
-  starOffsetY: 3.1,
+  starSize2: 5.2,
+  starOffsetX: 3.9, // == gridCellSize -> lands on the neighbouring grid node
+  starOffsetY: 3.9,
 
   // -- wall grid (paths-grid's mouse-glow node/line lattice, etched onto the wall) --
-  gridCellSize: 4.8,
+  gridCellSize: 3.9, // drives starOffsetX/Y above -- change both together
   gridCols: 17,
   gridRows: 11,
   gridLineThickness: 0.01,
@@ -67,7 +91,8 @@ const CONFIG = {
   gridIntensity: 2,
   gridBaseColor: '#2f3551', // muted slate lattice, only lit up by the cursor glow
   gridNodeColor: '#2f3551', // reticles match the lines so the lattice reads as one piece
-  gridNodeSize: 0.32,
+  // the mockup's nodes are a single ring, and a larger one relative to the cell
+  gridNodeSize: 0.6,
   gridRingCount: 2,
 
   // -- glass material -- transmission (not opacity) is what makes this read
@@ -106,7 +131,7 @@ const CONFIG = {
   bgStarCount: 260,
   bgStarRadius: 55,
   wispCount: 10,
-  wispOpacity: 0.35,
+  wispOpacity: 0.25,
   wispColorA: '#54d8ef',
   wispColorB: '#e838ff',
   eyeStar: true,
@@ -471,11 +496,18 @@ function buildGridLines() {
 const GRID_RING_RADII_BY_COUNT = { 0: [], 1: [1], 2: [1, 0.6], 3: [1, 0.75, 0.5] };
 
 let gridNodeMesh = null;
+let gridNodeFillMesh = null;
 function buildGridNodes() {
   if (gridNodeMesh) {
     scene.remove(gridNodeMesh);
     gridNodeMesh.geometry.dispose();
     gridNodeMesh.material.dispose();
+  }
+  if (gridNodeFillMesh) {
+    scene.remove(gridNodeFillMesh);
+    gridNodeFillMesh.geometry.dispose();
+    gridNodeFillMesh.material.dispose();
+    gridNodeFillMesh = null;
   }
   const outerR = CONFIG.gridNodeSize / 2;
   const radii = (GRID_RING_RADII_BY_COUNT[CONFIG.gridRingCount] ?? GRID_RING_RADII_BY_COUNT[2]).map((f) => f * outerR);
@@ -553,6 +585,64 @@ function buildGridNodes() {
   });
   gridNodeMesh.instanceMatrix.needsUpdate = true;
   scene.add(gridNodeMesh);
+
+  // Solid disc behind the whole reticle, matching the wall color -- without
+  // it, each ring was just an empty annulus with the crossing lines showing
+  // straight through, including the GAP between rings when gridRingCount > 1
+  // (sizing the disc to only the innermost ring's inner edge, as before, left
+  // that gap uncovered). One disc sized to the outermost ring's outer edge,
+  // sitting under all the rings, is simpler than a disc per gap and covers
+  // everything in one pass. Reads off wallUniforms.uWallColor (not a copy of
+  // CONFIG.wallColor) so it stays in sync if Wall Color is tweaked later
+  // without needing to rebuild the grid.
+  const fillR = radii[0] + halfWidth;
+  const fillVerts = [];
+  for (let i = 0; i < segments; i++) {
+    const a0 = (i / segments) * Math.PI * 2;
+    const a1 = ((i + 1) / segments) * Math.PI * 2;
+    fillVerts.push(0, 0, 0, Math.cos(a0) * fillR, Math.sin(a0) * fillR, 0, Math.cos(a1) * fillR, Math.sin(a1) * fillR, 0);
+  }
+  const fillGeometry = new THREE.BufferGeometry();
+  fillGeometry.setAttribute('position', new THREE.Float32BufferAttribute(fillVerts, 3));
+
+  const fillMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uMaskTex: wallUniforms.uMaskTex,
+      uCenters: wallUniforms.uCenters,
+      uSizes: wallUniforms.uSizes,
+      uWallColor: wallUniforms.uWallColor,
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vWorldPos;
+      void main() {
+        vec4 worldPosition = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        vWorldPos = worldPosition.xy;
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      ${windowMaskChunk}
+      uniform vec3 uWallColor;
+      varying vec2 vWorldPos;
+      void main() {
+        if (anyWindowMask(vWorldPos) > 0.5) discard;
+        gl_FragColor = vec4(uWallColor, 1.0);
+      }
+    `,
+    side: THREE.DoubleSide,
+  });
+
+  gridNodeFillMesh = new THREE.InstancedMesh(fillGeometry, fillMaterial, gridGraph.points.length);
+  gridNodeFillMesh.position.z = GRID_Z;
+  // between the lines (11) and the ring (12) -- drawn after the lines so it
+  // covers them, and before the ring so the ring still renders on top of it
+  gridNodeFillMesh.renderOrder = 11.5;
+  gridGraph.points.forEach((p, i) => {
+    m.setPosition(p);
+    gridNodeFillMesh.setMatrixAt(i, m);
+  });
+  gridNodeFillMesh.instanceMatrix.needsUpdate = true;
+  scene.add(gridNodeFillMesh);
 }
 
 function regenerateGrid() {
@@ -715,26 +805,64 @@ for (let i = 0; i < MAX_WISPS; i++) {
   wisps.push(mesh);
 }
 
+// Reference depth for the perspective compensation below -- roughly where the
+// camera sits while the wall/windows are actually being looked at (the zoom
+// settles at cameraMidZ for the whole shatter phase). Wisps are seeded once,
+// independent of the live scroll-driven camera, so this has to be a fixed
+// stand-in rather than the camera's current position.
+const WISP_REF_CAM_Z = CONFIG.cameraMidZ + 1;
+
+function placeWisp(wisp, rng, x, y, z, sizeMul) {
+  wisp.visible = true;
+  // Position and size were both independent of z, so a wisp got exactly as
+  // wide and exactly as far out in world space regardless of how deep it
+  // sat. Perspective then shrinks the far ones toward the screen center and
+  // toward invisibility. Scaling both position and plane size by distance
+  // from WISP_REF_CAM_Z keeps a wisp's apparent screen footprint roughly
+  // constant across the whole depth range.
+  const depthScale = (WISP_REF_CAM_Z - z) / (WISP_REF_CAM_Z - SPACE_NEAR_Z);
+  wisp.position.set(x * depthScale, y * depthScale, z);
+  const s = (16 + rng() * 20) * depthScale * sizeMul;
+  wisp.userData.scaleX = s;
+  wisp.userData.scaleY = s * (0.6 + rng() * 0.4);
+  wisp.rotation.z = rng() * Math.PI * 2;
+  wisp.userData.breathePhase = rng() * Math.PI * 2;
+  wisp.scale.set(wisp.userData.scaleX, wisp.userData.scaleY, 1);
+  wisp.material.uniforms.uSeed.value = rng() * 100;
+}
+
 function seedWisps() {
   const rng = mulberry32(4242);
+
+  // Random placement alone left this to luck: the fixed random seed never
+  // reliably put a wisp's world-space footprint over the two off-center
+  // windows, so they read as unlit next to the glowing center one. Anchoring
+  // one wisp directly behind each window (at a near depth, so it's bright and
+  // in focus) guarantees all three read as equally lit, matching the
+  // reference mockup; the rest of the budget still scatters randomly for
+  // ambient depth/texture.
+  const anchors = [
+    { x: 0, y: 0 },
+    { x: CONFIG.starOffsetX, y: -CONFIG.starOffsetY },
+    { x: -CONFIG.starOffsetX, y: -CONFIG.starOffsetY },
+  ];
+
   for (let i = 0; i < MAX_WISPS; i++) {
     const wisp = wisps[i];
     if (i >= CONFIG.wispCount) {
       wisp.visible = false;
       continue;
     }
-    wisp.visible = true;
+    if (i < anchors.length) {
+      const a = anchors[i];
+      const z = THREE.MathUtils.lerp(SPACE_NEAR_Z, SPACE_NEAR_Z + 10, rng());
+      placeWisp(wisp, rng, a.x, a.y, z, 1);
+      continue;
+    }
     const angle = rng() * Math.PI * 2;
-    const radial = 4 + rng() * 22;
     const z = THREE.MathUtils.lerp(SPACE_NEAR_Z, SPACE_FAR_Z, rng());
-    wisp.position.set(Math.cos(angle) * radial, Math.sin(angle) * radial, z);
-    const s = 16 + rng() * 20;
-    wisp.userData.scaleX = s;
-    wisp.userData.scaleY = s * (0.6 + rng() * 0.4);
-    wisp.rotation.z = angle;
-    wisp.userData.breathePhase = rng() * Math.PI * 2;
-    wisp.scale.set(wisp.userData.scaleX, wisp.userData.scaleY, 1);
-    wisp.material.uniforms.uSeed.value = rng() * 100;
+    const radial = 4 + rng() * 22;
+    placeWisp(wisp, rng, Math.cos(angle) * radial, Math.sin(angle) * radial, z, 1);
   }
 }
 seedWisps();
@@ -828,6 +956,10 @@ function addFresnelRim(material) {
 const modelGroup = new THREE.Group();
 modelGroup.position.z = GLASS_Z;
 scene.add(modelGroup);
+
+// cancels the perspective overhang from the glass sitting in front of the
+// wall -- see the registration block in applyTimeline()
+let glassRegistrationScale = 1;
 
 let mixer = null;
 let action = null;
@@ -939,14 +1071,43 @@ function applyTimeline(t) {
   const shatterT = easeInOutCubic(
     THREE.MathUtils.clamp((t - CONFIG.shatterStart) / (CONFIG.shatterEnd - CONFIG.shatterStart), 0, 1)
   );
+  // fills the gap between the zoom and pass phases (previously nothing drove
+  // the camera there, so it sat dead still at cameraMidZ for the whole
+  // shatter window) with a slow continuous creep toward cameraShatterEndZ
+  const driftT = easeInOutCubic(
+    THREE.MathUtils.clamp((t - CONFIG.zoomPhaseEnd) / (CONFIG.passStart - CONFIG.zoomPhaseEnd), 0, 1)
+  );
   const passT = easeInOutCubic(THREE.MathUtils.clamp((t - CONFIG.passStart) / (1 - CONFIG.passStart), 0, 1));
 
-  // camera holds at cameraMidZ through the shatter window, then continues
-  // its dolly through the wall during the pass phase
-  const zoomedZ = THREE.MathUtils.lerp(CONFIG.cameraStartZ, CONFIG.cameraMidZ, zoomT);
-  camera.userData.targetZ = THREE.MathUtils.lerp(zoomedZ, CONFIG.cameraEndZ, passT);
+  // Each term below is gated by its own eased progress (0 until that phase
+  // starts, 1 once it ends), so this is really 3 waypoint-to-waypoint moves
+  // chained additively rather than nested lerps -- nesting was what caused
+  // the freeze: lerp(lerp(start,mid,zoomT), end, passT) collapses to a flat
+  // `mid` for the entire span where zoomT has already saturated to 1 but
+  // passT hasn't yet started rising.
+  camera.userData.targetZ =
+    CONFIG.cameraStartZ +
+    (CONFIG.cameraMidZ - CONFIG.cameraStartZ) * zoomT +
+    (CONFIG.cameraShatterEndZ - CONFIG.cameraMidZ) * driftT +
+    (CONFIG.cameraEndZ - CONFIG.cameraShatterEndZ) * passT;
 
   setShatterProgress(shatterT);
+
+  // The glass is fit to starSize in world units, which matches the cutout
+  // exactly -- but it's parked GLASS_Z in front of the wall, so perspective
+  // projects it larger than the hole it's meant to fill: 4% at cameraStartZ,
+  // growing to 8.5% by cameraMidZ. Scaling by the ratio of the two depths
+  // cancels that, so the intact star registers with the SVG cutout at every
+  // camera distance instead of drifting bigger as the dolly closes in.
+  //
+  // Frozen once the shatter starts: there's nothing left to register against
+  // by then, and the factor collapses to zero (then flips negative) as the
+  // fly-through carries the camera onto and past the glass plane.
+  if (shatterT <= 0) {
+    const camZ = camera.position.z;
+    glassRegistrationScale = camZ > GLASS_Z ? 1 - GLASS_Z / camZ : 1;
+  }
+  modelGroup.scale.setScalar(glassRegistrationScale);
 
   // wall fades out as the camera pushes through it, so there's no visible
   // clipping/pop when the camera's z crosses the wall's z=0 plane

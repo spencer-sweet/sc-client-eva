@@ -55,6 +55,8 @@ body {
 }
 
 .scroll-spacer {
-  height: 600vh;
+  /* 700vh (was 600vh) -- the extra 100vh is runway for the closing galaxy
+     fly-through; the timeline fractions in main.js are rescaled to match */
+  height: 700vh;
   width: 1px;
 }
