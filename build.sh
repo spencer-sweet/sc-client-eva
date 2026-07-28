@@ -86,6 +86,11 @@ if [ ${#failed[@]} -ne 0 ]; then
   exit 1
 fi
 
+if [ -d "$ROOT/assets" ]; then
+  echo "==> Copying assets"
+  cp -r "$ROOT/assets" "$DIST/assets"
+fi
+
 echo "==> Generating root index"
 # Cloudflare Pages injects these during CI builds; empty locally.
 PAGES_URL="${CF_PAGES_URL:-}"
