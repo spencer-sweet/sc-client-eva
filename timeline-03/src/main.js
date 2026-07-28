@@ -5,6 +5,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import GUI from 'lil-gui';
+import Stats from 'stats.js';
 import { getProject, types } from '@theatre/core';
 import timelineState from './timeline-03-state.json';
 
@@ -53,6 +54,7 @@ const CONFIG = {
   clipStart: 0.13, // shatter clip: only this window of the glb's timeline is scrubbed through
   clipEnd: 0.29,
   autoRotateSpeed: 0,
+  glbModel: '02_star-shatter-glass-animated.glb',
 
   // -- camera path (world z) --
   cameraStartZ: 15,
@@ -175,20 +177,27 @@ const CONFIG = {
   bloomThreshold: 0.25,
 };
 
-// `import.meta.env.BASE_URL` is root-relative (e.g. "/timeline-03/"), which
-// the browser resolves against whatever page loaded the script -- fine when
-// this page's own index.html is what's running it, but wrong the moment the
-// built bundle is imported cross-origin, e.g. a Webflow page pulling it from
-// its Cloudflare Pages deployment: the browser then requests
-// "https://<webflow-site>/timeline-03/star-shatter-glass-animated.glb"
-// instead of the actual host, a guaranteed 404.
-//
-// Simplest fix for a single known deployment target: hardcode the production
-// URL, and only use the local/relative path for the dev server. Update the
-// hardcoded URL if the Cloudflare Pages deployment it points to changes.
-const MODEL_URL = import.meta.env.DEV
-  ? `${import.meta.env.BASE_URL}star-shatter-glass-animated.glb`
-  : 'https://6b0cc8b9.sc-client-eva.pages.dev/timeline-03/star-shatter-glass-animated.glb'; // TODO fix this later on...
+// A root-relative path (e.g. `${import.meta.env.BASE_URL}...`) resolves
+// against whatever page loaded the script -- fine when this page's own
+// index.html is what's running it, but wrong the moment the built bundle is
+// imported cross-origin, e.g. a Webflow page pulling it from its Cloudflare
+// Pages deployment: the browser would request
+// "https://<webflow-site>/timeline-03/<file>.glb" instead of the actual host,
+// a guaranteed 404. Always pointing at the live, shared /assets/ deployment
+// (built.sh copies the repo's assets/ folder to dist/assets/) sidesteps that
+// entirely -- the same absolute URL works from the dev server, this site's own
+// build, and a cross-origin Webflow embed alike.
+const STAR_SHATTER_BASE_URL = 'https://sc-client-eva.pages.dev/assets/star-shatter';
+
+// dropdown label -> filename in assets/star-shatter/, picked by the GUI below
+const GLB_OPTIONS = {
+  '01 - Star Shatter': '01_star-shatter-01.glb',
+  '02 - Glass Animated': '02_star-shatter-glass-animated.glb',
+  '02a - Simple Glass Animated': '02a_star-shatter-simple-glass-animated.glb',
+  '03 - Jagged Edges': '03_star-shatter_jagged-edges.glb',
+  '04 - Jagged, 100 Shards': '04_star-shatter_jagged-100-shards.glb',
+  '05 - Jagged, 120 Shards': '05_star-shatter_jagged-120-shards.glb',
+};
 
 const WALL_Z = 0;
 const GLASS_Z = 0.6;
@@ -269,13 +278,13 @@ window.addEventListener('resize', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Star mask texture -- exact path from paths-grid/src/4star_02.svg, baked
-// once into an alpha-only canvas texture. paths-grid samples this to draw a
-// filled star; the wall shader below does the inverse, punching a hole
+// Star mask texture -- exact path from assets/4-pointed-star/4star_03a.svg,
+// baked once into an alpha-only canvas texture. paths-grid samples this to
+// draw a filled star; the wall shader below does the inverse, punching a hole
 // wherever this mask is opaque.
 // ---------------------------------------------------------------------------
 const STAR_PATH =
-  'M418.94 6.082C421.263 -2.02639 434.026 -2.02638 436.349 6.08202C454.591 69.7607 501.161 210.898 572.777 282.514C644.393 354.13 785.53 400.7 849.209 418.942C857.317 421.265 857.317 434.028 849.209 436.351C785.53 454.593 644.393 501.163 572.777 572.779C501.161 644.395 454.591 785.532 436.349 849.211C434.026 857.319 421.263 857.319 418.94 849.211C400.698 785.532 354.128 644.395 282.512 572.779C210.896 501.163 69.7587 454.593 6.08005 436.351C-2.02835 434.028 -2.02833 421.265 6.08007 418.942C69.7587 400.7 210.896 354.13 282.512 282.514C354.128 210.898 400.698 69.7606 418.94 6.082Z';
+  'M419.296 6.436c2.323 -8.108 15.086 -8.108 17.409 0c18.242 63.679 64.812 204.816 136.428 276.432c71.616 71.616 212.753 118.186 276.432 136.428c8.108 2.323 8.108 15.086 0 17.409c-63.679 18.242 -204.816 64.812 -276.432 136.428c-71.616 71.616 -118.186 212.753 -136.428 276.432c-2.323 8.108 -15.086 8.108 -17.409 0c-18.242 -63.679 -64.812 -204.816 -136.428 -276.432c-71.616 -71.616 -212.753 -118.186 -276.432 -136.428c-8.108 -2.323 -8.108 -15.086 0 -17.409c63.679 -18.242 204.816 -64.812 276.432 -136.428c71.616 -71.616 118.186 -212.753 136.428 -276.432Z';
 const STAR_BOX = 856;
 
 function makeStarMaskTexture() {
@@ -1117,80 +1126,106 @@ let mixer = null;
 let action = null;
 let clipDuration = 1;
 let currentShatterProgress = 0;
+const gltfLoader = new GLTFLoader();
 
-new GLTFLoader().load(
-  MODEL_URL,
-  (gltf) => {
-    gltf.scene.traverse((child) => {
-      if (child.isMesh) {
-        // all shards share the glb's single authored material ("Thick Glossy
-        // Glass") -- grab a reference to it once so the GUI/reflection setup
-        // below can still tweak it live
-        glassMaterial = child.material;
-        child.frustumCulled = true;
-        // the shatter chunks are low-poly with hard per-face normals, which
-        // makes a transmissive material read as flat opaque mirror tiles
-        // (each facet reflects/refracts a single direction); smoothing the
-        // normals blends adjacent faces so light bends continuously across
-        // each shard instead, which is what actually reads as "glass"
-        child.geometry.computeVertexNormals();
-        // layer 1, excluded from reflectionCamera's default layer-0 capture --
-        // otherwise every shard would reflect itself/its siblings recursively
-        child.layers.set(1);
+// disposes the previously loaded glb (if any) and loads `filename` from
+// assets/star-shatter/ in its place -- shared by the initial load below and
+// the GUI's model-switching dropdown
+function loadModel(filename) {
+  while (modelGroup.children.length) {
+    const child = modelGroup.children[0];
+    modelGroup.remove(child);
+    child.traverse((node) => {
+      if (node.isMesh) {
+        node.geometry.dispose();
+        node.material.dispose();
       }
     });
+  }
+  mixer = null;
+  action = null;
+  glassMaterial = null;
 
-    // the glb material has no envMap of its own -- feed it the live scene
-    // reflection so shards still pick up the wall/other-shard/space reflection
-    if (glassMaterial) {
-      glassMaterial.envMap = reflectionTarget.texture;
-      glassMaterial.envMapIntensity = CONFIG.envMapIntensity;
-      addFresnelRim(glassMaterial);
+  gltfLoader.load(
+    `${STAR_SHATTER_BASE_URL}/${filename}`,
+    (gltf) => {
+      gltf.scene.traverse((child) => {
+        if (child.isMesh) {
+          // all shards share the glb's single authored material ("Thick Glossy
+          // Glass") -- grab a reference to it once so the GUI/reflection setup
+          // below can still tweak it live
+          glassMaterial = child.material;
+          child.frustumCulled = true;
+          // the shatter chunks are low-poly with hard per-face normals, which
+          // makes a transmissive material read as flat opaque mirror tiles
+          // (each facet reflects/refracts a single direction); smoothing the
+          // normals blends adjacent faces so light bends continuously across
+          // each shard instead, which is what actually reads as "glass"
+          child.geometry.computeVertexNormals();
+          // layer 1, excluded from reflectionCamera's default layer-0 capture --
+          // otherwise every shard would reflect itself/its siblings recursively
+          child.layers.set(1);
+        }
+      });
 
-      // mirror the glb-authored values back into CONFIG so the GUI sliders
-      // reflect what's actually on the material instead of the old hand-tuned
-      // defaults, then refresh the displayed slider positions
-      CONFIG.transmission = glassMaterial.transmission;
-      CONFIG.roughness = glassMaterial.roughness;
-      CONFIG.thickness = glassMaterial.thickness;
-      CONFIG.ior = glassMaterial.ior;
-      CONFIG.clearcoat = glassMaterial.clearcoat;
-      CONFIG.clearcoatRoughness = glassMaterial.clearcoatRoughness;
-      CONFIG.attenuationColor = `#${glassMaterial.attenuationColor.getHexString()}`;
-      CONFIG.attenuationDistance = glassMaterial.attenuationDistance;
-      glassFolder.controllers.forEach((c) => c.updateDisplay());
-    }
+      // the glb material has no envMap of its own -- feed it the live scene
+      // reflection so shards still pick up the wall/other-shard/space reflection
+      if (glassMaterial) {
+        glassMaterial.envMap = reflectionTarget.texture;
+        glassMaterial.envMapIntensity = CONFIG.envMapIntensity;
+        addFresnelRim(glassMaterial);
 
-    const box = new THREE.Box3().setFromObject(gltf.scene);
-    const center = box.getCenter(new THREE.Vector3());
-    // measured pre-rotation, while the star is still flat in the XZ plane: X
-    // stays horizontal after the tip-upright rotation below, Z becomes the
-    // new vertical -- a bounding-sphere diameter would overshoot by ~sqrt(2)
-    // since it covers the box's diagonal, not its tip-to-tip span
-    const tipToTip = Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
-    gltf.scene.position.sub(center);
-    gltf.scene.rotation.x = Math.PI / 2; // authored flat in XZ (Y-up); tip upright to face the camera
+        // mirror the glb-authored values back into CONFIG so the GUI sliders
+        // reflect what's actually on the material instead of the old hand-tuned
+        // defaults, then refresh the displayed slider positions -- guarded
+        // per-property since not every glb in the dropdown authors a full
+        // MeshPhysicalMaterial (e.g. the jagged-edge variants ship without
+        // KHR_materials_transmission/_volume, so transmission/attenuation
+        // fields come back undefined rather than a Color/number)
+        if (glassMaterial.transmission !== undefined) CONFIG.transmission = glassMaterial.transmission;
+        if (glassMaterial.roughness !== undefined) CONFIG.roughness = glassMaterial.roughness;
+        if (glassMaterial.thickness !== undefined) CONFIG.thickness = glassMaterial.thickness;
+        if (glassMaterial.ior !== undefined) CONFIG.ior = glassMaterial.ior;
+        if (glassMaterial.clearcoat !== undefined) CONFIG.clearcoat = glassMaterial.clearcoat;
+        if (glassMaterial.clearcoatRoughness !== undefined) CONFIG.clearcoatRoughness = glassMaterial.clearcoatRoughness;
+        if (glassMaterial.attenuationColor) CONFIG.attenuationColor = `#${glassMaterial.attenuationColor.getHexString()}`;
+        if (glassMaterial.attenuationDistance !== undefined) CONFIG.attenuationDistance = glassMaterial.attenuationDistance;
+        glassFolder.controllers.forEach((c) => c.updateDisplay());
+      }
 
-    // scale so the glass's own points land exactly on the center window's
-    // silhouette
-    const scale = CONFIG.starSize / tipToTip;
-    gltf.scene.scale.setScalar(scale);
+      const box = new THREE.Box3().setFromObject(gltf.scene);
+      const center = box.getCenter(new THREE.Vector3());
+      // measured pre-rotation, while the star is still flat in the XZ plane: X
+      // stays horizontal after the tip-upright rotation below, Z becomes the
+      // new vertical -- a bounding-sphere diameter would overshoot by ~sqrt(2)
+      // since it covers the box's diagonal, not its tip-to-tip span
+      const tipToTip = Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
+      gltf.scene.position.sub(center);
+      gltf.scene.rotation.x = Math.PI / 2; // authored flat in XZ (Y-up); tip upright to face the camera
 
-    modelGroup.add(gltf.scene);
+      // scale so the glass's own points land exactly on the center window's
+      // silhouette
+      const scale = CONFIG.starSize / tipToTip;
+      gltf.scene.scale.setScalar(scale);
 
-    if (gltf.animations.length) {
-      mixer = new THREE.AnimationMixer(gltf.scene);
-      const clip = gltf.animations[0];
-      clipDuration = clip.duration;
-      action = mixer.clipAction(clip);
-      action.play();
-      action.paused = true;
-      setShatterProgress(currentShatterProgress);
-    }
-  },
-  undefined,
-  (err) => console.error('Failed to load star-shatter glb', err)
-);
+      modelGroup.add(gltf.scene);
+
+      if (gltf.animations.length) {
+        mixer = new THREE.AnimationMixer(gltf.scene);
+        const clip = gltf.animations[0];
+        clipDuration = clip.duration;
+        action = mixer.clipAction(clip);
+        action.play();
+        action.paused = true;
+        setShatterProgress(currentShatterProgress);
+      }
+    },
+    undefined,
+    (err) => console.error(`Failed to load star-shatter glb "${filename}"`, err)
+  );
+}
+
+loadModel(CONFIG.glbModel);
 
 function setShatterProgress(p) {
   currentShatterProgress = THREE.MathUtils.clamp(p, 0, 1);
@@ -1504,6 +1539,23 @@ window.addEventListener('pointerleave', () => {
 // ---------------------------------------------------------------------------
 // lil-gui control panel
 // ---------------------------------------------------------------------------
+const stats = new Stats();
+stats.showPanel(0); // 0: fps
+// stats.js hardcodes position:fixed;top:0;left:0 in its own constructor --
+// overridden here (after construction, so this wins) to pin it bottom-right
+// instead, out of the way of the lil-gui panel that already owns the top-right
+stats.dom.style.cssText = 'position:fixed;bottom:0;right:80px;cursor:pointer;opacity:0.9;z-index:10000;';
+document.body.appendChild(stats.dom);
+
+// stats.js's single Stats() instance only shows one panel at a time (clicking
+// its dom cycles fps/ms/mb) -- a second instance pinned to panel 2 (mb) shows
+// memory alongside fps instead of having to click through. Only Chromium
+// exposes performance.memory, so this panel is simply blank/static elsewhere.
+const memStats = new Stats();
+memStats.showPanel(2); // 2: mb (heap memory)
+memStats.dom.style.cssText = 'position:fixed;bottom:0;right:0;cursor:pointer;opacity:0.9;z-index:10000;';
+document.body.appendChild(memStats.dom);
+
 const gui = new GUI({ title: 'Timeline 03 Controls' });
 
 const tips = { theatreTip: '⌥/Alt + \\ toggles Theatre UI (?minify omits it)' };
@@ -1527,6 +1579,7 @@ timelineFolder.add(CONFIG, 'passStart', 0.3, 0.95, 0.01).name('Pass Starts');
 timelineFolder.add(CONFIG, 'clipStart', 0, 1, 0.01).name('Clip Start %');
 timelineFolder.add(CONFIG, 'clipEnd', 0, 1, 0.01).name('Clip End %');
 timelineFolder.add(CONFIG, 'autoRotateSpeed', 0, 1, 0.01).name('Auto Rotate');
+timelineFolder.add(CONFIG, 'glbModel', GLB_OPTIONS).name('Shatter GLB').onChange(loadModel);
 
 const wallFolder = gui.addFolder('Wall & Windows');
 wallFolder.addColor(CONFIG, 'wallColor').name('Wall Color').onChange((v) => wallUniforms.uWallColor.value.set(v));
@@ -1650,6 +1703,8 @@ const clock = new THREE.Clock();
 
 function animate() {
   requestAnimationFrame(animate);
+  stats.begin();
+  memStats.begin();
   const dt = clock.getDelta();
   const time = clock.elapsedTime;
 
@@ -1730,6 +1785,8 @@ function animate() {
   reflectionCamera.update(renderer, scene);
 
   composer.render();
+  stats.end();
+  memStats.end();
 }
 
 animate();
