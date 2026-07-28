@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vortex Espacial</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #000;
+        height: 100%;
+        width: 100%;
+        font-family: sans-serif;
+      }
+      canvas {
+        display: block;
+      }
+      #hint {
+        position: fixed;
+        left: 16px;
+        bottom: 14px;
+        color: rgba(255, 255, 255, 0.55);
+        font-size: 12px;
+        line-height: 1.5;
+        pointer-events: none;
+        z-index: 10;
+        max-width: 320px;
+      }
+      #hint b {
+        color: rgba(255, 255, 255, 0.8);
+      }
+      #recordBtn {
+        position: fixed;
+        right: 16px;
+        bottom: 14px;
+        z-index: 10;
+        background: rgba(20, 20, 25, 0.85);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 6px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-family: sans-serif;
+        cursor: pointer;
+      }
+      #recordBtn:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      /* Panel de Tweakpane: fijo arriba a la derecha, con scroll propio. */
+      #panel {
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        z-index: 20;
+        width: 290px;
+        max-height: calc(100vh - 24px);
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+    <div id="panel"></div>
+    <div id="hint">
+      Click + arrastrar: orbitar la camara libre. Rueda: zoom. Se habilita
+      cuando termina la intro.<br />
+      Panel arriba a la derecha, 4 secciones: <b>Movimientos de Camara</b>,
+      <b>Recorrido del Vortex</b> (con Crecimiento/Trim), <b>Look del
+      Vortex</b>, <b>Background</b>.<br />
+      Los puntos naranjas del trayecto de camara se pueden arrastrar directo
+      en la escena (elegi cual con "Punto activo"); el icono amarillo muestra
+      donde apuntaria la camara segun "Progreso". Se ocultan mientras el
+      recorrido esta activo.<br />
+      Abajo de todo aparece la <b>linea de tiempo de Theatre.js</b>: ahi se
+      arman las secuencias con keyframes sobre cualquier valor del panel.
+    </div>
+    <button id="recordBtn">Grabar secuencia (.webm)</button>
+
+    <!-- importmap para poder hacer "import * as THREE from 'three'" sin bundler -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+        }
+      }
+    </script>
+
+    <script type="module">
+      import * as THREE from 'three'
+      // Postprocesado: bloom (brillo que se esparce) y afterimage (estela / larga exposicion)
+      import { EffectComposer } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js'
+      import { RenderPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/RenderPass.js'
+      import { UnrealBloomPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js'
+      import { AfterimagePass } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/AfterimagePass.js'
+      import { OutputPass } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/postprocessing/OutputPass.js'
+      // Controles de camara con mouse/touch (orbitar, zoom, paneo)
+      import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js'
+      // Gizmo para arrastrar objetos en la escena (puntos del trayecto de camara)
+      import { TransformControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/TransformControls.js'
+      // Panel de control "de mano" (mas comodo que la UI por defecto de Theatre)
+      import { Pane } from 'https://cdn.jsdelivr.net/npm/tweakpane@4.0.5/dist/tweakpane.js'
+      // Theatre.js: motor de secuencias/keyframes (vuelve a estar activo, ahora
+      // conviviendo con el panel Tweakpane de arriba a la derecha).
+      import 'https://cdn.jsdelivr.net/npm/@theatre/browser-bundles@0.5.0-insiders.88df1ef/dist/core-and-studio.js'
+
+      const { core, studio } = Theatre
+      const types = core.types
+      studio.initialize()
+
+      const project = core.getProject('Vortex Espacial')
+      const sheet = project.sheet('Escena Principal')
+
+      // ------------------------------------------------------------------
+      // Presets = "variantes" de la escena. Se aplican de una desde el
+      // dropdown "preset" del panel, y despues seguis ajustando fino.
+      // ------------------------------------------------------------------
+      const presets = {
+        nebulosa: {
+          colorCore: { r: 1, g: 1, b: 1 },
+          colorMid: { r: 0.35, g: 0.55, b: 1 },
+          colorEdge: { r: 0.02, g: 0.03, b: 0.1 },
+          speed: 0.6, swirl: 3, noiseScale: 2.0, turbulence: 0.6, glow: 1.4, detail: 3.0,
+          fov: 60, shake: 0.2, starBrightness: 0.8, exitGlow: 1.1, bloomStrength: 1.3, trail: 0.82, starCount: 1,
+        },
+        fuego: {
+          colorCore: { r: 1, g: 0.95, b: 0.6 },
+          colorMid: { r: 1, g: 0.35, b: 0.05 },
+          colorEdge: { r: 0.15, g: 0.02, b: 0.0 },
+          speed: 1.3, swirl: 6, noiseScale: 2.6, turbulence: 1.0, glow: 1.7, detail: 2.2,
+          fov: 70, shake: 0.5, starBrightness: 0.5, exitGlow: 1.6, bloomStrength: 1.5, trail: 0.78, starCount: 1,
+        },
+        acido: {
+          colorCore: { r: 0.9, g: 1, b: 0.4 },
+          colorMid: { r: 0.3, g: 0.9, b: 0.15 },
+          colorEdge: { r: 0.02, g: 0.08, b: 0.02 },
+          speed: 1.0, swirl: -7, noiseScale: 2.2, turbulence: 1.3, glow: 1.5, detail: 2.6,
+          fov: 65, shake: 0.35, starBrightness: 0.6, exitGlow: 1.2, bloomStrength: 1.4, trail: 0.8, starCount: 1,
+        },
+        hielo: {
+          colorCore: { r: 1, g: 1, b: 1 },
+          colorMid: { r: 0.55, g: 0.85, b: 1 },
+          colorEdge: { r: 0.03, g: 0.08, b: 0.14 },
+          speed: 0.4, swirl: 2, noiseScale: 1.6, turbulence: 0.4, glow: 1.2, detail: 3.6,
+          fov: 55, shake: 0.1, starBrightness: 1.0, exitGlow: 0.9, bloomStrength: 1.1, trail: 0.86, starCount: 1,
+        },
+      }
+      const DEFAULT_PRESET = 'nebulosa'
+      const d = presets[DEFAULT_PRESET]
+
+      const DEFAULT_WAYPOINTS = [
+        { x: 0, y: 0, z: -2 },
+        { x: 9, y: 2, z: -34 },
+        { x: -7, y: -1, z: -66 },
+        { x: 0, y: 0, z: -98 },
+      ]
+      const DEFAULT_CAM_WAYPOINTS = [
+        { x: 0, y: 0, z: -2 },
+        { x: 4.5, y: 1, z: -34 },
+        { x: -3.5, y: -0.5, z: -66 },
+        { x: 0, y: 0, z: -90 },
+      ]
+
+      // ------------------------------------------------------------------
+      // PARAMS: espejo plano de los valores de Theatre, pensado para que
+      // Tweakpane tenga un objeto simple al cual bindearse. La fuente de
+      // verdad real es Theatre (para poder keyframear); cada vez que
+      // Theatre cambia, se copia el valor aca y se refresca el panel.
+      // ------------------------------------------------------------------
+      const PARAMS = {
+        preset: DEFAULT_PRESET,
+        colorCore: { ...d.colorCore },
+        colorMid: { ...d.colorMid },
+        colorEdge: { ...d.colorEdge },
+        speed: d.speed,
+        swirl: d.swirl,
+        noiseScale: d.noiseScale,
+        turbulence: d.turbulence,
+        glow: d.glow,
+        detail: d.detail,
+        visible: true,
+
+        growth: 1,
+        p0: { ...DEFAULT_WAYPOINTS[0] },
+        p1: { ...DEFAULT_WAYPOINTS[1] },
+        p2: { ...DEFAULT_WAYPOINTS[2] },
+        p3: { ...DEFAULT_WAYPOINTS[3] },
+
+        fov: d.fov,
+        shake: d.shake,
+        camPos: { x: 0, y: 0, z: -2 },
+        pathEnabled: false,
+        pathProgress: 0,
+        pathLookAhead: 0.05,
+        cp0: { ...DEFAULT_CAM_WAYPOINTS[0] },
+        cp1: { ...DEFAULT_CAM_WAYPOINTS[1] },
+        cp2: { ...DEFAULT_CAM_WAYPOINTS[2] },
+        cp3: { ...DEFAULT_CAM_WAYPOINTS[3] },
+
+        starBrightness: d.starBrightness,
+        starCount: d.starCount,
+        exitGlow: d.exitGlow,
+        bloomStrength: d.bloomStrength,
+        trail: d.trail,
+        starsVisible: true,
+        cometVisible: true,
+        glowVisible: true,
+      }
+
+      // ------------------------------------------------------------------
+      // Estado mutable compartido entre el panel, Theatre y el loop de
+      // animacion. Declarado bien arriba para evitar bugs de "usado antes
+      // de declararse" (ya nos paso una vez).
+      // ------------------------------------------------------------------
+      let isOrbiting = false
+      let introDone = false
+      let camPathEnabled = false
+      let camPathProgress = 0
+      let camPathLookAhead = 0.05
+      let camShake = d.shake
+      let spinSpeed = d.swirl
+      let liveScrub = null
+
+      function commitLiveScrub() {
+        if (liveScrub) {
+          liveScrub.commit()
+          liveScrub = null
+        }
+      }
+      // Cambios discretos (checkboxes, dropdowns): una transaccion por click.
+      function pushDiscrete(obj, key, value) {
+        studio.transaction(({ set }) => set(obj.props[key], value))
+      }
+      // Cambios continuos (sliders, colores, arrastrar puntos): un solo
+      // "scrub" que se abre en el primer tick y se cierra en el ultimo,
+      // para que el timeline no se llene de pasos intermedios.
+      function pushContinuous(obj, key, value, isLast) {
+        if (!liveScrub) liveScrub = studio.scrub()
+        liveScrub.capture(({ set }) => set(obj.props[key], value))
+        if (isLast) commitLiveScrub()
+      }
+
+      // ------------------------------------------------------------------
+      // Objetos de Theatre.js: 4 grupos, uno por seccion del panel. Son la
+      // fuente de verdad (se pueden keyframear en la linea de tiempo).
+      // Declarados bien arriba (antes de armar la escena/el gizmo) para que
+      // cualquier callback que los referencie los encuentre ya definidos.
+      // ------------------------------------------------------------------
+      const camObj = sheet.object('Movimientos de Camara', {
+        fov: types.number(d.fov, { range: [30, 100] }),
+        shake: types.number(d.shake, { range: [0, 1] }),
+        posX: types.number(0, { range: [-100, 100] }),
+        posY: types.number(0, { range: [-100, 100] }),
+        posZ: types.number(-2, { range: [-200, 50] }),
+        pathEnabled: types.boolean(false),
+        pathProgress: types.number(0, { range: [0, 1] }),
+        pathLookAhead: types.number(0.05, { range: [0.01, 0.3] }),
+        cp0: { ...DEFAULT_CAM_WAYPOINTS[0] },
+        cp1: { ...DEFAULT_CAM_WAYPOINTS[1] },
+        cp2: { ...DEFAULT_CAM_WAYPOINTS[2] },
+        cp3: { ...DEFAULT_CAM_WAYPOINTS[3] },
+      })
+
+      const pathObj = sheet.object('Recorrido del Vortex', {
+        growth: types.number(1, { range: [0, 1] }),
+        p0: { ...DEFAULT_WAYPOINTS[0] },
+        p1: { ...DEFAULT_WAYPOINTS[1] },
+        p2: { ...DEFAULT_WAYPOINTS[2] },
+        p3: { ...DEFAULT_WAYPOINTS[3] },
+      })
+
+      const lookObj = sheet.object('Look del Vortex', {
+        preset: types.stringLiteral(DEFAULT_PRESET, {
+          nebulosa: 'Nebulosa Azul',
+          fuego: 'Fuego',
+          acido: 'Acido',
+          hielo: 'Hielo',
+        }),
+        colorCore: types.rgba({ r: d.colorCore.r, g: d.colorCore.g, b: d.colorCore.b, a: 1 }),
+        colorMid: types.rgba({ r: d.colorMid.r, g: d.colorMid.g, b: d.colorMid.b, a: 1 }),
+        colorEdge: types.rgba({ r: d.colorEdge.r, g: d.colorEdge.g, b: d.colorEdge.b, a: 1 }),
+        speed: types.number(d.speed, { range: [0, 3] }),
+        swirl: types.number(d.swirl, { range: [-12, 12] }),
+        noiseScale: types.number(d.noiseScale, { range: [0.5, 6] }),
+        turbulence: types.number(d.turbulence, { range: [0, 2] }),
+        glow: types.number(d.glow, { range: [0.3, 3] }),
+        detail: types.number(d.detail, { range: [1, 6] }),
+        visible: types.boolean(true),
+      })
+
+      const bgObj = sheet.object('Background', {
+        starBrightness: types.number(d.starBrightness, { range: [0, 2] }),
+        starCount: types.number(d.starCount, { range: [0, 1] }),
+        exitGlow: types.number(d.exitGlow, { range: [0, 2] }),
+        bloomStrength: types.number(d.bloomStrength, { range: [0, 3] }),
+        trail: types.number(d.trail, { range: [0, 0.95] }),
+        starsVisible: types.boolean(true),
+        cometVisible: types.boolean(true),
+        glowVisible: types.boolean(true),
+      })
+
+      // ------------------------------------------------------------------
+      // Three.js: escena, camara, tunel con material de "gas" y estrellas
+      // ------------------------------------------------------------------
+      const canvas = document.getElementById('scene')
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true })
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      renderer.setSize(window.innerWidth, window.innerHeight)
+
+      const scene = new THREE.Scene()
+      const camera = new THREE.PerspectiveCamera(d.fov, window.innerWidth / window.innerHeight, 0.1, 2000)
+      camera.position.set(0, 0, -2)
+
+      // Mouse/touch: click y arrastrar para orbitar, rueda/pellizco para
+      // zoom, click derecho (o ctrl+arrastrar) para paneo. Se habilita
+      // recien cuando termina la animacion de entrada.
+      const controls = new OrbitControls(camera, renderer.domElement)
+      controls.target.set(0, 0, -40)
+      controls.enableDamping = true
+      controls.dampingFactor = 0.08
+      controls.minDistance = 1
+      controls.maxDistance = 250
+      controls.enabled = false
+      // El constructor de OrbitControls hace un lookAt automatico al armarse;
+      // lo deshacemos para que la intro arranque mirando derecho para adelante.
+      camera.quaternion.set(0, 0, 0, 1)
+
+      // --- Estrellas de fondo ---
+      function makeStarfield(count, radius) {
+        const geo = new THREE.BufferGeometry()
+        const positions = new Float32Array(count * 3)
+        for (let i = 0; i < count; i++) {
+          const r = radius * (0.6 + Math.random() * 0.4)
+          const theta = Math.random() * Math.PI * 2
+          const phi = Math.acos(2 * Math.random() - 1)
+          positions[i * 3] = r * Math.sin(phi) * Math.cos(theta)
+          positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta)
+          positions[i * 3 + 2] = r * Math.cos(phi)
+        }
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+        const mat = new THREE.PointsMaterial({
+          color: 0xffffff,
+          size: 1.4,
+          sizeAttenuation: true,
+          transparent: true,
+          opacity: 0.8,
+          depthWrite: false,
+        })
+        return new THREE.Points(geo, mat)
+      }
+      const MAX_STARS = 4000
+      const stars = makeStarfield(MAX_STARS, 400)
+      stars.renderOrder = 0
+      scene.add(stars)
+
+      // --- Brillo al fondo del tunel (simula la luz del "final" del vortex) ---
+      function makeGlowTexture() {
+        const size = 256
+        const c = document.createElement('canvas')
+        c.width = c.height = size
+        const ctx = c.getContext('2d')
+        const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+        grad.addColorStop(0, 'rgba(255,255,255,1)')
+        grad.addColorStop(0.4, 'rgba(255,255,255,0.35)')
+        grad.addColorStop(1, 'rgba(255,255,255,0)')
+        ctx.fillStyle = grad
+        ctx.fillRect(0, 0, size, size)
+        return new THREE.CanvasTexture(c)
+      }
+      const glowMaterial = new THREE.SpriteMaterial({
+        map: makeGlowTexture(),
+        color: 0x88aaff,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      const glowSprite = new THREE.Sprite(glowMaterial)
+      glowSprite.scale.set(22, 22, 1)
+      glowSprite.position.set(0, 0, -97)
+      glowSprite.renderOrder = 1
+      scene.add(glowSprite)
+
+      // --- El tunel / vortex con material tipo gas ---
+      const TUNNEL_RADIUS = 6
+      const TUNNEL_TUBULAR_SEGMENTS = 220
+      const TUNNEL_RADIAL_SEGMENTS = 48
+
+      const uniforms = {
+        uTime: { value: 0 },
+        uColorCore: { value: new THREE.Color(d.colorCore.r, d.colorCore.g, d.colorCore.b) },
+        uColorMid: { value: new THREE.Color(d.colorMid.r, d.colorMid.g, d.colorMid.b) },
+        uColorEdge: { value: new THREE.Color(d.colorEdge.r, d.colorEdge.g, d.colorEdge.b) },
+        uSpeed: { value: d.speed },
+        uNoiseScale: { value: d.noiseScale },
+        uTurbulence: { value: d.turbulence },
+        uGlow: { value: d.glow },
+        uDetail: { value: d.detail },
+        uGrowth: { value: 1 },
+      }
+
+      const vortexMaterial = new THREE.ShaderMaterial({
+        uniforms,
+        side: THREE.DoubleSide,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            // TubeGeometry usa uv.x = a lo largo del tubo, uv.y = alrededor
+            // de la circunferencia (al reves que CylinderGeometry).
+            vUv = uv.yx;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          precision highp float;
+          varying vec2 vUv;
+          uniform float uTime;
+          uniform vec3 uColorCore;
+          uniform vec3 uColorMid;
+          uniform vec3 uColorEdge;
+          uniform float uSpeed;
+          uniform float uNoiseScale;
+          uniform float uTurbulence;
+          uniform float uGlow;
+          uniform float uDetail;
+          uniform float uGrowth;
+
+          vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+          vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+          vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
+          vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+          float snoise(vec3 v) {
+            const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+            const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+            vec3 i  = floor(v + dot(v, C.yyy));
+            vec3 x0 = v - i + dot(i, C.xxx);
+
+            vec3 g = step(x0.yzx, x0.xyz);
+            vec3 l = 1.0 - g;
+            vec3 i1 = min(g.xyz, l.zxy);
+            vec3 i2 = max(g.xyz, l.zxy);
+
+            vec3 x1 = x0 - i1 + C.xxx;
+            vec3 x2 = x0 - i2 + C.yyy;
+            vec3 x3 = x0 - D.yyy;
+
+            i = mod289(i);
+            vec4 p = permute(permute(permute(
+                      i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+
+            float n_ = 0.142857142857;
+            vec3 ns = n_ * D.wyz - D.xzx;
+
+            vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+            vec4 x_ = floor(j * ns.z);
+            vec4 y_ = floor(j - 7.0 * x_);
+
+            vec4 x = x_ * ns.x + ns.yyyy;
+            vec4 y = y_ * ns.x + ns.yyyy;
+            vec4 h = 1.0 - abs(x) - abs(y);
+
+            vec4 b0 = vec4(x.xy, y.xy);
+            vec4 b1 = vec4(x.zw, y.zw);
+
+            vec4 s0 = floor(b0) * 2.0 + 1.0;
+            vec4 s1 = floor(b1) * 2.0 + 1.0;
+            vec4 sh = -step(h, vec4(0.0));
+
+            vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+            vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+
+            vec3 p0 = vec3(a0.xy, h.x);
+            vec3 p1 = vec3(a0.zw, h.y);
+            vec3 p2 = vec3(a1.xy, h.z);
+            vec3 p3 = vec3(a1.zw, h.w);
+
+            vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+            p0 *= norm.x;
+            p1 *= norm.y;
+            p2 *= norm.z;
+            p3 *= norm.w;
+
+            vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+            m = m * m;
+            return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+          }
+
+          float fbm(vec3 p) {
+            float total = 0.0;
+            float amp = 0.5;
+            for (int i = 0; i < 5; i++) {
+              total += amp * snoise(p);
+              p *= 2.0;
+              amp *= 0.5;
+            }
+            return total;
+          }
+
+          void main() {
+            float angle = vUv.x * 6.28318530718;
+            float depth = vUv.y * uNoiseScale + uTime * uSpeed;
+
+            vec3 angCoord = vec3(cos(angle), sin(angle), depth * 0.1);
+
+            float warpN = fbm(angCoord * 1.1 + vec3(0.0, 0.0, uTime * 0.06)) * uTurbulence;
+
+            float veins = 0.0;
+            float amp = 0.5;
+            float freq = 1.0;
+            for (int i = 0; i < 4; i++) {
+              float jitter = snoise(angCoord * (1.6 + float(i) * 0.7) + vec3(float(i) * 4.1)) * uTurbulence * 0.35;
+              float phase = (depth + (warpN + jitter) * 1.6) * freq;
+              float ring = 1.0 - abs(fract(phase) - 0.5) * 2.0;
+              ring = pow(clamp(ring, 0.0, 1.0), 6.0);
+              veins += amp * ring;
+              freq *= 1.85;
+              amp *= 0.55;
+            }
+            veins = clamp(veins, 0.0, 1.0);
+            veins = pow(veins, max(uDetail * 0.4, 0.3));
+
+            vec3 color = mix(uColorEdge, uColorMid, smoothstep(0.05, 0.5, veins));
+            color = mix(color, uColorCore, smoothstep(0.55, 0.9, veins));
+
+            float pulse = 0.92 + 0.08 * sin(uTime * 1.5);
+            color *= uGlow * pulse;
+
+            float alpha = clamp(veins * 1.3, 0.0, 1.0);
+
+            // "Trim / crecimiento": lo que este mas alla de uGrowth queda
+            // oculto; justo en el borde, un anillo brillante (la punta).
+            float tip = 1.0 - smoothstep(0.0, 0.035, abs(vUv.y - uGrowth));
+            alpha *= step(vUv.y, uGrowth);
+            alpha = max(alpha, tip * 0.95);
+            color = mix(color, uColorCore, tip);
+            color *= 1.0 + tip * 1.5;
+
+            gl_FragColor = vec4(color, alpha);
+          }
+        `,
+      })
+
+      function buildCurve(wp) {
+        return new THREE.CatmullRomCurve3([
+          new THREE.Vector3(wp.p0.x, wp.p0.y, wp.p0.z),
+          new THREE.Vector3(wp.p1.x, wp.p1.y, wp.p1.z),
+          new THREE.Vector3(wp.p2.x, wp.p2.y, wp.p2.z),
+          new THREE.Vector3(wp.p3.x, wp.p3.y, wp.p3.z),
+        ])
+      }
+
+      let tunnelCurve = buildCurve(PARAMS)
+      const tunnelGeo = new THREE.TubeGeometry(
+        tunnelCurve,
+        TUNNEL_TUBULAR_SEGMENTS,
+        TUNNEL_RADIUS,
+        TUNNEL_RADIAL_SEGMENTS,
+        false,
+      )
+      const tunnelMesh = new THREE.Mesh(tunnelGeo, vortexMaterial)
+      tunnelMesh.renderOrder = 2
+      scene.add(tunnelMesh)
+
+      const spinAxis = new THREE.Vector3(0, 0, -1)
+      const spinQuat = new THREE.Quaternion()
+
+      function rebuildTunnel(wp) {
+        tunnelCurve = buildCurve(wp)
+        const newGeo = new THREE.TubeGeometry(
+          tunnelCurve,
+          TUNNEL_TUBULAR_SEGMENTS,
+          TUNNEL_RADIUS,
+          TUNNEL_RADIAL_SEGMENTS,
+          false,
+        )
+        tunnelMesh.geometry.dispose()
+        tunnelMesh.geometry = newGeo
+
+        const p0v = new THREE.Vector3(wp.p0.x, wp.p0.y, wp.p0.z)
+        const p3v = new THREE.Vector3(wp.p3.x, wp.p3.y, wp.p3.z)
+        spinAxis.copy(p3v).sub(p0v).normalize()
+
+        glowSprite.position.copy(p3v)
+      }
+      rebuildTunnel(PARAMS)
+
+      // --- Curva propia de la camara (independiente del path del tunel) ---
+      function buildCameraCurve(cp) {
+        return new THREE.CatmullRomCurve3([
+          new THREE.Vector3(cp.cp0.x, cp.cp0.y, cp.cp0.z),
+          new THREE.Vector3(cp.cp1.x, cp.cp1.y, cp.cp1.z),
+          new THREE.Vector3(cp.cp2.x, cp.cp2.y, cp.cp2.z),
+          new THREE.Vector3(cp.cp3.x, cp.cp3.y, cp.cp3.z),
+        ])
+      }
+      let camCurve = buildCameraCurve(PARAMS)
+
+      // ------------------------------------------------------------------
+      // Visualizacion del trayecto de camara: la curva dibujada, marcadores
+      // arrastrables en cada waypoint, y un icono de camara que muestra
+      // donde apuntaria segun "Progreso". Todo esto se oculta cuando el
+      // recorrido esta activo (ahi la camara real ya esta "adentro").
+      // ------------------------------------------------------------------
+      const camPathVisuals = new THREE.Group()
+      scene.add(camPathVisuals)
+
+      let camPathLineGeo = new THREE.BufferGeometry().setFromPoints(camCurve.getPoints(60))
+      const camPathLine = new THREE.Line(
+        camPathLineGeo,
+        new THREE.LineBasicMaterial({ color: 0xffaa33, transparent: true, opacity: 0.85 }),
+      )
+      camPathVisuals.add(camPathLine)
+
+      function updateCamPathLine() {
+        camPathLine.geometry.dispose()
+        camPathLine.geometry = new THREE.BufferGeometry().setFromPoints(camCurve.getPoints(60))
+      }
+
+      const markerColors = { cp0: 0xff5555, cp1: 0xffaa33, cp2: 0xffe066, cp3: 0xffffff }
+      const markers = {}
+      ;['cp0', 'cp1', 'cp2', 'cp3'].forEach((key) => {
+        const marker = new THREE.Mesh(
+          new THREE.SphereGeometry(1.3, 16, 16),
+          new THREE.MeshBasicMaterial({ color: markerColors[key] }),
+        )
+        marker.position.set(PARAMS[key].x, PARAMS[key].y, PARAMS[key].z)
+        marker.userData.key = key
+        markers[key] = marker
+        camPathVisuals.add(marker)
+      })
+
+      function makeCameraIcon() {
+        const group = new THREE.Group()
+        const mat = new THREE.MeshBasicMaterial({ color: 0xffdd55 })
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.9, 1.5), mat)
+        const lens = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 16), mat)
+        lens.rotation.x = -Math.PI / 2
+        lens.position.z = -1.2
+        group.add(body)
+        group.add(lens)
+        return group
+      }
+      const cameraIcon = makeCameraIcon()
+      camPathVisuals.add(cameraIcon)
+
+      function updateCameraIcon() {
+        const p = Math.min(Math.max(camPathProgress, 0), 1)
+        const ahead = Math.min(p + camPathLookAhead, 1)
+        const pos = camCurve.getPointAt(p)
+        const look = camCurve.getPointAt(ahead)
+        cameraIcon.position.copy(pos)
+        cameraIcon.lookAt(look)
+      }
+      updateCameraIcon()
+
+      // Gizmo para arrastrar el punto activo directamente en la escena.
+      const transformControls = new TransformControls(camera, renderer.domElement)
+      transformControls.setSize(0.8)
+      scene.add(transformControls)
+
+      const editorState = { activePoint: 'cp0' }
+      transformControls.attach(markers[editorState.activePoint])
+
+      transformControls.addEventListener('dragging-changed', (event) => {
+        controls.enabled = !event.value && introDone && !camPathEnabled
+        if (!event.value) commitLiveScrub()
+      })
+      transformControls.addEventListener('objectChange', () => {
+        const key = editorState.activePoint
+        const m = markers[key]
+        const val = { x: m.position.x, y: m.position.y, z: m.position.z }
+        PARAMS[key] = val
+        camCurve = buildCameraCurve(PARAMS)
+        updateCamPathLine()
+        updateCameraIcon()
+        pushContinuous(camObj, key, val, false)
+      })
+
+      // --- El "cometa": un trazo brillante que entra en diagonal y se lo
+      // traga el vortex, como en la referencia ---
+      function makeCometTexture() {
+        const w = 512
+        const h = 128
+        const c = document.createElement('canvas')
+        c.width = w
+        c.height = h
+        const ctx = c.getContext('2d')
+        ctx.translate(w / 2, h / 2)
+        ctx.scale(4, 1)
+        const r = h / 2
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, r)
+        grad.addColorStop(0, 'rgba(255,255,255,1)')
+        grad.addColorStop(0.45, 'rgba(255,255,255,0.4)')
+        grad.addColorStop(1, 'rgba(255,255,255,0)')
+        ctx.fillStyle = grad
+        ctx.beginPath()
+        ctx.arc(0, 0, r, 0, Math.PI * 2)
+        ctx.fill()
+        return new THREE.CanvasTexture(c)
+      }
+
+      const cometMaterial = new THREE.SpriteMaterial({
+        map: makeCometTexture(),
+        color: 0xffffff,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        opacity: 0,
+      })
+      const comet = new THREE.Sprite(cometMaterial)
+      comet.renderOrder = 3
+      scene.add(comet)
+
+      const COMET_START = new THREE.Vector3(-58, 34, -28)
+      const COMET_END = new THREE.Vector3(-1, 0.5, -94)
+      const COMET_PERIOD = 5.5
+      cometMaterial.rotation = Math.atan2(
+        COMET_END.y - COMET_START.y,
+        COMET_END.x - COMET_START.x,
+      )
+      let cometEnabled = true
+
+      // ------------------------------------------------------------------
+      // Postprocesado: bloom (brillo que se esparce) + afterimage (estela)
+      // ------------------------------------------------------------------
+      const composer = new EffectComposer(renderer)
+      composer.addPass(new RenderPass(scene, camera))
+
+      const afterimagePass = new AfterimagePass()
+      afterimagePass.uniforms['damp'].value = d.trail
+      composer.addPass(afterimagePass)
+
+      const bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        d.bloomStrength,
+        0.55,
+        0.15,
+      )
+      composer.addPass(bloomPass)
+      composer.addPass(new OutputPass())
+
+      // ------------------------------------------------------------------
+      // Panel de control (Tweakpane): 4 secciones planas (sin sub-carpetas,
+      // solo separadores) que reflejan 1 a 1 los 4 objetos de Theatre de
+      // arriba. Cada binding, al cambiar, empuja el valor hacia Theatre;
+      // Theatre es quien de verdad aplica el cambio a la escena (mas abajo).
+      // ------------------------------------------------------------------
+      const pane = new Pane({ container: document.getElementById('panel'), title: 'Vortex Espacial' })
+
+      // --- Movimientos de Camara ---
+      const camFolder = pane.addFolder({ title: 'Movimientos de Camara' })
+      camFolder.addBinding(PARAMS, 'fov', { label: 'FOV', min: 30, max: 100 })
+        .on('change', (ev) => pushContinuous(camObj, 'fov', ev.value, ev.last))
+      camFolder.addBinding(PARAMS, 'shake', { label: 'Shake (intro)', min: 0, max: 1 })
+        .on('change', (ev) => pushContinuous(camObj, 'shake', ev.value, ev.last))
+      camFolder.addBlade({ view: 'separator' })
+      camFolder.addBinding(PARAMS, 'camPos', {
+        label: 'Posicion libre',
+        x: { step: 0.5 },
+        y: { step: 0.5 },
+        z: { step: 0.5 },
+      }).on('change', (ev) => {
+        pushContinuous(camObj, 'posX', ev.value.x, false)
+        pushContinuous(camObj, 'posY', ev.value.y, false)
+        pushContinuous(camObj, 'posZ', ev.value.z, ev.last)
+      })
+      camFolder.addBlade({ view: 'separator' })
+      camFolder.addBinding(PARAMS, 'pathEnabled', { label: 'Activar recorrido tipo Spline' })
+        .on('change', (ev) => pushDiscrete(camObj, 'pathEnabled', ev.value))
+      camFolder.addBinding(PARAMS, 'pathProgress', { label: 'Progreso en el trayecto', min: 0, max: 1 })
+        .on('change', (ev) => pushContinuous(camObj, 'pathProgress', ev.value, ev.last))
+      camFolder.addBinding(PARAMS, 'pathLookAhead', { label: 'Mirada adelante', min: 0.01, max: 0.3 })
+        .on('change', (ev) => pushContinuous(camObj, 'pathLookAhead', ev.value, ev.last))
+      camFolder.addBinding(editorState, 'activePoint', {
+        label: 'Punto activo (arrastrable en 3D)',
+        options: { 'Punto 0': 'cp0', 'Punto 1': 'cp1', 'Punto 2': 'cp2', 'Punto 3': 'cp3' },
+      }).on('change', (ev) => {
+        transformControls.detach()
+        transformControls.attach(markers[ev.value])
+      })
+      ;['cp0', 'cp1', 'cp2', 'cp3'].forEach((key, i) => {
+        camFolder.addBinding(PARAMS, key, { label: `Punto ${i} (x,y,z)` }).on('change', (ev) => {
+          pushContinuous(camObj, key, ev.value, ev.last)
+        })
+      })
+
+      // --- Recorrido del Vortex ---
+      const pathFolder = pane.addFolder({ title: 'Recorrido del Vortex' })
+      pathFolder.addBinding(PARAMS, 'growth', { label: 'Crecimiento (trim)', min: 0, max: 1 })
+        .on('change', (ev) => pushContinuous(pathObj, 'growth', ev.value, ev.last))
+      pathFolder.addBlade({ view: 'separator' })
+      ;['p0', 'p1', 'p2', 'p3'].forEach((key, i) => {
+        pathFolder.addBinding(PARAMS, key, { label: `Punto ${i} (x,y,z)` }).on('change', (ev) => {
+          pushContinuous(pathObj, key, ev.value, ev.last)
+        })
+      })
+
+      // --- Look del Vortex ---
+      const lookFolder = pane.addFolder({ title: 'Look del Vortex' })
+      lookFolder.addBinding(PARAMS, 'preset', {
+        label: 'Preset',
+        options: { 'Nebulosa Azul': 'nebulosa', Fuego: 'fuego', Acido: 'acido', Hielo: 'hielo' },
+      }).on('change', (ev) => applyPresetByName(ev.value))
+      lookFolder.addBinding(PARAMS, 'visible', { label: 'Visible' })
+        .on('change', (ev) => pushDiscrete(lookObj, 'visible', ev.value))
+      lookFolder.addBlade({ view: 'separator' })
+      lookFolder.addBinding(PARAMS, 'colorCore', { label: 'Color nucleo', color: { type: 'float' } })
+        .on('change', (ev) => pushContinuous(lookObj, 'colorCore', { ...ev.value, a: 1 }, ev.last))
+      lookFolder.addBinding(PARAMS, 'colorMid', { label: 'Color medio', color: { type: 'float' } })
+        .on('change', (ev) => pushContinuous(lookObj, 'colorMid', { ...ev.value, a: 1 }, ev.last))
+      lookFolder.addBinding(PARAMS, 'colorEdge', { label: 'Color borde', color: { type: 'float' } })
+        .on('change', (ev) => pushContinuous(lookObj, 'colorEdge', { ...ev.value, a: 1 }, ev.last))
+      lookFolder.addBlade({ view: 'separator' })
+      lookFolder.addBinding(PARAMS, 'speed', { label: 'Velocidad', min: 0, max: 3 })
+        .on('change', (ev) => pushContinuous(lookObj, 'speed', ev.value, ev.last))
+      lookFolder.addBinding(PARAMS, 'swirl', { label: 'Giro', min: -12, max: 12 })
+        .on('change', (ev) => pushContinuous(lookObj, 'swirl', ev.value, ev.last))
+      lookFolder.addBinding(PARAMS, 'noiseScale', { label: 'Escala ruido', min: 0.5, max: 6 })
+        .on('change', (ev) => pushContinuous(lookObj, 'noiseScale', ev.value, ev.last))
+      lookFolder.addBinding(PARAMS, 'turbulence', { label: 'Turbulencia', min: 0, max: 2 })
+        .on('change', (ev) => pushContinuous(lookObj, 'turbulence', ev.value, ev.last))
+      lookFolder.addBlade({ view: 'separator' })
+      lookFolder.addBinding(PARAMS, 'glow', { label: 'Brillo', min: 0.3, max: 3 })
+        .on('change', (ev) => pushContinuous(lookObj, 'glow', ev.value, ev.last))
+      lookFolder.addBinding(PARAMS, 'detail', { label: 'Detalle (finura)', min: 1, max: 6 })
+        .on('change', (ev) => pushContinuous(lookObj, 'detail', ev.value, ev.last))
+
+      // --- Background ---
+      const bgFolder = pane.addFolder({ title: 'Background' })
+      bgFolder.addBinding(PARAMS, 'starsVisible', { label: 'Estrellas visibles' })
+        .on('change', (ev) => pushDiscrete(bgObj, 'starsVisible', ev.value))
+      bgFolder.addBinding(PARAMS, 'cometVisible', { label: 'Cometa visible' })
+        .on('change', (ev) => pushDiscrete(bgObj, 'cometVisible', ev.value))
+      bgFolder.addBinding(PARAMS, 'glowVisible', { label: 'Brillo final visible' })
+        .on('change', (ev) => pushDiscrete(bgObj, 'glowVisible', ev.value))
+      bgFolder.addBlade({ view: 'separator' })
+      bgFolder.addBinding(PARAMS, 'starBrightness', { label: 'Brillo estrellas', min: 0, max: 2 })
+        .on('change', (ev) => pushContinuous(bgObj, 'starBrightness', ev.value, ev.last))
+      bgFolder.addBinding(PARAMS, 'starCount', { label: 'Cantidad estrellas', min: 0, max: 1 })
+        .on('change', (ev) => pushContinuous(bgObj, 'starCount', ev.value, ev.last))
+      bgFolder.addBinding(PARAMS, 'exitGlow', { label: 'Brillo de salida', min: 0, max: 2 })
+        .on('change', (ev) => pushContinuous(bgObj, 'exitGlow', ev.value, ev.last))
+      bgFolder.addBinding(PARAMS, 'bloomStrength', { label: 'Bloom', min: 0, max: 3 })
+        .on('change', (ev) => pushContinuous(bgObj, 'bloomStrength', ev.value, ev.last))
+      bgFolder.addBinding(PARAMS, 'trail', { label: 'Estela', min: 0, max: 0.95 })
+        .on('change', (ev) => pushContinuous(bgObj, 'trail', ev.value, ev.last))
+
+      function applyPresetByName(name) {
+        const p = presets[name]
+        if (!p) return
+        studio.transaction(({ set }) => {
+          set(lookObj.props.colorCore, { ...p.colorCore, a: 1 })
+          set(lookObj.props.colorMid, { ...p.colorMid, a: 1 })
+          set(lookObj.props.colorEdge, { ...p.colorEdge, a: 1 })
+          set(lookObj.props.speed, p.speed)
+          set(lookObj.props.swirl, p.swirl)
+          set(lookObj.props.noiseScale, p.noiseScale)
+          set(lookObj.props.turbulence, p.turbulence)
+          set(lookObj.props.glow, p.glow)
+          set(lookObj.props.detail, p.detail)
+          set(camObj.props.fov, p.fov)
+          set(camObj.props.shake, p.shake)
+          set(bgObj.props.starBrightness, p.starBrightness)
+          set(bgObj.props.starCount, p.starCount)
+          set(bgObj.props.exitGlow, p.exitGlow)
+          set(bgObj.props.bloomStrength, p.bloomStrength)
+          set(bgObj.props.trail, p.trail)
+        })
+      }
+
+      // ------------------------------------------------------------------
+      // Theatre -> escena: cada objeto tiene un handler que aplica sus
+      // valores a Three.js/Tweakpane. Esta es la UNICA via que toca la
+      // escena; el panel solo empuja valores hacia Theatre (arriba).
+      // ------------------------------------------------------------------
+      camObj.onValuesChange((values) => {
+        PARAMS.fov = values.fov
+        PARAMS.shake = values.shake
+        PARAMS.camPos = { x: values.posX, y: values.posY, z: values.posZ }
+        PARAMS.pathEnabled = values.pathEnabled
+        PARAMS.pathProgress = values.pathProgress
+        PARAMS.pathLookAhead = values.pathLookAhead
+        PARAMS.cp0 = { ...values.cp0 }
+        PARAMS.cp1 = { ...values.cp1 }
+        PARAMS.cp2 = { ...values.cp2 }
+        PARAMS.cp3 = { ...values.cp3 }
+
+        camera.fov = values.fov
+        camera.updateProjectionMatrix()
+        camShake = values.shake
+        camPathEnabled = values.pathEnabled
+        camPathProgress = values.pathProgress
+        camPathLookAhead = values.pathLookAhead
+
+        camCurve = buildCameraCurve(PARAMS)
+        updateCamPathLine()
+        updateCameraIcon()
+        ;['cp0', 'cp1', 'cp2', 'cp3'].forEach((key) => {
+          markers[key].position.set(PARAMS[key].x, PARAMS[key].y, PARAMS[key].z)
+        })
+        camPathVisuals.visible = !camPathEnabled
+        transformControls.visible = !camPathEnabled
+        transformControls.enabled = !camPathEnabled
+
+        if (!isOrbiting && introDone && !camPathEnabled) {
+          camera.position.set(values.posX, values.posY, values.posZ)
+        }
+
+        pane.refresh()
+      })
+
+      pathObj.onValuesChange((values) => {
+        PARAMS.growth = values.growth
+        PARAMS.p0 = { ...values.p0 }
+        PARAMS.p1 = { ...values.p1 }
+        PARAMS.p2 = { ...values.p2 }
+        PARAMS.p3 = { ...values.p3 }
+
+        uniforms.uGrowth.value = values.growth
+        rebuildTunnel(PARAMS)
+
+        pane.refresh()
+      })
+
+      lookObj.onValuesChange((values) => {
+        PARAMS.preset = values.preset
+        PARAMS.colorCore = { r: values.colorCore.r, g: values.colorCore.g, b: values.colorCore.b }
+        PARAMS.colorMid = { r: values.colorMid.r, g: values.colorMid.g, b: values.colorMid.b }
+        PARAMS.colorEdge = { r: values.colorEdge.r, g: values.colorEdge.g, b: values.colorEdge.b }
+        PARAMS.speed = values.speed
+        PARAMS.swirl = values.swirl
+        PARAMS.noiseScale = values.noiseScale
+        PARAMS.turbulence = values.turbulence
+        PARAMS.glow = values.glow
+        PARAMS.detail = values.detail
+        PARAMS.visible = values.visible
+
+        uniforms.uColorCore.value.setRGB(values.colorCore.r, values.colorCore.g, values.colorCore.b)
+        uniforms.uColorMid.value.setRGB(values.colorMid.r, values.colorMid.g, values.colorMid.b)
+        uniforms.uColorEdge.value.setRGB(values.colorEdge.r, values.colorEdge.g, values.colorEdge.b)
+        uniforms.uSpeed.value = values.speed
+        uniforms.uNoiseScale.value = values.noiseScale
+        uniforms.uTurbulence.value = values.turbulence
+        uniforms.uGlow.value = values.glow
+        uniforms.uDetail.value = values.detail
+        spinSpeed = values.swirl
+        tunnelMesh.visible = values.visible
+        glowMaterial.color.setRGB(values.colorMid.r, values.colorMid.g, values.colorMid.b)
+
+        pane.refresh()
+      })
+
+      bgObj.onValuesChange((values) => {
+        PARAMS.starBrightness = values.starBrightness
+        PARAMS.starCount = values.starCount
+        PARAMS.exitGlow = values.exitGlow
+        PARAMS.bloomStrength = values.bloomStrength
+        PARAMS.trail = values.trail
+        PARAMS.starsVisible = values.starsVisible
+        PARAMS.cometVisible = values.cometVisible
+        PARAMS.glowVisible = values.glowVisible
+
+        stars.material.opacity = 0.35 + 0.35 * values.starBrightness
+        stars.geometry.setDrawRange(0, Math.floor(MAX_STARS * values.starCount))
+        stars.visible = values.starsVisible
+        glowMaterial.opacity = 0.6 * values.exitGlow
+        glowSprite.visible = values.glowVisible
+        bloomPass.strength = values.bloomStrength
+        afterimagePass.uniforms['damp'].value = values.trail
+        cometEnabled = values.cometVisible
+
+        pane.refresh()
+      })
+
+      // ------------------------------------------------------------------
+      // Camara <-> mouse: mientras se orbita con el mouse, la posicion real
+      // de la camara se escribe en Theatre (asi tambien queda keyframeable
+      // desde donde la dejaste con el mouse). Cuando no se esta orbitando,
+      // Theatre manda sobre la camara.
+      // ------------------------------------------------------------------
+      controls.addEventListener('start', () => {
+        isOrbiting = true
+      })
+      controls.addEventListener('end', () => {
+        isOrbiting = false
+        commitLiveScrub()
+      })
+      controls.addEventListener('change', () => {
+        if (!isOrbiting) return
+        pushContinuous(camObj, 'posX', camera.position.x, false)
+        pushContinuous(camObj, 'posY', camera.position.y, false)
+        pushContinuous(camObj, 'posZ', camera.position.z, false)
+      })
+
+      // ------------------------------------------------------------------
+      // Animacion de entrada (una sola vez, al cargar):
+      // - La camara desciende, siempre mirando al frente (nunca rota).
+      // - El tunel aparece desde la derecha de cuadro, chico/lejano, y se
+      //   agranda hasta acomodarse centrado, justo frente a la camara.
+      // ------------------------------------------------------------------
+      const INTRO_DURATION = 4.5
+      const INTRO_CAMERA_START_Y = 15
+      const INTRO_TUNNEL_START_X = 26
+      const INTRO_TUNNEL_START_SCALE = 0.12
+
+      function easeOutCubic(x) {
+        return 1 - Math.pow(1 - x, 3)
+      }
+      function easeOutBack(x) {
+        const c1 = 1.70158
+        const c3 = c1 + 1
+        return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2)
+      }
+
+      // ------------------------------------------------------------------
+      // Loop de render
+      // ------------------------------------------------------------------
+      const clock = new THREE.Clock()
+
+      function animate() {
+        requestAnimationFrame(animate)
+        const t = clock.getElapsedTime()
+        uniforms.uTime.value = t
+
+        const introT = Math.min(t / INTRO_DURATION, 1)
+        const introCam = easeOutCubic(introT)
+        const introTunnel = easeOutBack(introT)
+        const introPlaying = t < INTRO_DURATION
+        if (!introPlaying) introDone = true
+
+        if (camPathEnabled) {
+          controls.enabled = false
+          const p = Math.min(Math.max(camPathProgress, 0), 1)
+          const ahead = Math.min(p + camPathLookAhead, 1)
+          camera.position.copy(camCurve.getPointAt(p))
+          camera.lookAt(camCurve.getPointAt(ahead))
+        } else if (introPlaying) {
+          const baseCamY = THREE.MathUtils.lerp(INTRO_CAMERA_START_Y, 0, introCam)
+          camera.position.x = Math.sin(t * 0.6) * 0.2 * camShake
+          camera.position.y = baseCamY + Math.cos(t * 0.5) * 0.15 * camShake
+          camera.position.z = -2 + Math.sin(t * 0.3) * 0.4 * camShake
+        } else {
+          if (!controls.enabled) {
+            controls.enabled = true
+            pushDiscrete(camObj, 'posX', camera.position.x)
+            pushDiscrete(camObj, 'posY', camera.position.y)
+            pushDiscrete(camObj, 'posZ', camera.position.z)
+          }
+          controls.update()
+        }
+
+        const tunnelScale = THREE.MathUtils.lerp(INTRO_TUNNEL_START_SCALE, 1, introTunnel)
+        tunnelMesh.scale.setScalar(tunnelScale)
+        tunnelMesh.position.set(THREE.MathUtils.lerp(INTRO_TUNNEL_START_X, 0, introTunnel), 0, 0)
+
+        spinQuat.setFromAxisAngle(spinAxis, t * spinSpeed * 0.15)
+        tunnelMesh.quaternion.copy(spinQuat)
+
+        stars.rotation.y = t * 0.01
+        stars.rotation.x = t * 0.005
+
+        if (cometEnabled && t > INTRO_DURATION) {
+          const ct = ((t - INTRO_DURATION) % COMET_PERIOD) / COMET_PERIOD
+          comet.position.lerpVectors(COMET_START, COMET_END, ct)
+          const envelope = Math.sin(Math.PI * Math.min(Math.max(ct, 0), 1))
+          cometMaterial.opacity = envelope
+          const scale = 9 * (0.5 + 0.5 * (1.0 - ct))
+          comet.scale.set(scale, scale * 0.28, 1)
+        } else {
+          cometMaterial.opacity = 0
+        }
+
+        composer.render()
+      }
+      animate()
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight
+        camera.updateProjectionMatrix()
+        renderer.setSize(window.innerWidth, window.innerHeight)
+        composer.setSize(window.innerWidth, window.innerHeight)
+        bloomPass.setSize(window.innerWidth, window.innerHeight)
+      })
+
+      // ------------------------------------------------------------------
+      // Grabar video (.webm): reproduce la secuencia armada en la linea de
+      // tiempo de Theatre.js (desde 0 hasta su longitud) mientras graba el
+      // canvas con MediaRecorder.
+      // ------------------------------------------------------------------
+      const recordBtn = document.getElementById('recordBtn')
+      recordBtn.addEventListener('click', async () => {
+        if (typeof MediaRecorder === 'undefined' || !canvas.captureStream) {
+          alert('Este navegador no soporta grabar el canvas. Proba con Chrome o Edge, o graba la pantalla con otra herramienta.')
+          return
+        }
+        const length = core.val(sheet.sequence.pointer.length) || 8
+        recordBtn.disabled = true
+        recordBtn.textContent = 'Grabando...'
+
+        const stream = canvas.captureStream(60)
+        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? 'video/webm;codecs=vp9'
+          : 'video/webm'
+        const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 12000000 })
+        const chunks = []
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size) chunks.push(e.data)
+        }
+        const stopped = new Promise((resolve) => {
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(chunks, { type: mimeType })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = 'vortex-espacial.webm'
+            document.body.appendChild(a)
+            a.click()
+            a.remove()
+            setTimeout(() => URL.revokeObjectURL(url), 2000)
+            resolve()
+          }
+        })
+
+        mediaRecorder.start()
+        sheet.sequence.position = 0
+        await sheet.sequence.play({ range: [0, length] })
+        mediaRecorder.stop()
+        await stopped
+
+        recordBtn.disabled = false
+        recordBtn.textContent = 'Grabar secuencia (.webm)'
+      })
+    </script>
+  </body>
+</html>
