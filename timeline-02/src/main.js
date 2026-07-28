@@ -86,14 +86,27 @@ const CONFIG = {
   gridCols: 17,
   gridRows: 11,
   gridLineThickness: 0.01,
-  gridGlowRadius: 2.4,
-  gridGlowColor: '#00fff0', // neon cyan hotspot under the cursor
-  gridIntensity: 2,
-  gridBaseColor: '#2f3551', // muted slate lattice, only lit up by the cursor glow
+  gridGlowRadius: 3,
+  gridGlowColor: '#00fff0', // neon cyan hotspot
+  gridIntensity: 2.5,
+  gridBaseColor: '#2f3551', // muted slate lattice, only lit up by the glow centers
   gridNodeColor: '#2f3551', // reticles match the lines so the lattice reads as one piece
   // the mockup's nodes are a single ring, and a larger one relative to the cell
   gridNodeSize: 0.6,
   gridRingCount: 2,
+
+  // -- wall grid glow motion -- either 1-4 hotspots drifting on independent
+  // Lissajous orbits, or (glowFollowMouse) a single hotspot raycast onto the
+  // wall plane from the cursor
+  glowFollowMouse: false,
+  glowCenterCount: 2,
+  glowSpeed: 0.4,
+  glowOrbitRadiusX: 6,
+  glowOrbitRadiusY: 4,
+  // how much the plain wall (not just the grid lines/nodes) picks up the
+  // glow color near a hotspot -- 0 keeps the wall untouched, 1 matches the
+  // grid's own glow strength
+  wallGlowIntensity: 0.01,
 
   // -- glass material -- transmission (not opacity) is what makes this read
   // as glass: a slight roughness keeps refraction soft instead of mirror-flat,
@@ -265,9 +278,50 @@ function getWindowInstances() {
 }
 
 // ---------------------------------------------------------------------------
+// Wall grid glow -- 1-4 hotspots that either drift on independent Lissajous
+// orbits, or (glowFollowMouse) track a single raycast hit on the wall plane.
+// Declared up here, ahead of the wall itself, so the wall's own shader below
+// can share these same uniforms and pick up a glow spill near each hotspot.
+// ---------------------------------------------------------------------------
+const MAX_GLOW_CENTERS = 4;
+// per-center Lissajous frequency/phase, distinct enough that centers never
+// stay in lockstep with each other regardless of glowSpeed
+const GLOW_FREQ_X = [1.0, 1.35, 0.8, 1.6];
+const GLOW_FREQ_Y = [1.6, 0.85, 1.3, 0.55];
+const GLOW_PHASE = [0, 1.9, 3.4, 5.1];
+
+const gridUniforms = {
+  uGlowCenters: { value: Array.from({ length: MAX_GLOW_CENTERS }, () => new THREE.Vector2(1e5, 1e5)) },
+  uNumCenters: { value: CONFIG.glowCenterCount },
+  uRadius: { value: CONFIG.gridGlowRadius },
+  uGlowColor: { value: new THREE.Color(CONFIG.gridGlowColor) },
+  uIntensity: { value: CONFIG.gridIntensity },
+};
+
+// drives uGlowCenters every frame in autonomous mode -- called from the
+// animation loop with the clock's elapsed time. In glowFollowMouse mode the
+// animation loop sets uGlowCenters[0] from a raycast instead (see animate()).
+function updateGlowCenters(time) {
+  const centers = gridUniforms.uGlowCenters.value;
+  const t = time * CONFIG.glowSpeed;
+  for (let i = 0; i < MAX_GLOW_CENTERS; i++) {
+    if (i < CONFIG.glowCenterCount) {
+      const x = Math.sin(t * GLOW_FREQ_X[i] + GLOW_PHASE[i]) * CONFIG.glowOrbitRadiusX;
+      const y = Math.sin(t * GLOW_FREQ_Y[i] + GLOW_PHASE[i] * 1.7) * CONFIG.glowOrbitRadiusY;
+      centers[i].set(x, y);
+    } else {
+      centers[i].set(1e5, 1e5);
+    }
+  }
+  gridUniforms.uNumCenters.value = CONFIG.glowCenterCount;
+}
+
+// ---------------------------------------------------------------------------
 // Wall -- opaque plane, alpha punched to 0 inside any of the 3 star windows.
 // A ShaderMaterial (not discard) so the mask's texture-filtered edges stay
-// antialiased instead of hard-edged.
+// antialiased instead of hard-edged. Also picks up a glow spill from the grid's
+// hotspots (uGlowCenters etc., shared by reference with gridUniforms) so the
+// plain wall around a glowing line/node reads as lit too, not just the lattice.
 // ---------------------------------------------------------------------------
 const wallUniforms = {
   uMaskTex: { value: starMaskTexture },
@@ -275,6 +329,12 @@ const wallUniforms = {
   uCenters: { value: [new THREE.Vector2(), new THREE.Vector2(), new THREE.Vector2()] },
   uSizes: { value: [1, 1, 1] },
   uOpacity: { value: 1 },
+  uGlowCenters: gridUniforms.uGlowCenters,
+  uNumCenters: gridUniforms.uNumCenters,
+  uRadius: gridUniforms.uRadius,
+  uGlowColor: gridUniforms.uGlowColor,
+  uIntensity: gridUniforms.uIntensity,
+  uWallGlowIntensity: { value: CONFIG.wallGlowIntensity },
 };
 
 function syncWindowUniforms() {
@@ -317,6 +377,12 @@ const wallMaterial = new THREE.ShaderMaterial({
     uniform vec2 uCenters[3];
     uniform float uSizes[3];
     uniform float uOpacity;
+    uniform vec2 uGlowCenters[4];
+    uniform int uNumCenters;
+    uniform float uRadius;
+    uniform vec3 uGlowColor;
+    uniform float uIntensity;
+    uniform float uWallGlowIntensity;
     varying vec2 vWorldPos;
 
     float windowMask(vec2 center, float size) {
@@ -330,7 +396,16 @@ const wallMaterial = new THREE.ShaderMaterial({
       for (int i = 0; i < 3; i++) {
         hole = max(hole, windowMask(uCenters[i], uSizes[i]));
       }
-      gl_FragColor = vec4(uWallColor, (1.0 - hole) * uOpacity);
+      float g = 0.0;
+      for (int i = 0; i < 4; i++) {
+        if (i < uNumCenters) {
+          float d = distance(vWorldPos, uGlowCenters[i]);
+          g += 1.0 - smoothstep(0.0, uRadius, d);
+        }
+      }
+      g = clamp(g, 0.0, 1.0);
+      vec3 color = mix(uWallColor, uGlowColor, g * uIntensity * uWallGlowIntensity);
+      gl_FragColor = vec4(color, (1.0 - hole) * uOpacity);
     }
   `,
 });
@@ -356,18 +431,10 @@ function setWallFading(fading) {
 }
 
 // ---------------------------------------------------------------------------
-// Wall grid -- paths-grid's node/line lattice, etched onto the wall's surface
-// and lit by mouse proximity (raycast onto the wall plane each frame). Shares
-// the wall's star-mask uniforms so the pattern punches the same 3 holes
-// instead of floating over the exposed glass/space.
+// Wall grid -- paths-grid's node/line lattice, etched onto the wall's surface.
+// Shares the wall's star-mask uniforms so the pattern punches the same 3
+// holes instead of floating over the exposed glass/space.
 // ---------------------------------------------------------------------------
-const gridUniforms = {
-  uMouse: { value: new THREE.Vector2(1e5, 1e5) },
-  uRadius: { value: CONFIG.gridGlowRadius },
-  uGlowColor: { value: new THREE.Color(CONFIG.gridGlowColor) },
-  uIntensity: { value: CONFIG.gridIntensity },
-};
-
 const windowMaskChunk = /* glsl */ `
   uniform sampler2D uMaskTex;
   uniform vec2 uCenters[3];
@@ -465,7 +532,8 @@ function buildGridLines() {
     `,
     fragmentShader: /* glsl */ `
       ${windowMaskChunk}
-      uniform vec2 uMouse;
+      uniform vec2 uGlowCenters[4];
+      uniform int uNumCenters;
       uniform float uRadius;
       uniform vec3 uGlowColor;
       uniform float uIntensity;
@@ -473,8 +541,14 @@ function buildGridLines() {
       varying vec2 vWorldPos;
       void main() {
         if (anyWindowMask(vWorldPos) > 0.5) discard;
-        float d = distance(vWorldPos, uMouse);
-        float g = 1.0 - smoothstep(0.0, uRadius, d);
+        float g = 0.0;
+        for (int i = 0; i < 4; i++) {
+          if (i < uNumCenters) {
+            float d = distance(vWorldPos, uGlowCenters[i]);
+            g += 1.0 - smoothstep(0.0, uRadius, d);
+          }
+        }
+        g = clamp(g, 0.0, 1.0);
         vec3 color = mix(uBaseColor, uGlowColor, g * uIntensity);
         gl_FragColor = vec4(color, 1.0);
       }
@@ -554,7 +628,8 @@ function buildGridNodes() {
     `,
     fragmentShader: /* glsl */ `
       ${windowMaskChunk}
-      uniform vec2 uMouse;
+      uniform vec2 uGlowCenters[4];
+      uniform int uNumCenters;
       uniform float uRadius;
       uniform vec3 uGlowColor;
       uniform float uIntensity;
@@ -562,8 +637,14 @@ function buildGridNodes() {
       varying vec2 vWorldPos;
       void main() {
         if (anyWindowMask(vWorldPos) > 0.5) discard;
-        float d = distance(vWorldPos, uMouse);
-        float g = 1.0 - smoothstep(0.0, uRadius, d);
+        float g = 0.0;
+        for (int i = 0; i < 4; i++) {
+          if (i < uNumCenters) {
+            float d = distance(vWorldPos, uGlowCenters[i]);
+            g += 1.0 - smoothstep(0.0, uRadius, d);
+          }
+        }
+        g = clamp(g, 0.0, 1.0);
         vec3 color = mix(uBaseColor, uGlowColor, g * uIntensity);
         gl_FragColor = vec4(color, 1.0);
       }
@@ -1119,8 +1200,8 @@ camera.userData.targetZ = CONFIG.cameraStartZ;
 
 // ---------------------------------------------------------------------------
 // Mouse parallax -- camera dolly (not rotation), reused from star-shatter --
-// plus a raycast onto the wall plane so the grid's glow shader knows where
-// the cursor lands in the wall's own world space.
+// plus (when glowFollowMouse is on) a raycast onto the wall plane so the
+// grid's glow hotspot tracks the cursor instead of drifting on its own.
 // ---------------------------------------------------------------------------
 let targetMouseX = 0;
 let targetMouseY = 0;
@@ -1180,6 +1261,19 @@ gridFolder.add(CONFIG, 'gridLineThickness', 0.005, 0.15, 0.005).name('Line Thick
 gridFolder.add(CONFIG, 'gridCellSize', 0.8, 6, 0.1).name('Cell Size').onFinishChange(regenerateGrid);
 gridFolder.add(CONFIG, 'gridCols', 4, 40, 1).name('Columns').onFinishChange(regenerateGrid);
 gridFolder.add(CONFIG, 'gridRows', 4, 30, 1).name('Rows').onFinishChange(regenerateGrid);
+
+gridFolder.add(CONFIG, 'glowFollowMouse').name('Mouse Hover Glow');
+gridFolder
+  .add(CONFIG, 'glowCenterCount', 1, MAX_GLOW_CENTERS, 1)
+  .name('Glow Centers')
+  .onChange((v) => (gridUniforms.uNumCenters.value = v));
+gridFolder.add(CONFIG, 'glowSpeed', 0, 2, 0.01).name('Glow Speed');
+gridFolder.add(CONFIG, 'glowOrbitRadiusX', 0, 12, 0.1).name('Orbit Radius X');
+gridFolder.add(CONFIG, 'glowOrbitRadiusY', 0, 12, 0.1).name('Orbit Radius Y');
+gridFolder
+  .add(CONFIG, 'wallGlowIntensity', 0, 1, 0.01)
+  .name('Wall Spill')
+  .onChange((v) => (wallUniforms.uWallGlowIntensity.value = v));
 
 const glassFolder = gui.addFolder('Glass Material');
 glassFolder
@@ -1287,13 +1381,20 @@ function animate() {
   // around to face back the way it came
   camera.lookAt(camera.position.x, camera.position.y, camera.position.z - 10);
 
-  // re-raycast after the camera moves, so the grid's mouse-glow spot tracks
-  // where the cursor actually lands on the wall plane from the current view
-  raycaster.setFromCamera(pointerNDC, camera);
-  if (pointerActive && raycaster.ray.intersectPlane(wallPlane, wallHitPoint)) {
-    gridUniforms.uMouse.value.set(wallHitPoint.x, wallHitPoint.y);
+  if (CONFIG.glowFollowMouse) {
+    // re-raycast after the camera moves, so the hotspot tracks where the
+    // cursor actually lands on the wall plane from the current view
+    raycaster.setFromCamera(pointerNDC, camera);
+    const centers = gridUniforms.uGlowCenters.value;
+    if (pointerActive && raycaster.ray.intersectPlane(wallPlane, wallHitPoint)) {
+      centers[0].set(wallHitPoint.x, wallHitPoint.y);
+    } else {
+      centers[0].set(1e5, 1e5);
+    }
+    for (let i = 1; i < MAX_GLOW_CENTERS; i++) centers[i].set(1e5, 1e5);
+    gridUniforms.uNumCenters.value = 1;
   } else {
-    gridUniforms.uMouse.value.set(1e5, 1e5);
+    updateGlowCenters(time);
   }
 
   // refresh the glass's reflection before the visible render, so it shows the
