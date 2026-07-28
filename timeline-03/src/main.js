@@ -1229,6 +1229,18 @@ let currentGlobalT = 0;
 // ---------------------------------------------------------------------------
 const SCROLL_SOURCES = ['page', 'sections', 'external'];
 
+// A Webflow <script type="module"> that just `import`s the built bundle (as
+// opposed to this repo's own index.html/GUI) has no other hook into the
+// module to flip this before the scene starts driving itself off page scroll
+// -- hence the query-param fallback below, checked once at load.
+if (SCROLL_SOURCES.includes(new URLSearchParams(window.location.search).get('scrollSource'))) {
+  CONFIG.scrollSource = new URLSearchParams(window.location.search).get('scrollSource');
+}
+
+// set once the GUI folder below is built, so setScrollSource can keep its
+// dropdown in sync with a source switched programmatically
+let scrollSourceController = null;
+
 // The public API. T is a 0..1 fraction of the whole timeline. Kept on `window`
 // (not just exported) precisely so a plain <script> in Webflow -- which cannot
 // import from this module -- can still drive it.
@@ -1243,6 +1255,20 @@ window.seekTimelineTo = function seekTimelineTo(t) {
 window.setTimelineTo = function setTimelineTo(t) {
   window.seekTimelineTo(t);
   currentGlobalT = targetGlobalT;
+};
+
+// Lets a plain `import 'https://.../index-*.js'` embed (no access to this
+// module's internals, and loaded before the GUI/gui folder even exist) switch
+// off page-scroll driving and hand T entirely to its own Lenis bridge. Safe to
+// call before or after the GUI is built.
+window.setScrollSource = function setScrollSource(source) {
+  if (!SCROLL_SOURCES.includes(source)) {
+    console.warn(`setScrollSource: "${source}" must be one of ${SCROLL_SOURCES.join(', ')}`);
+    return;
+  }
+  CONFIG.scrollSource = source;
+  syncScrollListener();
+  scrollSourceController?.updateDisplay();
 };
 
 // -- 'page' source ----------------------------------------------------------
@@ -1484,7 +1510,7 @@ const tips = { theatreTip: '⌥/Alt + \\ toggles Theatre UI (?minify omits it)' 
 gui.add(tips, 'theatreTip').name('Tip').disable();
 
 const timelineFolder = gui.addFolder('Timeline');
-timelineFolder
+scrollSourceController = timelineFolder
   .add(CONFIG, 'scrollSource', SCROLL_SOURCES)
   .name('Scroll Source')
   .onChange(syncScrollListener);
