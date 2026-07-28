@@ -1,0 +1,77 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: #050608;
+  height: 100%;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+.vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(2, 3, 6, 0) 55%,
+    rgba(2, 3, 6, 0.35) 88%,
+    rgba(2, 3, 6, 0.7) 100%
+  );
+  z-index: 2;
+}
+
+.hint {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  color: rgba(215, 220, 230, 0.55);
+  font: 11px/1 "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* Three sections replace timeline-02's single .scroll-spacer. Together they add
+   up to the same ~700vh of runway the timeline fractions in main.js assume, and
+   they carry the [data-fs-section] hooks the Webflow embed measures against. */
+section[data-fs-section] {
+  height: 233vh;
+  width: 1px;
+}
+
+.dev-readout {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 4;
+  color: rgba(215, 220, 230, 0.6);
+  font: 11px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  pointer-events: none;
+}
+
+.dev-readout span {
+  color: #00fff0;
+}

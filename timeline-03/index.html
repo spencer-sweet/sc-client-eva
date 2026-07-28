@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Timeline 03</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+    <div class="vignette"></div>
+    <div class="hint">scroll</div>
+
+    <!-- Dev readouts, mirroring the Webflow embed's [data-fs-dev-*] hooks so the
+         same selectors work in both places. -->
+    <div class="dev-readout">
+      <div>sections: <span data-fs-dev-scrolls>--</span></div>
+      <div>timeline T: <span data-fs-dev-timeline>--</span></div>
+    </div>
+
+    <!-- Three sections matching the Webflow markup's [data-fs-section] contract.
+         In 'sections' scroll-source mode these are what drive the timeline (via
+         the same measure() math as the Spline embed); in 'page' mode they are
+         just scroll runway. -->
+    <section data-fs-section="one"></section>
+    <section data-fs-section="two"></section>
+    <section data-fs-section="three"></section>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

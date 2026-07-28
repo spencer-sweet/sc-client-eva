@@ -23,18 +23,68 @@ if [ ${#sites[@]} -eq 0 ]; then
   exit 1
 fi
 
-for name in "${sites[@]}"; do
-  echo "==> Building $name"
-  (
-    cd "$ROOT/$name"
-    if [ -f pnpm-lock.yaml ]; then
-      pnpm install --frozen-lockfile
+# Sites build concurrently -- they're fully independent (separate node_modules,
+# separate output dirs), so the only shared resource is the machine.
+#
+# Concurrency is batched rather than a sliding window on purpose: `wait -n`
+# needs bash 4.3+, and macOS still ships bash 3.2, so a portable script can't
+# rely on it. These builds are short and evenly sized, so batching costs little.
+JOBS="${BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
+
+# Each build's output is buffered to its own log and replayed after the batch,
+# so concurrent builds don't interleave into unreadable mush.
+LOGDIR="$(mktemp -d)"
+trap 'rm -rf "$LOGDIR"' EXIT
+
+build_site() {
+  local name="$1"
+  cd "$ROOT/$name"
+  if [ -f pnpm-lock.yaml ]; then
+    pnpm install --frozen-lockfile
+  else
+    pnpm install
+  fi
+  pnpm exec vite build --base="/$name/" --outDir "$DIST/$name" --emptyOutDir
+}
+
+echo "==> Building ${#sites[@]} sites, up to $JOBS at a time"
+
+failed=()
+i=0
+while [ "$i" -lt "${#sites[@]}" ]; do
+  batch=()
+  for ((j = 0; j < JOBS && i < ${#sites[@]}; j++, i++)); do
+    batch+=("${sites[$i]}")
+  done
+
+  pids=()
+  for name in "${batch[@]}"; do
+    build_site "$name" >"$LOGDIR/$name.log" 2>&1 &
+    pids+=("$!")
+  done
+
+  # `if wait ...` rather than a bare `wait` so `set -e` doesn't abort before
+  # every job in the batch has been reaped and attributed to a site name
+  for idx in "${!batch[@]}"; do
+    if wait "${pids[$idx]}"; then
+      echo "==> ok: ${batch[$idx]}"
     else
-      pnpm install
+      failed+=("${batch[$idx]}")
+      echo "==> FAILED: ${batch[$idx]}"
     fi
-    pnpm exec vite build --base="/$name/" --outDir "$DIST/$name" --emptyOutDir
-  )
+  done
+
+  # replay in batch order, so the transcript reads the same way every run
+  for name in "${batch[@]}"; do
+    echo "----- $name -----"
+    cat "$LOGDIR/$name.log"
+  done
 done
+
+if [ ${#failed[@]} -ne 0 ]; then
+  echo "Build failed for: ${failed[*]}" >&2
+  exit 1
+fi
 
 echo "==> Generating root index"
 # Cloudflare Pages injects these during CI builds; empty locally.

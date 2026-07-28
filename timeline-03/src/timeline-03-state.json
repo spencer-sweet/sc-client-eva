@@ -1,0 +1,47 @@
+{
+  "sheetsById": {
+    "Wall Scene": {
+      "staticOverrides": {
+        "byObject": {}
+      },
+      "sequence": {
+        "subUnitsPerUnit": 30,
+        "length": 24,
+        "type": "PositionalSequence",
+        "tracksByObject": {
+          "Scene": {
+            "trackData": {
+              "alarmLevelTrk01": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Scene:[\"alarmLevel\"]",
+                "keyframes": [
+                  {
+                    "id": "alarmKf01",
+                    "position": 0,
+                    "connectedRight": true,
+                    "handles": [0.5, 1, 0.5, 0],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "alarmKf02",
+                    "position": 7.5,
+                    "connectedRight": false,
+                    "handles": [0.5, 1, 0.5, 0],
+                    "type": "bezier",
+                    "value": 0
+                  }
+                ]
+              }
+            },
+            "trackIdByPropPath": {
+              "[\"alarmLevel\"]": "alarmLevelTrk01"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitionVersion": "0.4.0",
+  "revisionHistory": ["tl03initial0001"]
+}
