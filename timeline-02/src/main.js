@@ -149,6 +149,16 @@ const CONFIG = {
   wispColorB: '#e838ff',
   eyeStar: true,
 
+  // -- alarm beacon -- a soft red light behind the wall, visible only through
+  // the star cutouts (same depth-tested reveal that lets the starfield show
+  // through), pulsing on/off like a strobe/alarm rather than a slow breathe
+  alarmEnabled: false,
+  alarmColor: '#c70000',
+  alarmSpeed: 1.05, // blinks per second
+  alarmIntensity: 3.7,
+  alarmSize: 32.5,
+  alarmDepth: -11.4, // world z, behind WALL_Z
+
   // -- post --
   bloomStrength: 0.55,
   bloomRadius: 0.9,
@@ -977,6 +987,44 @@ eyeStar.scale.setScalar(14);
 eyeStar.visible = CONFIG.eyeStar;
 scene.add(eyeStar);
 
+// alarm beacon -- a big soft red sprite parked just behind the wall. It's
+// depth-tested against the wall's opaque surface like everything else back
+// here, so it only actually shows through the star cutouts, reading as a
+// light flashing behind the wall rather than a flat color wash over it.
+const alarmMaterial = new THREE.SpriteMaterial({
+  map: makeGlowTexture(),
+  color: new THREE.Color(CONFIG.alarmColor),
+  transparent: true,
+  opacity: 0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+const alarmLight = new THREE.Sprite(alarmMaterial);
+alarmLight.position.set(0, -1.2, CONFIG.alarmDepth);
+alarmLight.scale.setScalar(CONFIG.alarmSize);
+alarmLight.visible = CONFIG.alarmEnabled;
+scene.add(alarmLight);
+
+// bakes alarmIntensity into the sprite's base color so the per-frame pulse
+// below only has to drive opacity 0-1, not recompute color from the hex
+// string every frame
+function syncAlarmColor() {
+  alarmMaterial.color.set(CONFIG.alarmColor).multiplyScalar(CONFIG.alarmIntensity);
+}
+syncAlarmColor();
+
+// classic strobe shape -- quick rise, quick fall, long dark gap -- rather
+// than a smooth sine pulse, which reads as "breathing" instead of "alarm"
+function alarmPulse(time) {
+  const period = 1 / Math.max(CONFIG.alarmSpeed, 0.01);
+  const phase = (((time % period) + period) % period) / period;
+  const attack = 0.12;
+  const decay = 0.28;
+  if (phase < attack) return phase / attack;
+  if (phase < attack + decay) return 1 - (phase - attack) / decay;
+  return 0;
+}
+
 // ---------------------------------------------------------------------------
 // Glass -- the star-shatter glb, fit to the center window and parked at
 // GLASS_Z, just in front of the wall's center hole, so it reads as the pane
@@ -1335,6 +1383,14 @@ spaceFolder.addColor(CONFIG, 'wispColorA').name('Aura Color A').onChange((v) => 
 spaceFolder.addColor(CONFIG, 'wispColorB').name('Aura Color B').onChange((v) => wispUniforms.uColorB.value.set(v));
 spaceFolder.add(CONFIG, 'eyeStar').name('Eye Star').onChange((v) => (eyeStar.visible = v));
 
+const alarmFolder = gui.addFolder('Alarm Light');
+alarmFolder.add(CONFIG, 'alarmEnabled').name('Enabled').onChange((v) => (alarmLight.visible = v));
+alarmFolder.addColor(CONFIG, 'alarmColor').name('Color').onChange(syncAlarmColor);
+alarmFolder.add(CONFIG, 'alarmSpeed', 0.1, 4, 0.05).name('Blink Speed');
+alarmFolder.add(CONFIG, 'alarmIntensity', 0.2, 5, 0.1).name('Intensity').onChange(syncAlarmColor);
+alarmFolder.add(CONFIG, 'alarmSize', 4, 40, 0.5).name('Size').onChange((v) => alarmLight.scale.setScalar(v));
+alarmFolder.add(CONFIG, 'alarmDepth', SPACE_NEAR_Z, WALL_Z, 0.5).name('Depth').onChange((v) => (alarmLight.position.z = v));
+
 const postFolder = gui.addFolder('Post');
 postFolder.add(CONFIG, 'bloomStrength', 0, 3, 0.01).name('Bloom Strength').onChange((v) => (bloomPass.strength = v));
 postFolder.add(CONFIG, 'bloomRadius', 0, 1.5, 0.01).name('Bloom Blur').onChange((v) => (bloomPass.radius = v));
@@ -1396,6 +1452,8 @@ function animate() {
   } else {
     updateGlowCenters(time);
   }
+
+  alarmMaterial.opacity = CONFIG.alarmEnabled ? alarmPulse(time) : 0;
 
   // refresh the glass's reflection before the visible render, so it shows the
   // wall grid/other shards/space scene as they are this frame, not last frame
