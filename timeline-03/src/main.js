@@ -188,7 +188,7 @@ const CONFIG = {
 // hardcoded URL if the Cloudflare Pages deployment it points to changes.
 const MODEL_URL = import.meta.env.DEV
   ? `${import.meta.env.BASE_URL}star-shatter-glass-animated.glb`
-  : 'https://6b0cc8b9.sc-client-eva.pages.dev/timeline-03/star-shatter-glass-animated.glb';
+  : 'https://6b0cc8b9.sc-client-eva.pages.dev/timeline-03/star-shatter-glass-animated.glb'; // TODO fix this later on...
 
 const WALL_Z = 0;
 const GLASS_Z = 0.6;
@@ -1627,7 +1627,20 @@ function animate() {
   const dt = clock.getDelta();
   const time = clock.elapsedTime;
 
-  currentGlobalT += (targetGlobalT - currentGlobalT) * Math.min(1, dt * CONFIG.scrollDamping);
+  // 'external' (the Webflow/Lenis embed) skips this lerp entirely and tracks
+  // seekTimelineTo's target 1:1. Lenis already smooths its own scroll value
+  // (its `lerp` option) before ever calling seekTimelineTo, so lerping again
+  // here was smoothing already-smoothed input -- a second EMA stacked on top
+  // of Lenis' own inertia, which reads as the timeline laggily chasing the
+  // page instead of tracking it, particularly once Lenis overshoots on
+  // flicks/snaps and this lerp then has to visibly catch back up. 'page' and
+  // 'sections' still lerp: they read window.scrollY directly, which jumps in
+  // native per-tick increments with no smoothing of its own.
+  if (CONFIG.scrollSource === 'external') {
+    currentGlobalT = targetGlobalT;
+  } else {
+    currentGlobalT += (targetGlobalT - currentGlobalT) * Math.min(1, dt * CONFIG.scrollDamping);
+  }
   applyTimeline(currentGlobalT);
 
   wispUniforms.uTime.value = time;
