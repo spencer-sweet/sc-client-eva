@@ -2,7 +2,12 @@
   "sheetsById": {
     "Wall Scene": {
       "staticOverrides": {
-        "byObject": {}
+        "byObject": {
+          "Scene": {
+            "cameraOffsetZ": 1.1,
+            "bloomStrength": 0.2199999999999998
+          }
+        }
       },
       "sequence": {
         "subUnitsPerUnit": 30,
@@ -32,10 +37,41 @@
                     "value": 0
                   }
                 ]
+              },
+              "Wh_y7-oFji": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Scene:[\"cameraOffsetZ\"]",
+                "keyframes": [
+                  {
+                    "id": "jDyZOlgocQ",
+                    "position": 0,
+                    "connectedRight": true,
+                    "handles": [0.5, 1, 0.5, 0],
+                    "type": "bezier",
+                    "value": 1.1
+                  },
+                  {
+                    "id": "7oT2zVBMEX",
+                    "position": 8.333,
+                    "connectedRight": true,
+                    "handles": [0.5, 1, 0.5, 0],
+                    "type": "bezier",
+                    "value": -6.400000000000005
+                  },
+                  {
+                    "id": "X6J059f0RP",
+                    "position": 11.367,
+                    "connectedRight": true,
+                    "handles": [0.5, 1, 0.5, 0],
+                    "type": "bezier",
+                    "value": -11.300000000000045
+                  }
+                ]
               }
             },
             "trackIdByPropPath": {
-              "[\"alarmLevel\"]": "alarmLevelTrk01"
+              "[\"alarmLevel\"]": "alarmLevelTrk01",
+              "[\"cameraOffsetZ\"]": "Wh_y7-oFji"
             }
           }
         }
@@ -43,5 +79,5 @@
     }
   },
   "definitionVersion": "0.4.0",
-  "revisionHistory": ["tl03initial0001"]
+  "revisionHistory": ["PsojGmdeW5bAvzRf", "tl03initial0001"]
 }

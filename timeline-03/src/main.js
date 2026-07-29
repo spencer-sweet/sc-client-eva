@@ -4,6 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { KawaseBloomPass } from './kawase-bloom.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import GUI from 'lil-gui';
 import Stats from 'stats.js';
 import { getProject, types } from '@theatre/core';
@@ -37,17 +38,20 @@ const CONFIG = {
   progress: 0,
   scrub: true,
   scrollDamping: 4.5,
-  cameraDamping: 3.5,
   // where T comes from -- see the "Timeline input" block below. 'page' is the
   // standalone/dev default; the Webflow embed uses 'sections' (or 'external'
   // when the host page's Lenis handler calls window.seekTimelineTo itself).
   scrollSource: 'page',
+  // Off this decouples Theatre's OWN sequence playhead from scroll T, so
+  // Studio's keyframe-nav buttons and manual playhead scrubbing actually work
+  // while authoring -- see the guard in applyTimeline. Everything else
+  // (shatter progress, wall fade, etc.) keeps following scroll regardless.
+  syncTheatreToScroll: true,
   // These fractions are measured against the .scroll-spacer in style.css, which
   // was lengthened from 600vh to 700vh to give the closing galaxy fly-through
   // more runway. They were rescaled by the same factor so the zoom and shatter
   // beats still land at the same *absolute* scroll distance as before -- all of
   // the added length goes to the pass phase, not to slowing the earlier beats.
-  zoomPhaseEnd: 0.29, // scroll fraction where the zoom-into-window dolly finishes
   shatterStart: 0.25, // shatter timeline starts scrubbing here (overlaps zoom's tail)
   shatterEnd: 0.58,
   passStart: 0.54, // camera resumes moving (through the wall) here (overlaps shatter's tail)
@@ -55,22 +59,36 @@ const CONFIG = {
   clipEnd: 0.29,
   autoRotateSpeed: 0,
   glbModel: '02_star-shatter-glass-animated.glb',
+  // multiplier on top of the auto-fit scale (see modelAutoFitScale) that lands
+  // the glb's own tip-to-tip span exactly on the center window -- 0.001 steps
+  // since that auto-fit is already a tight fit and even a 0.01 nudge visibly
+  // drifts the shatter off the window's silhouette
+  glbScale: 1.05,
 
   // -- camera path (world z) --
+  // The camera no longer dollies procedurally off scroll T -- that whole move
+  // (zoom into the window, creep through the shatter, fly through the wall)
+  // is now authored entirely as Theatre keyframes on cameraOffsetZ (see
+  // sceneTrack below), the same way glowIntensity/bloomStrength/alarmLevel
+  // already work: open Studio (⌥/Alt+\), select Scene, and keyframe
+  // cameraOffsetZ across the sequence. cameraStartZ is just the static base
+  // position that offset gets added to.
   cameraStartZ: 15,
-  cameraMidZ: 8,
-  // the shatter window used to hold the camera dead still at cameraMidZ --
-  // this is where it creeps to instead, so the dolly keeps a faint forward
-  // crawl through the whole shatter rather than fully stopping. Rate works
-  // out to roughly half the zoom-in phase's, which reads as "slowed down",
-  // not "stopped".
-  cameraShatterEndZ: 5,
-  // deep enough to keep travelling for the whole lengthened pass phase, but
-  // still well short of SPACE_FAR_Z so the camera settles inside the galaxy
-  // rather than flying out the far side of it
-  cameraEndZ: -42,
   parallaxStrength: 0.3,
   parallaxDamping: 4,
+
+  // -- manual camera offset, added on top of the procedural dolly/parallax --
+  // a constant nudge from the GUI, PLUS whatever Theatre has keyframed on the
+  // same three properties (see sceneTrack below) -- the two add together
+  // rather than fighting, so a Studio-authored camera move still lands on top
+  // of any manual composition dialed in here.
+  cameraOffsetX: 0,
+  cameraOffsetY: 0,
+  cameraOffsetZ: 0,
+  // Free-fly preview camera (see debugCamera below) -- lets the scene be
+  // orbited/tumbled while the actual timeline camera keeps animating
+  // untouched, with a picture-in-picture inset showing what it currently sees.
+  freeCamera: false,
 
   // -- wall + star windows (ported from paths-grid's 3-star layout) --
   wallColor: '#0a0f2c',
@@ -88,7 +106,7 @@ const CONFIG = {
   // starts at SPACE_NEAR_Z, so pushing the wall back opens up the gap between
   // wall and starfield, while pulling it forward closes on the glass -- past
   // GLASS_Z the wall crosses in front of the shards.
-  wallZ: 0,
+  wallZ: 0.6,
   starSize: 6,
   starSize2: 5.2,
   starOffsetX: 3.9, // == gridCellSize -> lands on the neighbouring grid node
@@ -111,7 +129,7 @@ const CONFIG = {
   // -- wall grid glow motion -- either 1-4 hotspots drifting on independent
   // Lissajous orbits, or (glowFollowMouse) a single hotspot raycast onto the
   // wall plane from the cursor
-  glowFollowMouse: false,
+  glowFollowMouse: true,
   glowCenterCount: 2,
   glowSpeed: 0.4,
   glowOrbitRadiusX: 6,
@@ -160,7 +178,7 @@ const CONFIG = {
   wispOpacity: 0.25,
   wispColorA: '#54d8ef',
   wispColorB: '#e838ff',
-  eyeStar: true,
+  eyeStar: false,
 
   // -- alarm beacon -- a soft red light behind the wall, visible only through
   // the star cutouts (same depth-tested reveal that lets the starfield show
@@ -348,6 +366,8 @@ function applyRenderResolution() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio));
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+  debugCamera.aspect = camera.aspect;
+  debugCamera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
   // KawaseBloomPass owns its own resolution -- setSize resizes the whole mip
@@ -359,6 +379,99 @@ function applyRenderResolution() {
 }
 
 window.addEventListener('resize', applyRenderResolution);
+
+// ---------------------------------------------------------------------------
+// Free-fly preview camera -- lets the scene be orbited/tumbled by hand while
+// the actual timeline `camera` keeps animating untouched underneath, the way
+// Theatre's own r3f editor camera works (fly free, watch what the real camera
+// sees in a small inset) even though this project is vanilla three.js rather
+// than react-three-fiber and so has no access to that Studio extension.
+//
+// A second, fully independent PerspectiveCamera + OrbitControls rather than
+// re-purposing `camera` itself -- the timeline camera's position/rotation are
+// overwritten every frame by applyTimeline()/parallax, so orbiting it directly
+// would just be fought over and snap back each frame.
+// ---------------------------------------------------------------------------
+const debugCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.05, 200);
+// shards live only on layer 1 (see child.layers.set(1) below) -- without
+// enabling it here the glass would simply be invisible from the free camera
+debugCamera.layers.enable(1);
+
+const debugControls = new OrbitControls(debugCamera, renderer.domElement);
+debugControls.enableDamping = true;
+debugControls.enabled = false; // only listens for drag/wheel input while Free Cam is on
+
+// Traces the real camera's frustum in space when flying free, so it's obvious
+// where the "real" shot is looking from rather than just trusting the PiP
+// inset. Visibility is toggled alongside CONFIG.freeCamera (see applyFreeCameraMode).
+const cameraHelper = new THREE.CameraHelper(camera);
+cameraHelper.visible = false;
+scene.add(cameraHelper);
+
+// picture-in-picture: the real timeline camera's view, rendered small and
+// undecorated (no bloom -- it's a monitoring readout, not the shot) into a
+// corner of the same canvas after the main pass.
+//
+// Bottom-left rather than a true corner margin: top-left already carries the
+// stats.js FPS panel AND Theatre Studio's own outline tree (both load there by
+// default), and top-right/bottom-right sit under the lil-gui panel, which
+// runs the full height of most viewports.
+const PIP_WIDTH = 280;
+const PIP_HEIGHT = 158;
+const PIP_LEFT = 16;
+const PIP_BOTTOM = 16;
+
+function renderFreeCameraPip() {
+  const pixelRatio = renderer.getPixelRatio();
+  const x = PIP_LEFT * pixelRatio;
+  const y = PIP_BOTTOM * pixelRatio;
+  const w = PIP_WIDTH * pixelRatio;
+  const h = PIP_HEIGHT * pixelRatio;
+
+  // `camera`'s aspect is set to the FULL CANVAS's aspect ratio (see
+  // applyRenderResolution), because that's what it needs for the real shot.
+  // Rendering it into a smaller viewport whose aspect ratio differs -- 280x158
+  // (~1.77) versus, say, a 1280x800 window (1.6) -- without also matching the
+  // projection to that viewport stretches the image to fit, which is the
+  // squish reported in the inset. Swapping to the inset's own aspect for just
+  // this draw, then restoring it immediately after, keeps the real camera's
+  // state exactly as the rest of the frame (main pass, reflection cube, T
+  // calculations) expects it.
+  const realAspect = camera.aspect;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+
+  renderer.setViewport(x, y, w, h);
+  renderer.setScissor(x, y, w, h);
+  renderer.setScissorTest(true);
+  renderer.setRenderTarget(null);
+  renderer.clear();
+  renderer.render(scene, camera);
+
+  camera.aspect = realAspect;
+  camera.updateProjectionMatrix();
+  // hand the full canvas back to whatever composer.render() left it as, so the
+  // next frame's main pass isn't accidentally clipped to the inset's corner
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, renderer.domElement.width, renderer.domElement.height);
+}
+
+// swaps which camera the main render pass (and its bloom/composite) draws
+// from, and toggles the frustum helper + PiP inset alongside it
+function applyFreeCameraMode() {
+  const active = CONFIG.freeCamera;
+  composer.passes[0].camera = active ? debugCamera : camera;
+  debugControls.enabled = active;
+  cameraHelper.visible = active;
+  if (active) {
+    // snap the free camera to wherever the timeline camera currently is,
+    // so enabling Free Cam doesn't jump-cut the view -- it just unlocks it
+    debugCamera.position.copy(camera.position);
+    debugCamera.quaternion.copy(camera.quaternion);
+    debugControls.target.copy(camera.position).add(new THREE.Vector3(0, 0, -10).applyQuaternion(camera.quaternion));
+    debugControls.update();
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Star mask texture -- exact path from assets/4-pointed-star/4star_03a.svg,
@@ -423,14 +536,18 @@ const gridUniforms = {
   uIntensity: { value: CONFIG.gridIntensity },
 };
 
-// drives uGlowCenters every frame in autonomous mode -- called from the
-// animation loop with the clock's elapsed time. In glowFollowMouse mode the
-// animation loop sets uGlowCenters[0] from a raycast instead (see animate()).
-function updateGlowCenters(time) {
+// Drives the drifting Lissajous hotspots into slots [0, driftCount) every
+// frame -- called from the animation loop with the clock's elapsed time.
+// `driftCount` (rather than reading CONFIG.glowCenterCount directly) lets the
+// caller reserve a trailing slot for the mouse hotspot when glowFollowMouse is
+// on, so the two sources run at once instead of the mouse replacing the drift.
+// Does not touch uNumCenters -- the caller owns that, since it also accounts
+// for whether the mouse slot is actually active this frame.
+function updateGlowCenters(time, driftCount) {
   const centers = gridUniforms.uGlowCenters.value;
   const t = time * CONFIG.glowSpeed;
   for (let i = 0; i < MAX_GLOW_CENTERS; i++) {
-    if (i < CONFIG.glowCenterCount) {
+    if (i < driftCount) {
       const x = Math.sin(t * GLOW_FREQ_X[i] + GLOW_PHASE[i]) * CONFIG.glowOrbitRadiusX;
       const y = Math.sin(t * GLOW_FREQ_Y[i] + GLOW_PHASE[i] * 1.7) * CONFIG.glowOrbitRadiusY;
       centers[i].set(x, y);
@@ -438,7 +555,6 @@ function updateGlowCenters(time) {
       centers[i].set(1e5, 1e5);
     }
   }
-  gridUniforms.uNumCenters.value = CONFIG.glowCenterCount;
 }
 
 // ---------------------------------------------------------------------------
@@ -479,11 +595,21 @@ const wallMaterial = new THREE.ShaderMaterial({
   // wall opaque puts it (and, via the depth it writes, the space scene showing
   // through its windows) into what the shards actually see.
   //
-  // alphaToCoverage is what lets it stay opaque and still punch holes: the
-  // shader's mask alpha becomes MSAA sample coverage, so the window edges stay
-  // antialiased instead of going stair-stepped the way a hard discard would.
+  // The window cutout itself is a `discard` in the fragment shader below --
+  // matching the grid lines/nodes materials further down, which have always
+  // cut their own copies of these same holes this way. The wall used to punch
+  // its hole via alphaToCoverage instead (mask alpha as MSAA sample coverage,
+  // antialiasing the edge for free), but that only works when the surface
+  // actually lands on a multisampled target -- true for the main render
+  // (the composer's target is explicitly built with samples:4), but NOT for
+  // the free-cam PiP or for the main pass itself once bloom is disabled: both
+  // render straight to the canvas context, which runs `antialias:false` (the
+  // composer target is where MSAA lives; a second multisampled canvas would
+  // just be redundant cost). Off that path, alphaToCoverage silently did
+  // nothing and the "hole" rendered as solid wall. `discard` has no such
+  // dependency -- it drops the fragment (color and depth both) on any target,
+  // multisampled or not, so the cutout now works identically everywhere.
   transparent: false,
-  alphaToCoverage: true,
   // double-sided so the glass's reflection camera (looking back from behind
   // the wall, toward the main camera) still sees it instead of culling it as
   // a backface -- otherwise the glass has nothing colorful to reflect there
@@ -528,9 +654,28 @@ const wallMaterial = new THREE.ShaderMaterial({
           g += 1.0 - smoothstep(0.0, uRadius, d);
         }
       }
+      if (hole > 0.5) discard;
       g = clamp(g, 0.0, 1.0);
       vec3 color = mix(uWallColor, uGlowColor, g * uIntensity * uWallGlowIntensity);
-      gl_FragColor = vec4(color, (1.0 - hole) * uOpacity);
+      // uOpacity is the pass-through dissolve (see setWallFading) -- unrelated
+      // to the window cutout above, which is unconditional regardless of it
+      gl_FragColor = vec4(color, uOpacity);
+      // Every material here is a raw ShaderMaterial, so none of them get the
+      // sRGB output encode three's built-in materials bake into their own
+      // shader templates automatically. That's invisible while bloom is on,
+      // because KawaseBloomPass's composite (which DOES encode) ends up as the
+      // last pass rendering to the canvas -- this material only ever renders
+      // into its linear intermediate target, where encoding would be wrong.
+      // Disable bloom, though, and EffectComposer promotes RenderPass itself
+      // to render straight to the canvas (see EffectComposer.isLastEnabledPass) --
+      // at that point this shader's un-encoded linear output IS the final
+      // pixel, and a colour authored as sRGB #0a0f2c but never re-encoded reads
+      // roughly half as bright as intended. Three recompiles this shader
+      // per render target automatically (WebGLPrograms keys on the target's
+      // expected colour space), so include is a no-op into the linear
+      // composer target and a real encode straight to the canvas -- both
+      // paths handled by the one line, no bloom-state branching needed.
+      #include <colorspace_fragment>
     }
   `,
 });
@@ -543,14 +688,13 @@ wallMesh.position.z = CONFIG.wallZ;
 scene.add(wallMesh);
 
 // The pass-through fade is the one moment the wall needs genuine alpha
-// blending -- alpha-to-coverage would dither a partial fade into a visible
-// screen door at 4 samples. It leaves the opaque queue only for that stretch,
-// by which point the glass has already shattered and no longer needs it in
-// the backdrop.
+// blending, to dissolve the remaining (non-cutout) surface smoothly rather
+// than the hard on/off a discard would give it. It leaves the opaque queue
+// only for that stretch, by which point the glass has already shattered and
+// no longer needs it in the backdrop.
 function setWallFading(fading) {
   if (wallMaterial.transparent === fading) return;
   wallMaterial.transparent = fading;
-  wallMaterial.alphaToCoverage = !fading;
   wallMaterial.depthWrite = !fading;
   wallMaterial.needsUpdate = true;
 }
@@ -679,6 +823,9 @@ function buildGridLines() {
         g = clamp(g, 0.0, 1.0);
         vec3 color = mix(uBaseColor, uGlowColor, g * uIntensity);
         gl_FragColor = vec4(color, 1.0);
+        // see the wall material's identical include, a few hundred lines up --
+        // same raw-ShaderMaterial-missing-its-output-encode fix
+        #include <colorspace_fragment>
       }
     `,
     // fragments are either discarded (window cutouts) or fully opaque -- no
@@ -775,6 +922,9 @@ function buildGridNodes() {
         g = clamp(g, 0.0, 1.0);
         vec3 color = mix(uBaseColor, uGlowColor, g * uIntensity);
         gl_FragColor = vec4(color, 1.0);
+        // see the wall material's identical include, a few hundred lines up --
+        // same raw-ShaderMaterial-missing-its-output-encode fix
+        #include <colorspace_fragment>
       }
     `,
     // opaque for the same reason as the grid lines above -- this also fixes
@@ -836,6 +986,7 @@ function buildGridNodes() {
       void main() {
         if (anyWindowMask(vWorldPos) > 0.5) discard;
         gl_FragColor = vec4(uWallColor, 1.0);
+        #include <colorspace_fragment>
       }
     `,
     side: THREE.DoubleSide,
@@ -1000,6 +1151,7 @@ const wispMaterial = new THREE.ShaderMaterial({
       vec3 color = mix(uColorA, uColorB, smoothstep(0.1, 0.9, r + (flow - 0.5) * 0.3));
       color *= 0.6 + 0.7 * flow;
       gl_FragColor = vec4(color, blob * uOpacity);
+      #include <colorspace_fragment>
     }
   `,
 });
@@ -1022,11 +1174,13 @@ function ensureWispPool(n) {
 }
 
 // Reference depth for the perspective compensation below -- roughly where the
-// camera sits while the wall/windows are actually being looked at (the zoom
-// settles at cameraMidZ for the whole shatter phase). Wisps are seeded once,
-// independent of the live scroll-driven camera, so this has to be a fixed
-// stand-in rather than the camera's current position.
-const WISP_REF_CAM_Z = CONFIG.cameraMidZ + 1;
+// camera sits while the wall/windows are actually being looked at during the
+// shatter (now an authored cameraOffsetZ keyframe rather than a fixed
+// procedural stop, so this can't read the real value off CONFIG anymore --
+// same numeric depth as before, just no longer derived). Wisps are seeded
+// once, independent of the live scroll-driven camera, so this has to be a
+// fixed stand-in rather than the camera's current position.
+const WISP_REF_CAM_Z = 9;
 
 function placeWisp(wisp, rng, x, y, z, sizeMul) {
   wisp.visible = true;
@@ -1517,6 +1671,16 @@ let clipDuration = 1;
 let currentShatterProgress = 0;
 const gltfLoader = new GLTFLoader();
 
+// The scale that lands THIS glb's own tip-to-tip span on the center window
+// (computed fresh per model, since each glb's authored size differs) --
+// CONFIG.glbScale multiplies on top of it. Recorded so the GUI slider can
+// rescale the already-loaded model live without needing a full reload.
+let modelAutoFitScale = 1;
+function applyGlbScale() {
+  const loaded = modelGroup.children[0];
+  if (loaded) loaded.scale.setScalar(modelAutoFitScale * CONFIG.glbScale);
+}
+
 // disposes the previously loaded glb (if any) and loads `filename` from
 // assets/star-shatter/ in its place -- shared by the initial load below and
 // the GUI's model-switching dropdown
@@ -1580,8 +1744,8 @@ function loadModel(filename) {
 
       // scale so the glass's own points land exactly on the center window's
       // silhouette
-      const scale = CONFIG.starSize / tipToTip;
-      gltf.scene.scale.setScalar(scale);
+      modelAutoFitScale = CONFIG.starSize / tipToTip;
+      gltf.scene.scale.setScalar(modelAutoFitScale * CONFIG.glbScale);
 
       modelGroup.add(gltf.scene);
       // the shards arrive wearing the glb's own material, so re-assert whatever
@@ -1798,9 +1962,6 @@ const SEQUENCE_LENGTH = 24; // seconds -- just the T(0..1) -> playhead mapping r
 const sceneSheet = getProject('Timeline 03', { state: timelineState }).sheet('Wall Scene');
 
 const sceneTrack = sceneSheet.object('Scene', {
-  // multiplies the scroll-driven camera travel, so a keyframed dip here reads
-  // as the dolly hesitating without touching the phase fractions
-  dollyCurve: types.number(1, { range: [0, 3], nudgeMultiplier: 0.01 }),
   fov: types.number(50, { range: [25, 100] }),
   // scales the grid's glow hotspots and the wall spill together
   glowIntensity: types.number(CONFIG.gridIntensity, { range: [0, 4], nudgeMultiplier: 0.01 }),
@@ -1809,6 +1970,18 @@ const sceneTrack = sceneSheet.object('Scene', {
   // partway through the scroll rather than having it blink from the start
   alarmLevel: types.number(0, { range: [0, 1], nudgeMultiplier: 0.01 }),
   bloomStrength: types.number(CONFIG.bloomStrength, { range: [0, 3], nudgeMultiplier: 0.01 }),
+  // Keyframable camera position, added on top of the GUI's own
+  // cameraOffsetX/Y/Z (see the animate() loop) rather than replacing it, so a
+  // shot can be composed with a manual GUI offset AND a Theatre-authored move
+  // together. cameraOffsetZ is THE camera's whole scroll-driven journey now --
+  // what used to be a procedural zoom-in/shatter-creep/pass-through-the-wall
+  // formula (t -> z) is authored here instead: open Studio (⌥/Alt+\), select
+  // Scene, and keyframe cameraOffsetZ across the sequence. Range spans roughly
+  // the old dolly's full travel (start 15 down to end -42, relative to
+  // cameraStartZ) with room either side for overshoot.
+  cameraOffsetX: types.number(0, { range: [-10, 10], nudgeMultiplier: 0.01 }),
+  cameraOffsetY: types.number(0, { range: [-10, 10], nudgeMultiplier: 0.01 }),
+  cameraOffsetZ: types.number(0, { range: [-70, 30], nudgeMultiplier: 0.05 }),
 });
 
 const theatreColorScratch = new THREE.Color();
@@ -1828,47 +2001,38 @@ sceneTrack.onValuesChange((v) => {
 
 function applyTimeline(t) {
   // Drive Theatre's playhead from the same T, so the authored sequence and the
-  // procedural phases below always describe the same instant.
-  sceneSheet.sequence.position = t * SEQUENCE_LENGTH;
+  // procedural phases below always describe the same instant -- except while
+  // CONFIG.syncTheatreToScroll is off. With it on (the default, and what a
+  // deployed/scroll-driven page always wants), this runs every single frame,
+  // which fights any manual scrub of Theatre's OWN playhead: Studio's
+  // next/previous-keyframe nav (and dragging the playhead directly) moves
+  // sequence.position for an instant, then the very next animate() frame
+  // snaps it straight back to match scroll T. Turning sync off while
+  // authoring leaves Theatre's playhead alone so those controls -- and
+  // keyframing itself -- actually work; turn it back on to resume scrubbing
+  // the sequence by scrolling the page.
+  if (CONFIG.syncTheatreToScroll) sceneSheet.sequence.position = t * SEQUENCE_LENGTH;
 
-  const zoomT = easeInOutCubic(THREE.MathUtils.clamp(t / CONFIG.zoomPhaseEnd, 0, 1));
   const shatterT = easeInOutCubic(
     THREE.MathUtils.clamp((t - CONFIG.shatterStart) / (CONFIG.shatterEnd - CONFIG.shatterStart), 0, 1)
   );
-  // fills the gap between the zoom and pass phases (previously nothing drove
-  // the camera there, so it sat dead still at cameraMidZ for the whole
-  // shatter window) with a slow continuous creep toward cameraShatterEndZ
-  const driftT = easeInOutCubic(
-    THREE.MathUtils.clamp((t - CONFIG.zoomPhaseEnd) / (CONFIG.passStart - CONFIG.zoomPhaseEnd), 0, 1)
-  );
+  // The camera's own scroll-driven journey (zoom into the window, creep
+  // through the shatter, fly through the wall) no longer lives here as a
+  // procedural formula -- it's authored as Theatre keyframes on
+  // cameraOffsetZ instead (see sceneTrack above and the animate() loop, which
+  // is where cameraOffsetZ actually gets applied to camera.position.z).
+  // `passT` survives purely as the wall's own fade-out timing below, which
+  // needs a phase fraction regardless of what's driving the camera.
   const passT = easeInOutCubic(THREE.MathUtils.clamp((t - CONFIG.passStart) / (1 - CONFIG.passStart), 0, 1));
-
-  // Each term below is gated by its own eased progress (0 until that phase
-  // starts, 1 once it ends), so this is really 3 waypoint-to-waypoint moves
-  // chained additively rather than nested lerps -- nesting was what caused
-  // the freeze: lerp(lerp(start,mid,zoomT), end, passT) collapses to a flat
-  // `mid` for the entire span where zoomT has already saturated to 1 but
-  // passT hasn't yet started rising.
-  const dollyZ =
-    CONFIG.cameraStartZ +
-    (CONFIG.cameraMidZ - CONFIG.cameraStartZ) * zoomT +
-    (CONFIG.cameraShatterEndZ - CONFIG.cameraMidZ) * driftT +
-    (CONFIG.cameraEndZ - CONFIG.cameraShatterEndZ) * passT;
-
-  // Theatre's dollyCurve scales the travel measured from the start point, so a
-  // keyframed dip reads as the dolly hesitating mid-move rather than the whole
-  // path shifting -- at 1 (its default) this is exactly dollyZ.
-  camera.userData.targetZ =
-    CONFIG.cameraStartZ + (dollyZ - CONFIG.cameraStartZ) * theatreValues.dollyCurve;
 
   setShatterProgress(shatterT);
 
   // The glass is fit to starSize in world units, which matches the cutout
   // exactly -- but it's parked GLASS_Z in front of the wall, so perspective
-  // projects it larger than the hole it's meant to fill: 4% at cameraStartZ,
-  // growing to 8.5% by cameraMidZ. Scaling by the ratio of the two depths
-  // cancels that, so the intact star registers with the SVG cutout at every
-  // camera distance instead of drifting bigger as the dolly closes in.
+  // projects it larger than the hole it's meant to fill, growing as the
+  // camera dollies closer. Scaling by the ratio of the two depths cancels
+  // that, so the intact star registers with the SVG cutout at every camera
+  // distance instead of drifting bigger as the dolly closes in.
   //
   // Frozen once the shatter starts: there's nothing left to register against
   // by then, and the factor collapses to zero (then flips negative) as the
@@ -1893,7 +2057,6 @@ function applyTimeline(t) {
   modelGroup.visible = CONFIG.showGlass;
   setWallFading(passT > 0.001);
 }
-camera.userData.targetZ = CONFIG.cameraStartZ;
 
 // ---------------------------------------------------------------------------
 // Mouse parallax -- camera dolly (not rotation), reused from star-shatter --
@@ -1945,13 +2108,16 @@ scrollSourceController = timelineFolder
   .add(CONFIG, 'scrollSource', SCROLL_SOURCES)
   .name('Scroll Source')
   .onChange(syncScrollListener);
+// off while authoring in Studio -- otherwise every animate() frame snaps
+// Theatre's playhead back to scroll T, so keyframe-nav and manual scrubbing
+// in the Sequence panel never actually go anywhere
+timelineFolder.add(CONFIG, 'syncTheatreToScroll').name('Sync Theatre to Scroll');
 // live scrub, so the whole sequence can be inspected without scrolling -- and a
 // direct demo of the same entry point the Webflow/Lenis host page calls
 timelineFolder
   .add(CONFIG, 'progress', 0, 1, 0.001)
   .name('Seek T (manual)')
   .onChange((v) => window.setTimelineTo(v));
-timelineFolder.add(CONFIG, 'zoomPhaseEnd', 0.1, 0.6, 0.01).name('Zoom Ends');
 timelineFolder.add(CONFIG, 'shatterStart', 0.1, 0.8, 0.01).name('Shatter Starts');
 timelineFolder.add(CONFIG, 'shatterEnd', 0.2, 0.9, 0.01).name('Shatter Ends');
 timelineFolder.add(CONFIG, 'passStart', 0.3, 0.95, 0.01).name('Pass Starts');
@@ -1959,6 +2125,19 @@ timelineFolder.add(CONFIG, 'clipStart', 0, 1, 0.01).name('Clip Start %');
 timelineFolder.add(CONFIG, 'clipEnd', 0, 1, 0.01).name('Clip End %');
 timelineFolder.add(CONFIG, 'autoRotateSpeed', 0, 1, 0.01).name('Auto Rotate');
 timelineFolder.add(CONFIG, 'glbModel', GLB_OPTIONS).name('Shatter GLB').onChange(loadModel);
+timelineFolder.add(CONFIG, 'glbScale', 0.5, 2, 0.001).name('GLB Scale').onChange(applyGlbScale);
+
+const cameraFolder = gui.addFolder('Camera');
+// Flies free of the timeline camera to inspect/compose the scene from any
+// angle, with a picture-in-picture inset (top-left of the canvas) showing what
+// the real, animating camera currently sees -- see debugCamera/renderFreeCameraPip.
+cameraFolder.add(CONFIG, 'freeCamera').name('Free Cam (Preview)').onChange(applyFreeCameraMode);
+// Constant nudge added on top of the procedural dolly/parallax -- the
+// matching cameraOffsetX/Y/Z track in Theatre (keyframable in Studio, ⌥/Alt+\)
+// adds on top of these rather than overriding them.
+cameraFolder.add(CONFIG, 'cameraOffsetX', -10, 10, 0.01).name('Offset X');
+cameraFolder.add(CONFIG, 'cameraOffsetY', -10, 10, 0.01).name('Offset Y');
+cameraFolder.add(CONFIG, 'cameraOffsetZ', -20, 20, 0.01).name('Offset Z');
 
 // moves the wall and its etched grid together, and re-seats the raycast plane
 // the Mouse Hover Glow uses
@@ -1997,11 +2176,11 @@ gridFolder.add(CONFIG, 'gridCellSize', 0.8, 6, 0.1).name('Cell Size').onFinishCh
 gridFolder.add(CONFIG, 'gridCols', 4, 40, 1).name('Columns').onFinishChange(regenerateGrid);
 gridFolder.add(CONFIG, 'gridRows', 4, 30, 1).name('Rows').onFinishChange(regenerateGrid);
 
-gridFolder.add(CONFIG, 'glowFollowMouse').name('Mouse Hover Glow');
-gridFolder
-  .add(CONFIG, 'glowCenterCount', 1, MAX_GLOW_CENTERS, 1)
-  .name('Glow Centers')
-  .onChange((v) => (gridUniforms.uNumCenters.value = v));
+gridFolder.add(CONFIG, 'glowFollowMouse').name('Mouse Hover Glow (+1 center)');
+// uNumCenters is now recomputed every frame in animate() -- it depends on
+// glowFollowMouse and whether the cursor is currently over the wall, not just
+// on this count -- so there's no separate onChange to keep in sync here.
+gridFolder.add(CONFIG, 'glowCenterCount', 1, MAX_GLOW_CENTERS, 1).name('Drifting Centers');
 gridFolder.add(CONFIG, 'glowSpeed', 0, 2, 0.01).name('Glow Speed');
 gridFolder.add(CONFIG, 'glowOrbitRadiusX', 0, 12, 0.1).name('Orbit Radius X');
 gridFolder.add(CONFIG, 'glowOrbitRadiusY', 0, 12, 0.1).name('Orbit Radius Y');
@@ -2204,31 +2383,49 @@ function animate() {
   const parallaxY = CONFIG.enableParallax ? targetMouseY : 0;
   mouseX += (parallaxX - mouseX) * Math.min(1, dt * CONFIG.parallaxDamping);
   mouseY += (parallaxY - mouseY) * Math.min(1, dt * CONFIG.parallaxDamping);
-  camera.position.x = mouseX * CONFIG.parallaxStrength;
-  camera.position.y = -mouseY * CONFIG.parallaxStrength;
-  camera.position.z += (camera.userData.targetZ - camera.position.z) * Math.min(1, dt * CONFIG.cameraDamping);
+
+  // Manual GUI nudge and Theatre's keyframed version of the same three
+  // properties add together rather than fighting -- see cameraOffsetX/Y/Z in
+  // CONFIG and in sceneTrack. cameraOffsetZ carries the camera's ENTIRE
+  // scroll-driven journey now (see applyTimeline/sceneTrack) -- there's no
+  // procedural dolly underneath it anymore, just the static cameraStartZ.
+  camera.position.x = mouseX * CONFIG.parallaxStrength + CONFIG.cameraOffsetX + theatreValues.cameraOffsetX;
+  camera.position.y = -mouseY * CONFIG.parallaxStrength + CONFIG.cameraOffsetY + theatreValues.cameraOffsetY;
+  camera.position.z = CONFIG.cameraStartZ + CONFIG.cameraOffsetZ + theatreValues.cameraOffsetZ;
+
   // look a fixed distance ahead of wherever the camera currently sits (not at
   // a fixed world point) -- otherwise once the camera's z passes GLASS_Z
   // during the pass-through phase, a fixed lookAt target flips the view
   // around to face back the way it came
   camera.lookAt(camera.position.x, camera.position.y, camera.position.z - 10);
 
+  // The drifting Lissajous centers and the mouse hotspot now run together:
+  // when glowFollowMouse is on, one slot is reserved off the top of
+  // glowCenterCount for the mouse rather than the mouse replacing the drift
+  // entirely, so hovering adds a hotspot on top of the ones already orbiting.
+  const driftCount = CONFIG.glowFollowMouse
+    ? Math.min(CONFIG.glowCenterCount, MAX_GLOW_CENTERS - 1)
+    : Math.min(CONFIG.glowCenterCount, MAX_GLOW_CENTERS);
+  if (CONFIG.glowAnimate) glowTime += dt;
+  updateGlowCenters(glowTime, driftCount);
+
+  let numCenters = driftCount;
   if (CONFIG.glowFollowMouse) {
     // re-raycast after the camera moves, so the hotspot tracks where the
     // cursor actually lands on the wall plane from the current view
     raycaster.setFromCamera(pointerNDC, camera);
     const centers = gridUniforms.uGlowCenters.value;
+    const mouseIdx = driftCount; // the slot updateGlowCenters left reserved
     if (pointerActive && raycaster.ray.intersectPlane(wallPlane, wallHitPoint)) {
-      centers[0].set(wallHitPoint.x, wallHitPoint.y);
+      centers[mouseIdx].set(wallHitPoint.x, wallHitPoint.y);
+      numCenters = driftCount + 1;
     } else {
-      centers[0].set(1e5, 1e5);
+      // cursor off the wall/window -- leave the reserved slot parked far away
+      // rather than counting it, so the shader doesn't glow at the origin
+      centers[mouseIdx].set(1e5, 1e5);
     }
-    for (let i = 1; i < MAX_GLOW_CENTERS; i++) centers[i].set(1e5, 1e5);
-    gridUniforms.uNumCenters.value = 1;
-  } else {
-    if (CONFIG.glowAnimate) glowTime += dt;
-    updateGlowCenters(glowTime);
   }
+  gridUniforms.uNumCenters.value = numCenters;
 
   // Theatre's alarmLevel gates the pulse, so the alarm can be keyframed to
   // ramp in partway through the scroll instead of blinking from frame one.
@@ -2258,7 +2455,15 @@ function animate() {
   // objectionable than the ~4ms saved.
   reflectionCamera.update(renderer, scene);
 
+  if (CONFIG.freeCamera) {
+    debugControls.update();
+    // keeps the wireframe frustum in sync with the timeline camera's motion --
+    // CameraHelper only rebuilds from the tracked camera's matrix on demand
+    cameraHelper.update();
+  }
+
   composer.render();
+  if (CONFIG.freeCamera) renderFreeCameraPip();
   stats.end();
 }
 
