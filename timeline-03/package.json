@@ -13,7 +13,7 @@
     "@theatre/studio": "^0.7.2",
     "lil-gui": "^0.21.0",
     "stats.js": "^0.17.0",
-    "three": "^0.169.0"
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "vite": "^5.4.10"

@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { KawaseBloomPass } from './kawase-bloom.js';
 import GUI from 'lil-gui';
 import Stats from 'stats.js';
 import { getProject, types } from '@theatre/core';
@@ -84,6 +84,11 @@ const CONFIG = {
   // Measured off the mockup: center star = 1.55 cells wide, side stars = 0.87
   // of the center. starSize is left at 6 and the cell size moved instead, so
   // the glass fit and camera framing that hang off it stay put.
+  // World z of the wall plane. The glass sits at GLASS_Z and the space scene
+  // starts at SPACE_NEAR_Z, so pushing the wall back opens up the gap between
+  // wall and starfield, while pulling it forward closes on the glass -- past
+  // GLASS_Z the wall crosses in front of the shards.
+  wallZ: 0,
   starSize: 6,
   starSize2: 5.2,
   starOffsetX: 3.9, // == gridCellSize -> lands on the neighbouring grid node
@@ -175,6 +180,49 @@ const CONFIG = {
   bloomStrength: 0.55,
   bloomRadius: 0.9,
   bloomThreshold: 0.25,
+  // dual-filter chain depth -- each level halves the resolution again, so this
+  // sets how wide the blur reaches. 4 is already a very broad glow here; going
+  // to 5+ costs almost nothing extra (the buffers are tiny by then) but starts
+  // bleeding light across the whole frame.
+  bloomLevels: 4,
+
+  // -- performance --
+  // This scene is fill-rate bound, not geometry bound (287 shards but only
+  // ~6.5k triangles total), so the three knobs that actually move the needle
+  // are all about how many pixels get shaded.
+  //
+  // 1.5 rather than 2: on a 2x display that's ~44% fewer pixels per pass, and
+  // every pass benefits -- the MSAA scene target, the transmission backdrop
+  // that all 287 glass shards sample, and the bloom chain.
+  maxPixelRatio: 1.5,
+  bloomResolutionScale: 0.5,
+  // NOTE: there is deliberately no "reflect every N frames" knob here. The
+  // CubeCamera re-render looks like an obvious thing to throttle, but doing so
+  // makes the glass strobe -- see the comment at the reflectionCamera.update()
+  // call in animate().
+  // three r170+ only. Every transmissive shard samples a backdrop render
+  // target of the whole opaque scene; this scales that target's resolution.
+  // What the shards show is already distorted by refraction and roughness, so
+  // half resolution costs a quarter of the pixels for no visible change.
+  transmissionResolutionScale: 0.5,
+
+  // -- layer / effect toggles --
+  // Every one of these defaults to the scene exactly as authored; they exist
+  // to isolate a layer while tuning, and to price each effect against the
+  // stats.js readout.
+  showWall: true,
+  showGridLines: true,
+  showGridNodes: true,
+  glowAnimate: true, // off freezes the hotspots where they are
+  showGlass: true,
+  // which material the shards wear -- see GLASS_MATERIAL_MODES
+  glassMaterialMode: 'authored',
+  showAuras: true,
+  showReflection: true, // the live CubeCamera envMap on the glass
+  fresnelRim: true,
+  enableBloom: true,
+  enableFog: true,
+  enableParallax: true,
 };
 
 // A root-relative path (e.g. `${import.meta.env.BASE_URL}...`) resolves
@@ -199,6 +247,9 @@ const GLB_OPTIONS = {
   '05 - Jagged, 120 Shards': '05_star-shatter_jagged-120-shards.glb',
 };
 
+// The wall's home position. Its LIVE z is CONFIG.wallZ (Wall Z in the GUI) --
+// this constant survives only as the reference depth other fixed layout
+// numbers are quoted against.
 const WALL_Z = 0;
 const GLASS_Z = 0.6;
 const SPACE_NEAR_Z = GLASS_Z - 14;
@@ -210,18 +261,34 @@ const WALL_H = 20;
 // Renderer / scene / camera
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// `antialias` is deliberately off: the composer renders into its own MSAA
+// target (see composerTarget below) and the canvas's own default framebuffer
+// is only ever blitted to, so a second multisampled buffer here is pure cost.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x050608, 1);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
+renderer.transmissionResolutionScale = CONFIG.transmissionResolutionScale;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x050608, 0.02);
+// Toggled by density rather than by nulling scene.fog: removing the fog object
+// changes every material's #define set and forces a full shader recompile of
+// the scene mid-frame, which stalls hard. Density 0 is a no-op at the same cost
+// as no fog at all.
+const FOG_DENSITY = 0.02;
+scene.fog = new THREE.FogExp2(0x050608, FOG_DENSITY);
 
+// RoomEnvironment is itself a THREE.Scene full of boxes and area-light
+// materials. It's only needed for the one-shot PMREM bake, so it gets disposed
+// immediately after -- left alive it lingers as a second scene holding ~20
+// geometries/materials for the lifetime of the page (and shows up as a phantom
+// extra Scene in three.js inspectors).
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
-scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+const roomEnvironment = new RoomEnvironment();
+scene.environment = pmremGenerator.fromScene(roomEnvironment, 0.04).texture;
+roomEnvironment.dispose();
 pmremGenerator.dispose();
 
 const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
@@ -262,20 +329,36 @@ const composerTarget = new THREE.WebGLRenderTarget(
 );
 const composer = new EffectComposer(renderer, composerTarget);
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight),
+// Bloom is a wide blur, so it's purely fill-rate bound and survives being
+// computed small: it runs at a fraction of the display resolution (see
+// bloomResolutionScale) on top of the dual-filter chain's own halvings.
+const bloomPass = new KawaseBloomPass(
+  new THREE.Vector2(window.innerWidth * CONFIG.bloomResolutionScale, window.innerHeight * CONFIG.bloomResolutionScale),
   CONFIG.bloomStrength,
   CONFIG.bloomRadius,
-  CONFIG.bloomThreshold
+  CONFIG.bloomThreshold,
+  CONFIG.bloomLevels
 );
 composer.addPass(bloomPass);
 
-window.addEventListener('resize', () => {
+// re-applies the render resolution everywhere it's cached -- also called from
+// the Perf GUI folder when maxPixelRatio / bloomResolutionScale change, so
+// those are tunable live rather than only at load
+function applyRenderResolution() {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio));
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
-});
+  // KawaseBloomPass owns its own resolution -- setSize resizes the whole mip
+  // chain, so unlike UnrealBloomPass there's no separate `resolution` to poke
+  bloomPass.setSize(
+    Math.max(1, Math.round(window.innerWidth * CONFIG.bloomResolutionScale)),
+    Math.max(1, Math.round(window.innerHeight * CONFIG.bloomResolutionScale))
+  );
+}
+
+window.addEventListener('resize', applyRenderResolution);
 
 // ---------------------------------------------------------------------------
 // Star mask texture -- exact path from assets/4-pointed-star/4star_03a.svg,
@@ -453,7 +536,7 @@ const wallMaterial = new THREE.ShaderMaterial({
 });
 
 const wallMesh = new THREE.Mesh(new THREE.PlaneGeometry(WALL_W, WALL_H), wallMaterial);
-wallMesh.position.z = WALL_Z;
+wallMesh.position.z = CONFIG.wallZ;
 // no renderOrder: as an opaque mesh it sorts front-to-back naturally, which
 // draws it before the space scene and lets its depth reject those far wisps
 // everywhere except inside the window cutouts
@@ -494,7 +577,10 @@ const windowMaskChunk = /* glsl */ `
   }
 `;
 
-const GRID_Z = WALL_Z + 0.01; // just in front of the wall so it reads as etched into its surface
+// the grid rides just in front of the wall so it reads as etched into its
+// surface -- an offset rather than an absolute z, so it follows the Wall Z
+// slider (see applyWallZ) instead of detaching when the wall moves
+const GRID_Z_OFFSET = 0.01;
 
 function buildGridGraph(cellSize, cols, rows) {
   const originX = -((cols - 1) * cellSize) / 2;
@@ -603,7 +689,7 @@ function buildGridLines() {
     side: THREE.DoubleSide,
   });
   gridLineMesh = new THREE.Mesh(geometry, material);
-  gridLineMesh.position.z = GRID_Z;
+  gridLineMesh.position.z = CONFIG.wallZ + GRID_Z_OFFSET;
   gridLineMesh.renderOrder = 11;
   scene.add(gridLineMesh);
 }
@@ -699,7 +785,7 @@ function buildGridNodes() {
   });
 
   gridNodeMesh = new THREE.InstancedMesh(geometry, material, gridGraph.points.length);
-  gridNodeMesh.position.z = GRID_Z;
+  gridNodeMesh.position.z = CONFIG.wallZ + GRID_Z_OFFSET;
   gridNodeMesh.renderOrder = 12;
   const m = new THREE.Matrix4();
   gridGraph.points.forEach((p, i) => {
@@ -756,7 +842,7 @@ function buildGridNodes() {
   });
 
   gridNodeFillMesh = new THREE.InstancedMesh(fillGeometry, fillMaterial, gridGraph.points.length);
-  gridNodeFillMesh.position.z = GRID_Z;
+  gridNodeFillMesh.position.z = CONFIG.wallZ + GRID_Z_OFFSET;
   // between the lines (11) and the ring (12) -- drawn after the lines so it
   // covers them, and before the ring so the ring still renders on top of it
   gridNodeFillMesh.renderOrder = 11.5;
@@ -920,12 +1006,19 @@ const wispMaterial = new THREE.ShaderMaterial({
 
 const MAX_WISPS = 24;
 const wispPlaneGeo = new THREE.PlaneGeometry(1, 1);
+// Grown on demand rather than pre-filled to MAX_WISPS: the pool used to park
+// 24 permanently-invisible meshes in the scene, all of which still had to be
+// walked (and matrix-updated) on every one of the 7 scene traversals per
+// frame. The GUI slider can still take it up to MAX_WISPS -- it just allocates
+// when asked instead of up front.
 const wisps = [];
-for (let i = 0; i < MAX_WISPS; i++) {
-  const mesh = new THREE.Mesh(wispPlaneGeo, wispMaterial);
-  mesh.visible = false;
-  scene.add(mesh);
-  wisps.push(mesh);
+function ensureWispPool(n) {
+  while (wisps.length < n) {
+    const mesh = new THREE.Mesh(wispPlaneGeo, wispMaterial);
+    mesh.visible = false;
+    scene.add(mesh);
+    wisps.push(mesh);
+  }
 }
 
 // Reference depth for the perspective compensation below -- roughly where the
@@ -970,9 +1063,11 @@ function seedWisps() {
     { x: -CONFIG.starOffsetX, y: -CONFIG.starOffsetY },
   ];
 
-  for (let i = 0; i < MAX_WISPS; i++) {
+  ensureWispPool(CONFIG.wispCount);
+
+  for (let i = 0; i < wisps.length; i++) {
     const wisp = wisps[i];
-    if (i >= CONFIG.wispCount) {
+    if (!CONFIG.showAuras || i >= CONFIG.wispCount) {
       wisp.visible = false;
       continue;
     }
@@ -1068,17 +1163,301 @@ function alarmPulse(time) {
 // scattered shards, transmission alone has little to refract, so reflection
 // is what actually sells "glass" rather than "solid grey chunk."
 // ---------------------------------------------------------------------------
-const reflectionTarget = new THREE.WebGLCubeRenderTarget(256, {
+// 64 rather than 256: these 6 face renders happen every single frame (see the
+// reflectionCamera.update() call in animate(), which must not be throttled),
+// so resolution is the main lever on their cost. three PMREM-prefilters this
+// into a roughness-blurred envMap before the shards ever sample it, and the
+// shards are small and rough, so the fine detail is blurred away regardless.
+const reflectionTarget = new THREE.WebGLCubeRenderTarget(64, {
   generateMipmaps: true,
   minFilter: THREE.LinearMipmapLinearFilter,
 });
 const reflectionCamera = new THREE.CubeCamera(0.1, 100, reflectionTarget);
 reflectionCamera.position.set(0, 0, GLASS_Z);
-scene.add(reflectionCamera);
+// The CubeCamera only exists to render *from* -- it has no visual
+// representation, so keeping it out of the scene graph saves 7 objects (itself
+// plus its 6 face cameras) from every traversal. Its world matrix is static,
+// so one manual update is all it ever needs.
+reflectionCamera.updateMatrixWorld();
 
 // populated from the glb's own material once it loads (KHR_materials_transmission
 // / _volume / _clearcoat authored in Blender) -- see the GLTFLoader callback below
 let glassMaterial = null;
+
+// --- the shard material options, all single shared instances -----------------
+// Swapping between them is a pointer assignment per mesh, with no recompile
+// beyond the first switch to each. They cost wildly different amounts, so the
+// dropdown doubles as the scene's biggest perf lever: transmission (the two
+// glass options) is by far the most expensive thing here, since every shard
+// samples a full-scene backdrop render target.
+
+// The albedo is far darker than the grey it actually renders as: coreLight is a
+// 30-intensity point light sitting *inside* the shard cluster, so with inverse
+// -square decay the irradiance here is enormous and a mid-grey albedo tone-maps
+// to blown-out white. flatShading counteracts the computeVertexNormals() call
+// on load, which is there to sell the glass but would otherwise smear the grey
+// shards into one indistinct blob.
+const solidGlassMaterial = new THREE.MeshStandardMaterial({
+  color: 0x24272c,
+  roughness: 0.9,
+  metalness: 0,
+  flatShading: true,
+});
+
+// A stock three.js glass, built from MeshPhysicalMaterial defaults rather than
+// the glb's authored values -- useful as a neutral reference for what the
+// Blender-authored material is actually doing differently.
+const threeGlassMaterial = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff,
+  metalness: 0,
+  roughness: 0.05,
+  transmission: 1,
+  thickness: 0.5,
+  ior: 1.5,
+  clearcoat: 1,
+  clearcoatRoughness: 0.05,
+});
+
+// Matcap of a shiny glass sphere, generated rather than loaded so the scene
+// stays dependency-free. A matcap bakes the entire lighting response into a
+// lookup keyed by view-space normal, so it costs one texture fetch and no
+// lighting maths at all -- by far the cheapest of the four, and it keeps a
+// convincing glassy read because the rim and specular are painted in.
+function makeGlassMatcapTexture() {
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const r = size / 2;
+
+  // corners are outside the sampled disc, but fill them so bilinear filtering
+  // at the silhouette doesn't drag in stray pixels
+  ctx.fillStyle = '#05070c';
+  ctx.fillRect(0, 0, size, size);
+
+  // the disc becomes the current path and stays it, so every gradient below is
+  // clipped to the sphere without needing a separate clip()
+  ctx.beginPath();
+  ctx.arc(r, r, r, 0, Math.PI * 2);
+  ctx.closePath();
+
+  // body: cool and dark where it faces the camera, brightening toward the
+  // lower right where the environment bounces back into view
+  const body = ctx.createLinearGradient(0, 0, size, size);
+  body.addColorStop(0, '#1b2434');
+  body.addColorStop(0.55, '#2c3a52');
+  body.addColorStop(1, '#7f9dc4');
+  ctx.fillStyle = body;
+  ctx.fill();
+
+  // fresnel rim hugging the silhouette -- this is what actually reads as glass
+  // rather than plastic
+  const rim = ctx.createRadialGradient(r, r, r * 0.7, r, r, r);
+  rim.addColorStop(0, 'rgba(255,255,255,0)');
+  rim.addColorStop(0.8, 'rgba(190,220,255,0.5)');
+  rim.addColorStop(1, 'rgba(255,255,255,0.95)');
+  ctx.fillStyle = rim;
+  ctx.fill();
+
+  // key specular, upper left
+  const key = ctx.createRadialGradient(r * 0.62, r * 0.5, 0, r * 0.62, r * 0.5, r * 0.6);
+  key.addColorStop(0, 'rgba(255,255,255,1)');
+  key.addColorStop(0.22, 'rgba(255,255,255,0.7)');
+  key.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = key;
+  ctx.fill();
+
+  // small warm counter-glint, lower right, so the sphere doesn't read as lit
+  // by a single lamp
+  const glint = ctx.createRadialGradient(r * 1.38, r * 1.44, 0, r * 1.38, r * 1.44, r * 0.36);
+  glint.addColorStop(0, 'rgba(255,214,170,0.85)');
+  glint.addColorStop(1, 'rgba(255,214,170,0)');
+  ctx.fillStyle = glint;
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(c);
+  // colour data, not a data map -- without this it renders washed out
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const matcapGlassMaterial = new THREE.MeshMatcapMaterial({ matcap: makeGlassMatcapTexture() });
+
+// The see-through sibling of the matcap above. Painted for a CLEAR pane rather
+// than a shiny solid: a real sheet of glass reflects almost nothing head-on, so
+// the middle of the disc is near-black (and, via the alpha patch below, barely
+// there at all) while everything interesting happens at grazing angles.
+function makeClearGlassMatcapTexture() {
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const r = size / 2;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.beginPath();
+  ctx.arc(r, r, r, 0, Math.PI * 2);
+  ctx.closePath();
+
+  // body: almost nothing facing the camera, picking up a cool cast only as it
+  // turns away
+  const body = ctx.createRadialGradient(r, r, 0, r, r, r);
+  body.addColorStop(0, '#04070d');
+  body.addColorStop(0.6, '#0d1a2b');
+  body.addColorStop(1, '#3c6289');
+  ctx.fillStyle = body;
+  ctx.fill();
+
+  // Fresnel rim -- tighter and brighter than the opaque matcap's, because with
+  // a clear body this edge is essentially the whole read
+  const rim = ctx.createRadialGradient(r, r, r * 0.78, r, r, r);
+  rim.addColorStop(0, 'rgba(150,200,255,0)');
+  rim.addColorStop(0.65, 'rgba(190,225,255,0.6)');
+  rim.addColorStop(1, 'rgba(255,255,255,1)');
+  ctx.fillStyle = rim;
+  ctx.fill();
+
+  // two tight glints rather than one broad highlight: small hard speculars are
+  // what sell a polished, hard surface
+  const key = ctx.createRadialGradient(r * 0.66, r * 0.5, 0, r * 0.66, r * 0.5, r * 0.3);
+  key.addColorStop(0, 'rgba(255,255,255,1)');
+  key.addColorStop(0.3, 'rgba(255,255,255,0.5)');
+  key.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = key;
+  ctx.fill();
+
+  const glint = ctx.createRadialGradient(r * 1.3, r * 1.36, 0, r * 1.3, r * 1.36, r * 0.22);
+  glint.addColorStop(0, 'rgba(214,236,255,0.9)');
+  glint.addColorStop(1, 'rgba(214,236,255,0)');
+  ctx.fillStyle = glint;
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// How clear the pane is where it faces the camera, and how sharply it ramps to
+// solid at the silhouette. Baked into the shader rather than exposed as
+// uniforms -- these are the material's identity, not a per-scene tuning knob.
+const CLEAR_GLASS_CENTER_ALPHA = 0.07;
+const CLEAR_GLASS_RIM_POWER = 2.2;
+
+// A matcap is opaque by construction: it looks up a baked lighting response by
+// view-space normal and has no notion of what lies behind the surface. This
+// patches in the missing half -- a Fresnel-driven alpha, nearly clear head-on
+// and solid at grazing angles, which is both how real glass behaves and what
+// stops the shards reading as shiny opaque pebbles.
+//
+// `uv` is three's own matcap lookup coordinate, a point on the unit disc of
+// radius 0.495; its distance from the centre IS the grazing-angle term, so the
+// Fresnel falls out of the existing maths for free.
+function addMatcapGlassAlpha(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      `float glassRim = clamp(length(uv - 0.5) / 0.495, 0.0, 1.0);
+       diffuseColor.a *= mix(${CLEAR_GLASS_CENTER_ALPHA.toFixed(3)}, 1.0, pow(glassRim, ${CLEAR_GLASS_RIM_POWER.toFixed(2)}));
+       #include <opaque_fragment>`
+    );
+  };
+  material.needsUpdate = true;
+}
+
+const clearMatcapGlassMaterial = new THREE.MeshMatcapMaterial({
+  matcap: makeClearGlassMatcapTexture(),
+  transparent: true,
+  // shards overlap heavily in the shatter; without this the nearest one would
+  // occlude the rest and the cluster would lose all its depth
+  depthWrite: false,
+});
+addMatcapGlassAlpha(clearMatcapGlassMaterial);
+
+// Persistent, shared across every loaded model -- loadModel() must not dispose
+// these when swapping glbs (the authored material is per-glb and IS disposed).
+const SHARED_GLASS_MATERIALS = new Set([
+  solidGlassMaterial,
+  threeGlassMaterial,
+  matcapGlassMaterial,
+  clearMatcapGlassMaterial,
+]);
+
+// label -> CONFIG.glassMaterialMode value, for the GUI dropdown
+const GLASS_MATERIAL_MODES = {
+  'PBR Glass (from GLB)': 'authored',
+  'Three.js Glass': 'physical',
+  'Solid Grey': 'grey',
+  'Shiny Matcap': 'matcap',
+  'Shiny Glass Matcap': 'glassmatcap',
+};
+
+function activeGlassMaterial() {
+  switch (CONFIG.glassMaterialMode) {
+    case 'physical':
+      return threeGlassMaterial;
+    case 'grey':
+      return solidGlassMaterial;
+    case 'matcap':
+      return matcapGlassMaterial;
+    case 'glassmatcap':
+      return clearMatcapGlassMaterial;
+    default:
+      // null until the glb finishes loading; applyGlassMaterial() no-ops then
+      // and loadModel() re-applies once it has one
+      return glassMaterial;
+  }
+}
+
+function applyGlassMaterial() {
+  const target = activeGlassMaterial();
+  if (!target) return;
+  modelGroup.traverse((child) => {
+    if (child.isMesh) child.material = target;
+  });
+  syncGlassControllers();
+}
+
+// assigned once the GUI exists; syncGlassControllers no-ops before then, which
+// matters because the initial loadModel() can in principle resolve first
+let glassFolderRef = null;
+
+// Mirrors the ACTIVE material's real values back into CONFIG so the sliders
+// show what is actually on the shards rather than stale defaults. Guarded
+// per-property because the four options genuinely differ: the grey and matcap
+// materials have no transmission or attenuation at all, and not every glb in
+// the model dropdown authors a full MeshPhysicalMaterial (the jagged-edge
+// variants ship without KHR_materials_transmission/_volume, so those fields
+// come back undefined rather than a number/Color).
+function syncGlassControllers() {
+  const m = activeGlassMaterial();
+  if (!m) return;
+  if (m.transmission !== undefined) CONFIG.transmission = m.transmission;
+  if (m.roughness !== undefined) CONFIG.roughness = m.roughness;
+  if (m.thickness !== undefined) CONFIG.thickness = m.thickness;
+  if (m.ior !== undefined) CONFIG.ior = m.ior;
+  if (m.envMapIntensity !== undefined) CONFIG.envMapIntensity = m.envMapIntensity;
+  if (m.clearcoat !== undefined) CONFIG.clearcoat = m.clearcoat;
+  if (m.clearcoatRoughness !== undefined) CONFIG.clearcoatRoughness = m.clearcoatRoughness;
+  if (m.attenuationColor) CONFIG.attenuationColor = `#${m.attenuationColor.getHexString()}`;
+  // MeshPhysicalMaterial defaults attenuationDistance to Infinity ("no
+  // absorption"), which is off the end of the slider and displays as the
+  // literal text Infinity -- leave the control where it was in that case
+  if (Number.isFinite(m.attenuationDistance)) CONFIG.attenuationDistance = m.attenuationDistance;
+  glassFolderRef?.controllers.forEach((c) => c.updateDisplay());
+}
+
+// Writes a slider's value onto whichever material is active, skipping
+// properties that material doesn't have -- so the transmission/IOR sliders
+// simply do nothing while Solid Grey or Shiny Matcap is selected instead of
+// silently editing a material you can't see.
+function setGlassProp(key, value) {
+  const m = activeGlassMaterial();
+  if (!m || !(key in m)) return;
+  if (m[key] && m[key].isColor) m[key].set(value);
+  else m[key] = value;
+}
 
 // Fresnel rim, patched into whatever material the glb ships rather than baked
 // into the file, so it stays tunable from the GUI alongside the authored
@@ -1114,6 +1493,16 @@ function addFresnelRim(material) {
   material.needsUpdate = true;
 }
 
+// The rim patch keys off geometryNormal / geometryViewDir / <opaque_fragment>,
+// which only exist in the lit (physical/standard) shader -- so it goes on the
+// stock glass but never on the matcap, whose shader has none of them.
+addFresnelRim(threeGlassMaterial);
+
+// Feeds the stock glass the same live cube reflection the authored one gets,
+// so switching between them compares materials rather than lighting setups.
+threeGlassMaterial.envMap = reflectionTarget.texture;
+threeGlassMaterial.envMapIntensity = CONFIG.envMapIntensity;
+
 const modelGroup = new THREE.Group();
 modelGroup.position.z = GLASS_Z;
 scene.add(modelGroup);
@@ -1138,7 +1527,10 @@ function loadModel(filename) {
     child.traverse((node) => {
       if (node.isMesh) {
         node.geometry.dispose();
-        node.material.dispose();
+        // the grey/stock-glass/matcap materials are shared across every model
+        // and outlive them -- disposing one here would blank that option for
+        // good the first time the model dropdown is used while it's selected
+        if (!SHARED_GLASS_MATERIALS.has(node.material)) node.material.dispose();
       }
     });
   }
@@ -1171,26 +1563,9 @@ function loadModel(filename) {
       // the glb material has no envMap of its own -- feed it the live scene
       // reflection so shards still pick up the wall/other-shard/space reflection
       if (glassMaterial) {
-        glassMaterial.envMap = reflectionTarget.texture;
+        glassMaterial.envMap = CONFIG.showReflection ? reflectionTarget.texture : null;
         glassMaterial.envMapIntensity = CONFIG.envMapIntensity;
         addFresnelRim(glassMaterial);
-
-        // mirror the glb-authored values back into CONFIG so the GUI sliders
-        // reflect what's actually on the material instead of the old hand-tuned
-        // defaults, then refresh the displayed slider positions -- guarded
-        // per-property since not every glb in the dropdown authors a full
-        // MeshPhysicalMaterial (e.g. the jagged-edge variants ship without
-        // KHR_materials_transmission/_volume, so transmission/attenuation
-        // fields come back undefined rather than a Color/number)
-        if (glassMaterial.transmission !== undefined) CONFIG.transmission = glassMaterial.transmission;
-        if (glassMaterial.roughness !== undefined) CONFIG.roughness = glassMaterial.roughness;
-        if (glassMaterial.thickness !== undefined) CONFIG.thickness = glassMaterial.thickness;
-        if (glassMaterial.ior !== undefined) CONFIG.ior = glassMaterial.ior;
-        if (glassMaterial.clearcoat !== undefined) CONFIG.clearcoat = glassMaterial.clearcoat;
-        if (glassMaterial.clearcoatRoughness !== undefined) CONFIG.clearcoatRoughness = glassMaterial.clearcoatRoughness;
-        if (glassMaterial.attenuationColor) CONFIG.attenuationColor = `#${glassMaterial.attenuationColor.getHexString()}`;
-        if (glassMaterial.attenuationDistance !== undefined) CONFIG.attenuationDistance = glassMaterial.attenuationDistance;
-        glassFolder.controllers.forEach((c) => c.updateDisplay());
       }
 
       const box = new THREE.Box3().setFromObject(gltf.scene);
@@ -1209,6 +1584,9 @@ function loadModel(filename) {
       gltf.scene.scale.setScalar(scale);
 
       modelGroup.add(gltf.scene);
+      // the shards arrive wearing the glb's own material, so re-assert whatever
+      // the dropdown is actually set to, and refresh the sliders from it
+      applyGlassMaterial();
 
       if (gltf.animations.length) {
         mixer = new THREE.AnimationMixer(gltf.scene);
@@ -1504,7 +1882,15 @@ function applyTimeline(t) {
   // wall fades out as the camera pushes through it, so there's no visible
   // clipping/pop when the camera's z crosses the wall's z=0 plane
   wallUniforms.uOpacity.value = 1 - passT;
-  wallMesh.visible = passT < 0.995;
+  // the timeline's own fade-out ANDed with the Layers & Effects switches, so a
+  // manual toggle can't be undone by the next frame's timeline update
+  wallMesh.visible = CONFIG.showWall && passT < 0.995;
+  // the grid needs no timeline gating of its own -- it sits on the wall plane,
+  // so the fly-through leaves it behind the camera and frustum culling drops it
+  if (gridLineMesh) gridLineMesh.visible = CONFIG.showGridLines;
+  if (gridNodeMesh) gridNodeMesh.visible = CONFIG.showGridNodes;
+  if (gridNodeFillMesh) gridNodeFillMesh.visible = CONFIG.showGridNodes;
+  modelGroup.visible = CONFIG.showGlass;
   setWallFading(passT > 0.001);
 }
 camera.userData.targetZ = CONFIG.cameraStartZ;
@@ -1521,7 +1907,9 @@ let mouseY = 0;
 
 const raycaster = new THREE.Raycaster();
 const pointerNDC = new THREE.Vector2(1e5, 1e5);
-const wallPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -WALL_Z);
+// kept in sync with CONFIG.wallZ by applyWallZ() so the Mouse Hover Glow
+// raycast still lands on the wall after it's been moved
+const wallPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -CONFIG.wallZ);
 const wallHitPoint = new THREE.Vector3();
 let pointerActive = false;
 
@@ -1540,21 +1928,12 @@ window.addEventListener('pointerleave', () => {
 // lil-gui control panel
 // ---------------------------------------------------------------------------
 const stats = new Stats();
-stats.showPanel(0); // 0: fps
+stats.showPanel(0); // 0: fps -- click the panel to cycle to ms/mb
 // stats.js hardcodes position:fixed;top:0;left:0 in its own constructor --
-// overridden here (after construction, so this wins) to pin it bottom-right
-// instead, out of the way of the lil-gui panel that already owns the top-right
-stats.dom.style.cssText = 'position:fixed;bottom:0;right:80px;cursor:pointer;opacity:0.9;z-index:10000;';
+// overridden here (after construction, so this wins) to shift it clear of the
+// Theatre Studio outline panel that occupies the top-left corner
+stats.dom.style.cssText = 'position:fixed;top:0;left:80px;cursor:pointer;opacity:0.9;z-index:10000;';
 document.body.appendChild(stats.dom);
-
-// stats.js's single Stats() instance only shows one panel at a time (clicking
-// its dom cycles fps/ms/mb) -- a second instance pinned to panel 2 (mb) shows
-// memory alongside fps instead of having to click through. Only Chromium
-// exposes performance.memory, so this panel is simply blank/static elsewhere.
-const memStats = new Stats();
-memStats.showPanel(2); // 2: mb (heap memory)
-memStats.dom.style.cssText = 'position:fixed;bottom:0;right:0;cursor:pointer;opacity:0.9;z-index:10000;';
-document.body.appendChild(memStats.dom);
 
 const gui = new GUI({ title: 'Timeline 03 Controls' });
 
@@ -1581,8 +1960,22 @@ timelineFolder.add(CONFIG, 'clipEnd', 0, 1, 0.01).name('Clip End %');
 timelineFolder.add(CONFIG, 'autoRotateSpeed', 0, 1, 0.01).name('Auto Rotate');
 timelineFolder.add(CONFIG, 'glbModel', GLB_OPTIONS).name('Shatter GLB').onChange(loadModel);
 
+// moves the wall and its etched grid together, and re-seats the raycast plane
+// the Mouse Hover Glow uses
+function applyWallZ() {
+  wallMesh.position.z = CONFIG.wallZ;
+  const gridZ = CONFIG.wallZ + GRID_Z_OFFSET;
+  if (gridLineMesh) gridLineMesh.position.z = gridZ;
+  if (gridNodeMesh) gridNodeMesh.position.z = gridZ;
+  if (gridNodeFillMesh) gridNodeFillMesh.position.z = gridZ;
+  // Plane(normal (0,0,1), constant) satisfies dot(n, p) + c = 0, so a plane
+  // sitting at z = wallZ has constant -wallZ
+  wallPlane.constant = -CONFIG.wallZ;
+}
+
 const wallFolder = gui.addFolder('Wall & Windows');
 wallFolder.addColor(CONFIG, 'wallColor').name('Wall Color').onChange((v) => wallUniforms.uWallColor.value.set(v));
+wallFolder.add(CONFIG, 'wallZ', SPACE_NEAR_Z, GLASS_Z + 4, 0.1).name('Wall Z').onChange(applyWallZ);
 wallFolder.add(CONFIG, 'starSize', 2, 14, 0.1).name('Center Size').onChange(syncWindowUniforms);
 wallFolder.add(CONFIG, 'starSize2', 1, 10, 0.1).name('Side Size').onChange(syncWindowUniforms);
 wallFolder.add(CONFIG, 'starOffsetX', 0, 10, 0.1).name('Side Offset X').onChange(syncWindowUniforms);
@@ -1618,42 +2011,53 @@ gridFolder
   .onChange((v) => (wallUniforms.uWallGlowIntensity.value = v));
 
 const glassFolder = gui.addFolder('Glass Material');
+glassFolderRef = glassFolder;
+// Which material the shards wear. Also the scene's biggest perf control: the
+// two transmissive options each make every shard sample a full-scene backdrop,
+// while the matcap is a single texture fetch with no lighting maths at all.
+glassFolder
+  .add(CONFIG, 'glassMaterialMode', GLASS_MATERIAL_MODES)
+  .name('Material')
+  .onChange(applyGlassMaterial);
+// The sliders below drive whichever material is selected (see setGlassProp),
+// and no-op for properties it doesn't have -- so they go inert on Solid Grey
+// and Shiny Matcap rather than editing something off-screen.
 glassFolder
   .add(CONFIG, 'transmission', 0, 1, 0.01)
   .name('Transmission')
-  .onChange((v) => glassMaterial && (glassMaterial.transmission = v));
+  .onChange((v) => setGlassProp('transmission', v));
 glassFolder
   .add(CONFIG, 'roughness', 0, 0.5, 0.005)
   .name('Roughness')
-  .onChange((v) => glassMaterial && (glassMaterial.roughness = v));
+  .onChange((v) => setGlassProp('roughness', v));
 glassFolder
   .add(CONFIG, 'thickness', 0, 2, 0.01)
   .name('Thickness')
-  .onChange((v) => glassMaterial && (glassMaterial.thickness = v));
+  .onChange((v) => setGlassProp('thickness', v));
 glassFolder
   .add(CONFIG, 'ior', 1, 2.33, 0.01)
   .name('IOR')
-  .onChange((v) => glassMaterial && (glassMaterial.ior = v));
+  .onChange((v) => setGlassProp('ior', v));
 glassFolder
   .add(CONFIG, 'envMapIntensity', 0, 6, 0.05)
   .name('Env Intensity')
-  .onChange((v) => glassMaterial && (glassMaterial.envMapIntensity = v));
+  .onChange((v) => setGlassProp('envMapIntensity', v));
 glassFolder
   .add(CONFIG, 'clearcoat', 0, 1, 0.01)
   .name('Clearcoat')
-  .onChange((v) => glassMaterial && (glassMaterial.clearcoat = v));
+  .onChange((v) => setGlassProp('clearcoat', v));
 glassFolder
   .add(CONFIG, 'clearcoatRoughness', 0, 0.5, 0.005)
   .name('Clearcoat Roughness')
-  .onChange((v) => glassMaterial && (glassMaterial.clearcoatRoughness = v));
+  .onChange((v) => setGlassProp('clearcoatRoughness', v));
 glassFolder
   .addColor(CONFIG, 'attenuationColor')
   .name('Tint Color')
-  .onChange((v) => glassMaterial && glassMaterial.attenuationColor.set(v));
+  .onChange((v) => setGlassProp('attenuationColor', v));
 glassFolder
   .add(CONFIG, 'attenuationDistance', 0.5, 30, 0.5)
   .name('Tint Distance')
-  .onChange((v) => glassMaterial && (glassMaterial.attenuationDistance = v));
+  .onChange((v) => setGlassProp('attenuationDistance', v));
 glassFolder.addColor(CONFIG, 'rimColor').name('Edge Color').onChange((v) => rimUniforms.uRimColor.value.set(v));
 glassFolder
   .add(CONFIG, 'rimStrength', 0, 3, 0.05)
@@ -1664,8 +2068,9 @@ glassFolder
   .name('Edge Falloff')
   .onChange((v) => (rimUniforms.uRimPower.value = v));
 
+// on/off switches for this folder's layers live in "Layers & Effects" below,
+// so each property has exactly one controller and they can't drift out of sync
 const spaceFolder = gui.addFolder('Space Scene');
-spaceFolder.add(CONFIG, 'showBackgroundStars').name('Show Stars').onChange((v) => (bgStars.visible = v));
 spaceFolder.add(CONFIG, 'bgStarCount', 0, MAX_BG_STARS, 1).name('Star Count').onFinishChange(seedBgStars);
 spaceFolder.add(CONFIG, 'bgStarRadius', 8, 100, 1).name('Star Field Radius').onFinishChange(seedBgStars);
 spaceFolder.add(CONFIG, 'wispCount', 0, MAX_WISPS, 1).name('Aura Count').onFinishChange(seedWisps);
@@ -1675,12 +2080,10 @@ spaceFolder
   .onChange((v) => (wispUniforms.uOpacity.value = v));
 spaceFolder.addColor(CONFIG, 'wispColorA').name('Aura Color A').onChange((v) => wispUniforms.uColorA.value.set(v));
 spaceFolder.addColor(CONFIG, 'wispColorB').name('Aura Color B').onChange((v) => wispUniforms.uColorB.value.set(v));
-spaceFolder.add(CONFIG, 'eyeStar').name('Eye Star').onChange((v) => (eyeStar.visible = v));
 
 const alarmFolder = gui.addFolder('Alarm Light');
 // visibility itself is driven per-frame in animate() (it also depends on
-// Theatre's alarmLevel), so these two are plain flags with no side effect here
-alarmFolder.add(CONFIG, 'alarmEnabled').name('Enabled');
+// Theatre's alarmLevel), so this is a plain flag with no side effect here
 alarmFolder.add(CONFIG, 'alarmManual').name('Ignore Keyframes');
 alarmFolder.addColor(CONFIG, 'alarmColor').name('Color').onChange(syncAlarmColor);
 alarmFolder.add(CONFIG, 'alarmSpeed', 0.1, 4, 0.05).name('Blink Speed');
@@ -1695,16 +2098,73 @@ postFolder
   .add(CONFIG, 'bloomThreshold', 0, 1, 0.01)
   .name('Bloom Threshold')
   .onChange((v) => (bloomPass.threshold = v));
+postFolder
+  .add(CONFIG, 'bloomLevels', 2, KawaseBloomPass.MAX_LEVELS, 1)
+  .name('Bloom Spread')
+  .onChange((v) => (bloomPass.levels = v));
+
+const perfFolder = gui.addFolder('Performance');
+perfFolder
+  .add(CONFIG, 'maxPixelRatio', 0.5, 2, 0.25)
+  .name('Max Pixel Ratio')
+  .onFinishChange(applyRenderResolution);
+perfFolder
+  .add(CONFIG, 'bloomResolutionScale', 0.25, 1, 0.05)
+  .name('Bloom Resolution')
+  .onFinishChange(applyRenderResolution);
+perfFolder
+  .add(CONFIG, 'transmissionResolutionScale', 0.25, 1, 0.05)
+  .name('Transmission Res')
+  .onFinishChange((v) => (renderer.transmissionResolutionScale = v));
+
+// ---------------------------------------------------------------------------
+// Layers & effects -- one place to switch any single layer or pass off, both
+// for isolating a look while tuning and for pricing each one against the
+// stats.js readout. Every default matches the scene as authored.
+// ---------------------------------------------------------------------------
+const layersFolder = gui.addFolder('Layers & Effects');
+layersFolder.add(CONFIG, 'showWall').name('Wall');
+layersFolder.add(CONFIG, 'showGridLines').name('Grid Lines');
+layersFolder.add(CONFIG, 'showGridNodes').name('Grid Nodes');
+layersFolder.add(CONFIG, 'glowAnimate').name('Glow Drift');
+layersFolder.add(CONFIG, 'showGlass').name('Glass Shards');
+// the old "Realistic Glass" switch lives on as the Material dropdown in the
+// Glass Material folder, where Solid Grey is one of four options
+layersFolder
+  .add(CONFIG, 'showReflection')
+  .name('Live Reflection')
+  .onChange((v) => {
+    // both lit glass options carry the cube reflection; the matcap has its
+    // environment baked into its texture and the grey stand-in has none
+    for (const m of [glassMaterial, threeGlassMaterial]) {
+      if (!m) continue;
+      m.envMap = v ? reflectionTarget.texture : null;
+      m.needsUpdate = true;
+    }
+  });
+layersFolder
+  .add(CONFIG, 'fresnelRim')
+  .name('Edge Fresnel')
+  .onChange((v) => (rimUniforms.uRimStrength.value = v ? CONFIG.rimStrength : 0));
+layersFolder.add(CONFIG, 'showAuras').name('Aura Veils').onChange(seedWisps);
+layersFolder.add(CONFIG, 'showBackgroundStars').name('Starfield').onChange((v) => (bgStars.visible = v));
+layersFolder.add(CONFIG, 'eyeStar').name('Eye Star').onChange((v) => (eyeStar.visible = v));
+layersFolder.add(CONFIG, 'alarmEnabled').name('Alarm Beacon');
+layersFolder.add(CONFIG, 'enableBloom').name('Bloom Pass').onChange((v) => (bloomPass.enabled = v));
+layersFolder.add(CONFIG, 'enableFog').name('Fog').onChange((v) => (scene.fog.density = v ? FOG_DENSITY : 0));
+layersFolder.add(CONFIG, 'enableParallax').name('Mouse Parallax');
 
 // ---------------------------------------------------------------------------
 // Animation loop
 // ---------------------------------------------------------------------------
 const clock = new THREE.Clock();
+// advances only while glowAnimate is on, so freezing leaves the hotspots
+// exactly where they were rather than snapping when re-enabled
+let glowTime = 0;
 
 function animate() {
   requestAnimationFrame(animate);
   stats.begin();
-  memStats.begin();
   const dt = clock.getDelta();
   const time = clock.elapsedTime;
 
@@ -1738,8 +2198,12 @@ function animate() {
   // mouse parallax -- dolly sideways and re-aim at the axis every frame, so
   // near geometry sweeps across the screen more than far geometry (real
   // motion parallax, unlike a pan)
-  mouseX += (targetMouseX - mouseX) * Math.min(1, dt * CONFIG.parallaxDamping);
-  mouseY += (targetMouseY - mouseY) * Math.min(1, dt * CONFIG.parallaxDamping);
+  // toggling parallax off eases the offset back to zero rather than snapping,
+  // so flipping the switch mid-scene doesn't jolt the camera
+  const parallaxX = CONFIG.enableParallax ? targetMouseX : 0;
+  const parallaxY = CONFIG.enableParallax ? targetMouseY : 0;
+  mouseX += (parallaxX - mouseX) * Math.min(1, dt * CONFIG.parallaxDamping);
+  mouseY += (parallaxY - mouseY) * Math.min(1, dt * CONFIG.parallaxDamping);
   camera.position.x = mouseX * CONFIG.parallaxStrength;
   camera.position.y = -mouseY * CONFIG.parallaxStrength;
   camera.position.z += (camera.userData.targetZ - camera.position.z) * Math.min(1, dt * CONFIG.cameraDamping);
@@ -1762,7 +2226,8 @@ function animate() {
     for (let i = 1; i < MAX_GLOW_CENTERS; i++) centers[i].set(1e5, 1e5);
     gridUniforms.uNumCenters.value = 1;
   } else {
-    updateGlowCenters(time);
+    if (CONFIG.glowAnimate) glowTime += dt;
+    updateGlowCenters(glowTime);
   }
 
   // Theatre's alarmLevel gates the pulse, so the alarm can be keyframed to
@@ -1780,13 +2245,21 @@ function animate() {
       .join(' | ');
   }
 
-  // refresh the glass's reflection before the visible render, so it shows the
-  // wall grid/other shards/space scene as they are this frame, not last frame
+  // Refresh the glass's reflection before the visible render, so it shows the
+  // wall grid/space scene as they are this frame.
+  //
+  // This MUST run every frame. It is 6 full scene renders and throttling it is
+  // tempting, but the shards render visibly darker on frames that immediately
+  // follow a cube update than on frames that don't -- the cube camera sits
+  // inside the shard cluster and captures mostly unlit wall and space, and
+  // three regenerates the envMap's PMREM on the update frame. Updating every
+  // frame keeps every frame on the same side of that difference; updating
+  // every Nth makes the glass strobe between the two, which is far more
+  // objectionable than the ~4ms saved.
   reflectionCamera.update(renderer, scene);
 
   composer.render();
   stats.end();
-  memStats.end();
 }
 
 animate();
