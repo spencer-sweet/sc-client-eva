@@ -271,7 +271,9 @@ const CONFIG = {
 // build, and a cross-origin Webflow embed alike.
 const STAR_SHATTER_BASE_URL = 'https://sc-client-eva.pages.dev/assets/star-shatter';
 
-// dropdown label -> filename in assets/star-shatter/, picked by the GUI below
+// dropdown label -> path under assets/star-shatter/, picked by the GUI below.
+// Subfolder entries (clean/, jagged/) are loaded from the local repo in DEV
+// until they're on the CDN; everything else stays on pages.dev.
 const GLB_OPTIONS = {
   '01 - Star Shatter': '01_star-shatter-01.glb',
   '02 - Glass Animated': '02_star-shatter-glass-animated.glb',
@@ -279,7 +281,24 @@ const GLB_OPTIONS = {
   '03 - Jagged Edges': '03_star-shatter_jagged-edges.glb',
   '04 - Jagged, 100 Shards': '04_star-shatter_jagged-100-shards.glb',
   '05 - Jagged, 120 Shards': '05_star-shatter_jagged-120-shards.glb',
+  'Clean - 30 breaks': 'clean/Broken 30 clean breaks.glb',
+  'Clean - 60 breaks': 'clean/Broken 60 clean breaks.glb',
+  'Clean - 90 breaks': 'clean/Broken 90 clean breaks.glb',
+  'Clean - 120 breaks': 'clean/Broken 120 clean breaks.glb',
+  'Jagged - 30 fragments': 'jagged/Broken 30 fragments.glb',
+  'Jagged - 60 fragments': 'jagged/Broken 60 fragments.glb',
+  'Jagged - 90 fragments': 'jagged/Broken 90 fragments.glb',
+  'Jagged - 120 fragments': 'jagged/Broken 120 fragments.glb',
 };
+
+function starShatterUrl(filename) {
+  const isLocalFolder = filename.startsWith('clean/') || filename.startsWith('jagged/');
+  if (import.meta.env.DEV && isLocalFolder) {
+    // Vite resolves this to /@fs/<abs-path>; spaces are encoded by the URL ctor
+    return new URL(`../../assets/star-shatter/${filename}`, import.meta.url).href;
+  }
+  return `${STAR_SHATTER_BASE_URL}/${filename.split('/').map(encodeURIComponent).join('/')}`;
+}
 
 // The wall's home position. Its LIVE z is CONFIG.wallZ (Wall Z in the GUI) --
 // this constant survives only as the reference depth other fixed layout
@@ -1965,7 +1984,7 @@ function loadModel(filename) {
   glassMaterial = null;
 
   gltfLoader.load(
-    `${STAR_SHATTER_BASE_URL}/${filename}`,
+    starShatterUrl(filename),
     (gltf) => {
       gltf.scene.traverse((child) => {
         if (child.isMesh) {
