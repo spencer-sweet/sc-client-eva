@@ -55,10 +55,12 @@ body {
 }
 
 /* Three sections replace timeline-02's single .scroll-spacer. Together they add
-   up to the same ~700vh of runway the timeline fractions in main.js assume, and
-   they carry the [data-fs-section] hooks the Webflow embed measures against. */
+   up to ~2100vh of runway (3× the original ~700vh), and they carry the
+   [data-fs-section] hooks the Webflow embed measures against. Timeline
+   fractions in main.js are 0..1 of this total, so a longer runway stretches
+   every beat over more scroll distance. */
 section[data-fs-section] {
-  height: 233vh;
+  height: 699vh;
   width: 1px;
 }
 

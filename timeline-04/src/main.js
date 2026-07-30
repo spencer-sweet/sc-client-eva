@@ -44,11 +44,10 @@ const CONFIG = {
   // while authoring -- see the guard in applyTimeline. Everything else
   // (shatter progress, wall fade, etc.) keeps following scroll regardless.
   syncTheatreToScroll: true,
-  // These fractions are measured against the .scroll-spacer in style.css, which
-  // was lengthened from 600vh to 700vh to give the closing galaxy fly-through
-  // more runway. They were rescaled by the same factor so the zoom and shatter
-  // beats still land at the same *absolute* scroll distance as before -- all of
-  // the added length goes to the pass phase, not to slowing the earlier beats.
+  // These fractions are measured against the three [data-fs-section] blocks in
+  // style.css (~2100vh total, 3× the original ~700vh runway). They are 0..1 of
+  // that full scroll span, so lengthening the sections stretches every beat
+  // over more absolute scroll distance without retuning these numbers.
   shatterStart: 0.25, // shatter timeline starts scrubbing here (overlaps zoom's tail)
   shatterEnd: 0.58,
   passStart: 0.54, // camera resumes moving (through the wall) here (overlaps shatter's tail)
@@ -2214,7 +2213,7 @@ if (THEATRE_STUDIO) {
     .catch((err) => console.error('Failed to load Theatre Studio', err));
 }
 
-const SEQUENCE_LENGTH = 24; // seconds -- just the T(0..1) -> playhead mapping range
+const SEQUENCE_LENGTH = 72; // seconds -- T(0..1) -> playhead; 3× the original 24s to match the longer scroll runway
 
 // The authored state is passed in every time, not just in production: without
 // it @theatre/core throws once it detects no studio and no state after 1s, and

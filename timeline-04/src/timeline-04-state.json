@@ -12,7 +12,7 @@
       },
       "sequence": {
         "subUnitsPerUnit": 30,
-        "length": 24,
+        "length": 72,
         "type": "PositionalSequence",
         "tracksByObject": {
           "Scene": {
@@ -25,12 +25,7 @@
                     "id": "alarmKf01",
                     "position": 0,
                     "connectedRight": true,
-                    "handles": [
-                      0.5,
-                      1,
-                      0.5,
-                      0
-                    ],
+                    "handles": [0.5, 1, 0.5, 0],
                     "type": "bezier",
                     "value": 1
                   },
@@ -38,12 +33,7 @@
                     "id": "alarmKf02",
                     "position": 7.5,
                     "connectedRight": false,
-                    "handles": [
-                      0.5,
-                      1,
-                      0.5,
-                      0
-                    ],
+                    "handles": [0.5, 1, 0.5, 0],
                     "type": "bezier",
                     "value": 0
                   }
@@ -57,12 +47,7 @@
                     "id": "jDyZOlgocQ",
                     "position": 0,
                     "connectedRight": true,
-                    "handles": [
-                      0.5,
-                      1,
-                      0.5,
-                      0
-                    ],
+                    "handles": [0.5, 1, 0.5, 0],
                     "type": "bezier",
                     "value": 1.1
                   },
@@ -70,12 +55,7 @@
                     "id": "7oT2zVBMEX",
                     "position": 8.333,
                     "connectedRight": true,
-                    "handles": [
-                      0.5,
-                      1,
-                      0.5,
-                      0
-                    ],
+                    "handles": [0.5, 1, 0.5, 0],
                     "type": "bezier",
                     "value": -6.400000000000005
                   },
@@ -83,12 +63,7 @@
                     "id": "X6J059f0RP",
                     "position": 11.367,
                     "connectedRight": true,
-                    "handles": [
-                      0.5,
-                      1,
-                      0.5,
-                      0
-                    ],
+                    "handles": [0.5, 1, 0.5, 0],
                     "type": "bezier",
                     "value": -11.300000000000045
                   },
@@ -96,12 +71,7 @@
                     "id": "7fuiNBl2it",
                     "position": 14.467,
                     "connectedRight": true,
-                    "handles": [
-                      0.5,
-                      1,
-                      0.5,
-                      0
-                    ],
+                    "handles": [0.5, 1, 0.5, 0],
                     "type": "bezier",
                     "value": -14.850000000000051
                   }
@@ -115,12 +85,7 @@
                     "id": "Lbp56oW9YW",
                     "position": 11.333,
                     "connectedRight": true,
-                    "handles": [
-                      0.5,
-                      1,
-                      0.5,
-                      0
-                    ],
+                    "handles": [0.5, 1, 0.5, 0],
                     "type": "bezier",
                     "value": 0
                   },
@@ -128,12 +93,7 @@
                     "id": "UJEcTstsg9",
                     "position": 24,
                     "connectedRight": true,
-                    "handles": [
-                      0.5,
-                      1,
-                      0.5,
-                      0
-                    ],
+                    "handles": [0.5, 1, 0.5, 0],
                     "type": "bezier",
                     "value": 1
                   }
@@ -152,6 +112,7 @@
   },
   "definitionVersion": "0.4.0",
   "revisionHistory": [
+    "tl04seq72runway",
     "d22NewKxxxoMosMP",
     "PsojGmdeW5bAvzRf",
     "tl03initial0001"
