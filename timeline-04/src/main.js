@@ -8,20 +8,17 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import GUI from 'lil-gui';
 import Stats from 'stats.js';
 import { getProject, types } from '@theatre/core';
-import timelineState from './timeline-03-state.json';
+import timelineState from './timeline-04-state.json';
 
 // ---------------------------------------------------------------------------
-// timeline-02 = star-shatter (the exploding glass glb + scroll-scrubbed
-// AnimationMixer) forked and fused with paths-grid (the 4-point star mask,
-// borrowed here to cut window-shaped holes in an opaque wall instead of
-// paths-grid's own use of the same mask -- revealing a gradient behind a
-// filled star shape).
+// timeline-04 = timeline-03 plus the gas-tunnel vortex from Vortex/vortex-espacial
+// (TubeGeometry + FBM shader), keyframable on the main Theatre Scene track.
 //
 // Depth order along -z, camera starts on the +z side looking down the axis:
 //   camera (starts far) -> GLASS_Z (the shatter glb, closest to camera --
 //                           sits just in front of the wall's center hole)
 //                        -> WALL_Z (opaque, 3 star-shaped holes)
-//                        -> space scene (aura veils + starfield, far back)
+//                        -> space scene (aura veils + starfield + vortex tunnel)
 //
 // Everything behind the glass is deliberately kept in the renderer's OPAQUE
 // queue (see the wall / wisp / starfield materials), because three.js renders
@@ -180,6 +177,26 @@ const CONFIG = {
   wispColorB: '#e838ff',
   eyeStar: false,
 
+  // -- vortex tunnel (ported from Vortex/vortex-espacial) -- a TubeGeometry
+  // following a 4-point CatmullRom path, shaded with an FBM gas/vein material.
+  // Path waypoints + look params are also on the Theatre Scene track so they
+  // can be keyframed; the GUI writes the same uniforms for live tweaking.
+  showVortex: true,
+  vortexTrim: 1,
+  vortexSpeed: 0.6,
+  vortexSwirl: 3,
+  vortexNoiseScale: 2.0,
+  vortexTurbulence: 0.6,
+  vortexGlow: 1.4,
+  vortexDetail: 3.0,
+  vortexColorCore: '#ffffff',
+  vortexColorMid: '#598cff',
+  vortexColorEdge: '#05081a',
+  vortexP0: { x: 0, y: 0, z: -2 },
+  vortexP1: { x: 9, y: 2, z: -34 },
+  vortexP2: { x: -7, y: -1, z: -66 },
+  vortexP3: { x: 0, y: 0, z: -98 },
+
   // -- alarm beacon -- a soft red light behind the wall, visible only through
   // the star cutouts (same depth-tested reveal that lets the starfield show
   // through), pulsing on/off like a strobe/alarm rather than a slow breathe
@@ -234,7 +251,7 @@ const CONFIG = {
   glowAnimate: true, // off freezes the hotspots where they are
   showGlass: true,
   // which material the shards wear -- see GLASS_MATERIAL_MODES
-  glassMaterialMode: 'authored',
+  glassMaterialMode: 'glassmatcap',
   showAuras: true,
   showReflection: true, // the live CubeCamera envMap on the glass
   fresnelRim: true,
@@ -248,7 +265,7 @@ const CONFIG = {
 // index.html is what's running it, but wrong the moment the built bundle is
 // imported cross-origin, e.g. a Webflow page pulling it from its Cloudflare
 // Pages deployment: the browser would request
-// "https://<webflow-site>/timeline-03/<file>.glb" instead of the actual host,
+// "https://<webflow-site>/timeline-04/<file>.glb" instead of the actual host,
 // a guaranteed 404. Always pointing at the live, shared /assets/ deployment
 // (built.sh copies the repo's assets/ folder to dist/assets/) sidesteps that
 // entirely -- the same absolute URL works from the dev server, this site's own
@@ -1081,6 +1098,251 @@ const bgStarMaterial = new THREE.PointsMaterial({
 const bgStars = new THREE.Points(bgStarGeo, bgStarMaterial);
 bgStars.visible = CONFIG.showBackgroundStars;
 scene.add(bgStars);
+
+// ---------------------------------------------------------------------------
+// Vortex tunnel -- TubeGeometry along a CatmullRom path + FBM gas/vein shader,
+// ported from Vortex/vortex-espacial. Sits in the space volume behind the wall
+// so the camera flies into it after the pass-through.
+// ---------------------------------------------------------------------------
+const TUNNEL_RADIUS = 6;
+const TUNNEL_TUBULAR_SEGMENTS = 220;
+const TUNNEL_RADIAL_SEGMENTS = 48;
+
+const vortexColorScratch = new THREE.Color();
+
+const vortexUniforms = {
+  uTime: { value: 0 },
+  uColorCore: { value: new THREE.Color(CONFIG.vortexColorCore) },
+  uColorMid: { value: new THREE.Color(CONFIG.vortexColorMid) },
+  uColorEdge: { value: new THREE.Color(CONFIG.vortexColorEdge) },
+  uSpeed: { value: CONFIG.vortexSpeed },
+  uNoiseScale: { value: CONFIG.vortexNoiseScale },
+  uTurbulence: { value: CONFIG.vortexTurbulence },
+  uGlow: { value: CONFIG.vortexGlow },
+  uDetail: { value: CONFIG.vortexDetail },
+  uGrowth: { value: CONFIG.vortexTrim },
+};
+
+const vortexMaterial = new THREE.ShaderMaterial({
+  uniforms: vortexUniforms,
+  side: THREE.DoubleSide,
+  transparent: true,
+  depthWrite: false,
+  fog: false,
+  blending: THREE.AdditiveBlending,
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      // TubeGeometry: uv.x along the tube, uv.y around the circumference
+      // (opposite of CylinderGeometry) -- swap so the fragment shader sees
+      // angle on x and depth on y.
+      vUv = uv.yx;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    precision highp float;
+    varying vec2 vUv;
+    uniform float uTime;
+    uniform vec3 uColorCore;
+    uniform vec3 uColorMid;
+    uniform vec3 uColorEdge;
+    uniform float uSpeed;
+    uniform float uNoiseScale;
+    uniform float uTurbulence;
+    uniform float uGlow;
+    uniform float uDetail;
+    uniform float uGrowth;
+
+    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+    vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+    vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
+    vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+    float snoise(vec3 v) {
+      const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+      const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+      vec3 i  = floor(v + dot(v, C.yyy));
+      vec3 x0 = v - i + dot(i, C.xxx);
+
+      vec3 g = step(x0.yzx, x0.xyz);
+      vec3 l = 1.0 - g;
+      vec3 i1 = min(g.xyz, l.zxy);
+      vec3 i2 = max(g.xyz, l.zxy);
+
+      vec3 x1 = x0 - i1 + C.xxx;
+      vec3 x2 = x0 - i2 + C.yyy;
+      vec3 x3 = x0 - D.yyy;
+
+      i = mod289(i);
+      vec4 p = permute(permute(permute(
+                i.z + vec4(0.0, i1.z, i2.z, 1.0))
+              + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+              + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+
+      float n_ = 0.142857142857;
+      vec3 ns = n_ * D.wyz - D.xzx;
+
+      vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+      vec4 x_ = floor(j * ns.z);
+      vec4 y_ = floor(j - 7.0 * x_);
+
+      vec4 x = x_ * ns.x + ns.yyyy;
+      vec4 y = y_ * ns.x + ns.yyyy;
+      vec4 h = 1.0 - abs(x) - abs(y);
+
+      vec4 b0 = vec4(x.xy, y.xy);
+      vec4 b1 = vec4(x.zw, y.zw);
+
+      vec4 s0 = floor(b0) * 2.0 + 1.0;
+      vec4 s1 = floor(b1) * 2.0 + 1.0;
+      vec4 sh = -step(h, vec4(0.0));
+
+      vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+      vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+
+      vec3 p0 = vec3(a0.xy, h.x);
+      vec3 p1 = vec3(a0.zw, h.y);
+      vec3 p2 = vec3(a1.xy, h.z);
+      vec3 p3 = vec3(a1.zw, h.w);
+
+      vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+      p0 *= norm.x;
+      p1 *= norm.y;
+      p2 *= norm.z;
+      p3 *= norm.w;
+
+      vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+      m = m * m;
+      return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+    }
+
+    float fbm(vec3 p) {
+      float total = 0.0;
+      float amp = 0.5;
+      for (int i = 0; i < 5; i++) {
+        total += amp * snoise(p);
+        p *= 2.0;
+        amp *= 0.5;
+      }
+      return total;
+    }
+
+    void main() {
+      float angle = vUv.x * 6.28318530718;
+      float depth = vUv.y * uNoiseScale + uTime * uSpeed;
+
+      vec3 angCoord = vec3(cos(angle), sin(angle), depth * 0.1);
+
+      float warpN = fbm(angCoord * 1.1 + vec3(0.0, 0.0, uTime * 0.06)) * uTurbulence;
+
+      float veins = 0.0;
+      float amp = 0.5;
+      float freq = 1.0;
+      for (int i = 0; i < 4; i++) {
+        float jitter = snoise(angCoord * (1.6 + float(i) * 0.7) + vec3(float(i) * 4.1)) * uTurbulence * 0.35;
+        float phase = (depth + (warpN + jitter) * 1.6) * freq;
+        float ring = 1.0 - abs(fract(phase) - 0.5) * 2.0;
+        ring = pow(clamp(ring, 0.0, 1.0), 6.0);
+        veins += amp * ring;
+        freq *= 1.85;
+        amp *= 0.55;
+      }
+      veins = clamp(veins, 0.0, 1.0);
+      veins = pow(veins, max(uDetail * 0.4, 0.3));
+
+      vec3 color = mix(uColorEdge, uColorMid, smoothstep(0.05, 0.5, veins));
+      color = mix(color, uColorCore, smoothstep(0.55, 0.9, veins));
+
+      float pulse = 0.92 + 0.08 * sin(uTime * 1.5);
+      color *= uGlow * pulse;
+
+      float alpha = clamp(veins * 1.3, 0.0, 1.0);
+
+      // Trim / growth: hide past uGrowth; bright tip ring at the growth edge.
+      float tip = 1.0 - smoothstep(0.0, 0.035, abs(vUv.y - uGrowth));
+      alpha *= step(vUv.y, uGrowth);
+      alpha = max(alpha, tip * 0.95);
+      color = mix(color, uColorCore, tip);
+      color *= 1.0 + tip * 1.5;
+
+      gl_FragColor = vec4(color, alpha);
+    }
+  `,
+});
+
+function buildVortexCurve(p0, p1, p2, p3) {
+  return new THREE.CatmullRomCurve3([
+    new THREE.Vector3(p0.x, p0.y, p0.z),
+    new THREE.Vector3(p1.x, p1.y, p1.z),
+    new THREE.Vector3(p2.x, p2.y, p2.z),
+    new THREE.Vector3(p3.x, p3.y, p3.z),
+  ]);
+}
+
+let tunnelCurve = buildVortexCurve(CONFIG.vortexP0, CONFIG.vortexP1, CONFIG.vortexP2, CONFIG.vortexP3);
+const tunnelMesh = new THREE.Mesh(
+  new THREE.TubeGeometry(tunnelCurve, TUNNEL_TUBULAR_SEGMENTS, TUNNEL_RADIUS, TUNNEL_RADIAL_SEGMENTS, false),
+  vortexMaterial
+);
+tunnelMesh.renderOrder = 2;
+tunnelMesh.visible = CONFIG.showVortex;
+scene.add(tunnelMesh);
+
+const vortexSpinAxis = new THREE.Vector3(0, 0, -1);
+const vortexSpinQuat = new THREE.Quaternion();
+let vortexSwirl = CONFIG.vortexSwirl;
+
+function rebuildVortexTunnel(p0, p1, p2, p3) {
+  tunnelCurve = buildVortexCurve(p0, p1, p2, p3);
+  const newGeo = new THREE.TubeGeometry(
+    tunnelCurve,
+    TUNNEL_TUBULAR_SEGMENTS,
+    TUNNEL_RADIUS,
+    TUNNEL_RADIAL_SEGMENTS,
+    false
+  );
+  tunnelMesh.geometry.dispose();
+  tunnelMesh.geometry = newGeo;
+
+  const p0v = new THREE.Vector3(p0.x, p0.y, p0.z);
+  const p3v = new THREE.Vector3(p3.x, p3.y, p3.z);
+  vortexSpinAxis.copy(p3v).sub(p0v).normalize();
+}
+rebuildVortexTunnel(CONFIG.vortexP0, CONFIG.vortexP1, CONFIG.vortexP2, CONFIG.vortexP3);
+
+function hexToRgb01(hex) {
+  const c = vortexColorScratch.set(hex);
+  return { r: c.r, g: c.g, b: c.b, a: 1 };
+}
+
+function applyVortexLook(values) {
+  const core = values.vortexColorCore;
+  const mid = values.vortexColorMid;
+  const edge = values.vortexColorEdge;
+  vortexUniforms.uColorCore.value.setRGB(core.r, core.g, core.b);
+  vortexUniforms.uColorMid.value.setRGB(mid.r, mid.g, mid.b);
+  vortexUniforms.uColorEdge.value.setRGB(edge.r, edge.g, edge.b);
+  vortexUniforms.uSpeed.value = values.vortexSpeed;
+  vortexUniforms.uNoiseScale.value = values.vortexNoiseScale;
+  vortexUniforms.uTurbulence.value = values.vortexTurbulence;
+  vortexUniforms.uGlow.value = values.vortexGlow;
+  vortexUniforms.uDetail.value = values.vortexDetail;
+  vortexUniforms.uGrowth.value = values.vortexTrim;
+  vortexSwirl = values.vortexSwirl;
+  if (typeof values.vortexVisible === 'boolean') {
+    tunnelMesh.visible = CONFIG.showVortex && values.vortexVisible;
+  } else {
+    tunnelMesh.visible = CONFIG.showVortex;
+  }
+}
+
+function applyVortexPathFromConfig() {
+  rebuildVortexTunnel(CONFIG.vortexP0, CONFIG.vortexP1, CONFIG.vortexP2, CONFIG.vortexP3);
+  vortexUniforms.uGrowth.value = CONFIG.vortexTrim;
+}
 
 // aura veils -- trimmed version of aura-zoom's FBM-swirled glow plane, static
 // (no travel-based reseeding) since this scene is a single pass-through, not
@@ -1960,7 +2222,7 @@ const SEQUENCE_LENGTH = 24; // seconds -- just the T(0..1) -> playhead mapping r
 // open the *committed* keyframes rather than an empty sheet. Studio's own
 // localStorage autosave still takes precedence while it's open, so authoring
 // in dev behaves as before.
-const sceneSheet = getProject('Timeline 03', { state: timelineState }).sheet('Wall Scene');
+const sceneSheet = getProject('Timeline 04', { state: timelineState }).sheet('Wall Scene');
 
 const sceneTrack = sceneSheet.object('Scene', {
   fov: types.number(50, { range: [25, 100] }),
@@ -1983,10 +2245,50 @@ const sceneTrack = sceneSheet.object('Scene', {
   cameraOffsetX: types.number(0, { range: [-10, 10], nudgeMultiplier: 0.01 }),
   cameraOffsetY: types.number(0, { range: [-10, 10], nudgeMultiplier: 0.01 }),
   cameraOffsetZ: types.number(0, { range: [-70, 30], nudgeMultiplier: 0.05 }),
+
+  // -- vortex tunnel (look + path + growth), keyframable on the main Scene --
+  vortexVisible: types.boolean(true),
+  vortexTrim: types.number(CONFIG.vortexTrim, { range: [0, 1], nudgeMultiplier: 0.01 }),
+  vortexSpeed: types.number(CONFIG.vortexSpeed, { range: [0, 3], nudgeMultiplier: 0.01 }),
+  vortexSwirl: types.number(CONFIG.vortexSwirl, { range: [-12, 12], nudgeMultiplier: 0.05 }),
+  vortexNoiseScale: types.number(CONFIG.vortexNoiseScale, { range: [0.5, 6], nudgeMultiplier: 0.01 }),
+  vortexTurbulence: types.number(CONFIG.vortexTurbulence, { range: [0, 2], nudgeMultiplier: 0.01 }),
+  vortexGlow: types.number(CONFIG.vortexGlow, { range: [0.3, 3], nudgeMultiplier: 0.01 }),
+  vortexDetail: types.number(CONFIG.vortexDetail, { range: [1, 6], nudgeMultiplier: 0.01 }),
+  vortexColorCore: types.rgba(hexToRgb01(CONFIG.vortexColorCore)),
+  vortexColorMid: types.rgba(hexToRgb01(CONFIG.vortexColorMid)),
+  vortexColorEdge: types.rgba(hexToRgb01(CONFIG.vortexColorEdge)),
+  vortexP0: {
+    x: types.number(CONFIG.vortexP0.x, { range: [-40, 40], nudgeMultiplier: 0.1 }),
+    y: types.number(CONFIG.vortexP0.y, { range: [-40, 40], nudgeMultiplier: 0.1 }),
+    z: types.number(CONFIG.vortexP0.z, { range: [-200, 20], nudgeMultiplier: 0.5 }),
+  },
+  vortexP1: {
+    x: types.number(CONFIG.vortexP1.x, { range: [-40, 40], nudgeMultiplier: 0.1 }),
+    y: types.number(CONFIG.vortexP1.y, { range: [-40, 40], nudgeMultiplier: 0.1 }),
+    z: types.number(CONFIG.vortexP1.z, { range: [-200, 20], nudgeMultiplier: 0.5 }),
+  },
+  vortexP2: {
+    x: types.number(CONFIG.vortexP2.x, { range: [-40, 40], nudgeMultiplier: 0.1 }),
+    y: types.number(CONFIG.vortexP2.y, { range: [-40, 40], nudgeMultiplier: 0.1 }),
+    z: types.number(CONFIG.vortexP2.z, { range: [-200, 20], nudgeMultiplier: 0.5 }),
+  },
+  vortexP3: {
+    x: types.number(CONFIG.vortexP3.x, { range: [-40, 40], nudgeMultiplier: 0.1 }),
+    y: types.number(CONFIG.vortexP3.y, { range: [-40, 40], nudgeMultiplier: 0.1 }),
+    z: types.number(CONFIG.vortexP3.z, { range: [-200, 20], nudgeMultiplier: 0.5 }),
+  },
 });
 
 const theatreColorScratch = new THREE.Color();
 let theatreValues = sceneTrack.value;
+let lastVortexPathKey = '';
+
+function vortexPathKey(v) {
+  const pts = [v.vortexP0, v.vortexP1, v.vortexP2, v.vortexP3];
+  return pts.map((p) => `${p.x},${p.y},${p.z}`).join('|');
+}
+
 sceneTrack.onValuesChange((v) => {
   theatreValues = v;
 
@@ -1998,6 +2300,13 @@ sceneTrack.onValuesChange((v) => {
   gridUniforms.uGlowColor.value.copy(theatreColorScratch.setRGB(r, g, b));
 
   bloomPass.strength = v.bloomStrength;
+
+  applyVortexLook(v);
+  const pathKey = vortexPathKey(v);
+  if (pathKey !== lastVortexPathKey) {
+    lastVortexPathKey = pathKey;
+    rebuildVortexTunnel(v.vortexP0, v.vortexP1, v.vortexP2, v.vortexP3);
+  }
 });
 
 function applyTimeline(t) {
@@ -2099,7 +2408,7 @@ stats.showPanel(0); // 0: fps -- click the panel to cycle to ms/mb
 stats.dom.style.cssText = 'position:fixed;top:0;left:80px;cursor:pointer;opacity:0.9;z-index:10000;';
 document.body.appendChild(stats.dom);
 
-const gui = new GUI({ title: 'Timeline 03 Controls' });
+const gui = new GUI({ title: 'Timeline 04 Controls' });
 
 const tips = { theatreTip: '⌥/Alt + \\ toggles Theatre UI (?minify omits it)' };
 gui.add(tips, 'theatreTip').name('Tip').disable();
@@ -2261,6 +2570,54 @@ spaceFolder
 spaceFolder.addColor(CONFIG, 'wispColorA').name('Aura Color A').onChange((v) => wispUniforms.uColorA.value.set(v));
 spaceFolder.addColor(CONFIG, 'wispColorB').name('Aura Color B').onChange((v) => wispUniforms.uColorB.value.set(v));
 
+const vortexFolder = gui.addFolder('Vortex Tunnel');
+vortexFolder
+  .add(CONFIG, 'vortexTrim', 0, 1, 0.01)
+  .name('Trim')
+  .onChange((v) => (vortexUniforms.uGrowth.value = v));
+vortexFolder
+  .add(CONFIG, 'vortexSpeed', 0, 3, 0.01)
+  .name('Speed')
+  .onChange((v) => (vortexUniforms.uSpeed.value = v));
+vortexFolder
+  .add(CONFIG, 'vortexSwirl', -12, 12, 0.05)
+  .name('Swirl')
+  .onChange((v) => (vortexSwirl = v));
+vortexFolder
+  .add(CONFIG, 'vortexNoiseScale', 0.5, 6, 0.01)
+  .name('Noise Scale')
+  .onChange((v) => (vortexUniforms.uNoiseScale.value = v));
+vortexFolder
+  .add(CONFIG, 'vortexTurbulence', 0, 2, 0.01)
+  .name('Turbulence')
+  .onChange((v) => (vortexUniforms.uTurbulence.value = v));
+vortexFolder
+  .add(CONFIG, 'vortexGlow', 0.3, 3, 0.01)
+  .name('Glow')
+  .onChange((v) => (vortexUniforms.uGlow.value = v));
+vortexFolder
+  .add(CONFIG, 'vortexDetail', 1, 6, 0.01)
+  .name('Detail')
+  .onChange((v) => (vortexUniforms.uDetail.value = v));
+vortexFolder
+  .addColor(CONFIG, 'vortexColorCore')
+  .name('Color Core')
+  .onChange((v) => vortexUniforms.uColorCore.value.set(v));
+vortexFolder
+  .addColor(CONFIG, 'vortexColorMid')
+  .name('Color Mid')
+  .onChange((v) => vortexUniforms.uColorMid.value.set(v));
+vortexFolder
+  .addColor(CONFIG, 'vortexColorEdge')
+  .name('Color Edge')
+  .onChange((v) => vortexUniforms.uColorEdge.value.set(v));
+;['vortexP0', 'vortexP1', 'vortexP2', 'vortexP3'].forEach((key, i) => {
+  const folder = vortexFolder.addFolder(`Path P${i}`);
+  folder.add(CONFIG[key], 'x', -40, 40, 0.1).name('X').onFinishChange(applyVortexPathFromConfig);
+  folder.add(CONFIG[key], 'y', -40, 40, 0.1).name('Y').onFinishChange(applyVortexPathFromConfig);
+  folder.add(CONFIG[key], 'z', -200, 20, 0.5).name('Z').onFinishChange(applyVortexPathFromConfig);
+});
+
 const alarmFolder = gui.addFolder('Alarm Light');
 // visibility itself is driven per-frame in animate() (it also depends on
 // Theatre's alarmLevel), so this is a plain flag with no side effect here
@@ -2328,6 +2685,10 @@ layersFolder
   .onChange((v) => (rimUniforms.uRimStrength.value = v ? CONFIG.rimStrength : 0));
 layersFolder.add(CONFIG, 'showAuras').name('Aura Veils').onChange(seedWisps);
 layersFolder.add(CONFIG, 'showBackgroundStars').name('Starfield').onChange((v) => (bgStars.visible = v));
+layersFolder
+  .add(CONFIG, 'showVortex')
+  .name('Vortex Tunnel')
+  .onChange((v) => (tunnelMesh.visible = v && theatreValues.vortexVisible));
 layersFolder.add(CONFIG, 'eyeStar').name('Eye Star').onChange((v) => (eyeStar.visible = v));
 layersFolder.add(CONFIG, 'alarmEnabled').name('Alarm Beacon');
 layersFolder.add(CONFIG, 'enableBloom').name('Bloom Pass').onChange((v) => (bloomPass.enabled = v));
@@ -2365,6 +2726,9 @@ function animate() {
   applyTimeline(currentGlobalT);
 
   wispUniforms.uTime.value = time;
+  vortexUniforms.uTime.value = time;
+  vortexSpinQuat.setFromAxisAngle(vortexSpinAxis, time * vortexSwirl * 0.15);
+  tunnelMesh.quaternion.copy(vortexSpinQuat);
   for (const wisp of wisps) {
     if (!wisp.visible) continue;
     const b = 1 + Math.sin(time * 0.5 + wisp.userData.breathePhase) * 0.12;

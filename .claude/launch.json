@@ -58,6 +58,12 @@
       "port": 5203
     },
     {
+      "name": "timeline-04",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-C", "timeline-04", "run", "dev"],
+      "port": 5204
+    },
+    {
       "name": "dist-preview",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-y", "serve", "dist", "-l", "4173"],

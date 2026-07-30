@@ -1,0 +1,159 @@
+{
+  "sheetsById": {
+    "Wall Scene": {
+      "staticOverrides": {
+        "byObject": {
+          "Scene": {
+            "cameraOffsetZ": 1.1,
+            "bloomStrength": 0.2199999999999998,
+            "vortexTrim": 0
+          }
+        }
+      },
+      "sequence": {
+        "subUnitsPerUnit": 30,
+        "length": 24,
+        "type": "PositionalSequence",
+        "tracksByObject": {
+          "Scene": {
+            "trackData": {
+              "alarmLevelTrk01": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Scene:[\"alarmLevel\"]",
+                "keyframes": [
+                  {
+                    "id": "alarmKf01",
+                    "position": 0,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "alarmKf02",
+                    "position": 7.5,
+                    "connectedRight": false,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  }
+                ]
+              },
+              "Wh_y7-oFji": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Scene:[\"cameraOffsetZ\"]",
+                "keyframes": [
+                  {
+                    "id": "jDyZOlgocQ",
+                    "position": 0,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1.1
+                  },
+                  {
+                    "id": "7oT2zVBMEX",
+                    "position": 8.333,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": -6.400000000000005
+                  },
+                  {
+                    "id": "X6J059f0RP",
+                    "position": 11.367,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": -11.300000000000045
+                  },
+                  {
+                    "id": "7fuiNBl2it",
+                    "position": 14.467,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": -14.850000000000051
+                  }
+                ]
+              },
+              "KyvjohQ6SL": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Scene:[\"vortexTrim\"]",
+                "keyframes": [
+                  {
+                    "id": "Lbp56oW9YW",
+                    "position": 11.333,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "UJEcTstsg9",
+                    "position": 24,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "trackIdByPropPath": {
+              "[\"alarmLevel\"]": "alarmLevelTrk01",
+              "[\"cameraOffsetZ\"]": "Wh_y7-oFji",
+              "[\"vortexTrim\"]": "KyvjohQ6SL"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitionVersion": "0.4.0",
+  "revisionHistory": [
+    "d22NewKxxxoMosMP",
+    "PsojGmdeW5bAvzRf",
+    "tl03initial0001"
+  ]
+}
