@@ -39,6 +39,10 @@ trap 'rm -rf "$LOGDIR"' EXIT
 build_site() {
   local name="$1"
   cd "$ROOT/$name"
+  # pnpm may need to wipe node_modules (store/layout mismatch). Without a TTY
+  # it refuses unless CI=true -- and build_site always runs non-interactively
+  # (backgrounded batches, Cloudflare Pages, piped logs).
+  export CI=true
   if [ -f pnpm-lock.yaml ]; then
     pnpm install --frozen-lockfile
   else

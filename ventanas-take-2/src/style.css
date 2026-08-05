@@ -1,0 +1,14 @@
+:root{--ink:#dfe9ff;--dim:#8fa0c8;--cyan:#66d2ff;--mag:#cea7fc;--panel:rgba(8,10,26,.82);--line:rgba(120,150,220,.2)}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;color:var(--ink);background:#040718;font-family:ui-monospace,Menlo,Consolas,monospace}
+  #app{position:fixed;inset:0}canvas{display:block}
+  #bar{position:fixed;left:16px;top:16px;z-index:12;display:flex;gap:7px;flex-wrap:wrap;align-items:center;max-width:80vw}
+  #bar button{background:var(--panel);border:1px solid var(--line);color:var(--cyan);border-radius:9px;padding:8px 12px;font:inherit;font-size:12px;cursor:pointer;backdrop-filter:blur(8px)}
+  #bar button.on{background:rgba(102,210,255,.25);color:#fff}
+  #bar .act{color:var(--mag);border-color:rgba(206,167,252,.4)}
+  #help{position:fixed;left:16px;bottom:14px;z-index:12;max-width:620px;font-size:11px;line-height:1.6;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;backdrop-filter:blur(8px);display:none}
+  #help.on{display:block}
+  #help b{color:var(--cyan)}
+  #err{position:fixed;inset:0;z-index:50;display:none;place-items:center;padding:32px;background:#040718;text-align:center}
+  #err div{max-width:540px;font-size:13px;line-height:1.7}#err code{color:var(--cyan)}
+  #fadeOverlay{position:fixed;inset:0;z-index:20;background:#000;opacity:0;pointer-events:none}
