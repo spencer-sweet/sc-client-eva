@@ -234,7 +234,7 @@ const CONFIG = {
   glowAnimate: true, // off freezes the hotspots where they are
   showGlass: true,
   // which material the shards wear -- see GLASS_MATERIAL_MODES
-  glassMaterialMode: 'authored',
+  glassMaterialMode: 'glassmatcap',
   showAuras: true,
   showReflection: true, // the live CubeCamera envMap on the glass
   fresnelRim: true,
