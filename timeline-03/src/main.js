@@ -60,7 +60,7 @@ const CONFIG = {
   clipStart: 0.13, // shatter clip: only this window of the glb's timeline is scrubbed through
   clipEnd: 0.29,
   autoRotateSpeed: 0,
-  glbModel: '02_star-shatter-glass-animated.glb',
+  glbModel: 'jagged/Broken 60 fragments.glb',
   // multiplier on top of the auto-fit scale (see modelAutoFitScale) that lands
   // the glb's own tip-to-tip span exactly on the center window -- 0.001 steps
   // since that auto-fit is already a tight fit and even a 0.01 nudge visibly
@@ -120,7 +120,7 @@ const CONFIG = {
   gridRows: 11,
   gridLineThickness: 0.01,
   gridGlowRadius: 3,
-  gridGlowColor: '#00fff0', // neon cyan hotspot
+  gridGlowColor: '#5a00a3',
   gridIntensity: 2.5,
   gridBaseColor: '#2f3551', // muted slate lattice, only lit up by the glow centers
   gridNodeColor: '#2f3551', // reticles match the lines so the lattice reads as one piece
@@ -132,10 +132,10 @@ const CONFIG = {
   // Lissajous orbits, or (glowFollowMouse) a single hotspot raycast onto the
   // wall plane from the cursor
   glowFollowMouse: true,
-  glowCenterCount: 2,
-  glowSpeed: 0.4,
-  glowOrbitRadiusX: 6,
-  glowOrbitRadiusY: 4,
+  glowCenterCount: 1,
+  glowSpeed: 0.27,
+  glowOrbitRadiusX: 9,
+  glowOrbitRadiusY: 9,
   // how much the plain wall (not just the grid lines/nodes) picks up the
   // glow color near a hotspot -- 0 keeps the wall untouched, 1 matches the
   // grid's own glow strength
@@ -265,6 +265,7 @@ const GLB_OPTIONS = {
   '03 - Jagged Edges': '03_star-shatter_jagged-edges.glb',
   '04 - Jagged, 100 Shards': '04_star-shatter_jagged-100-shards.glb',
   '05 - Jagged, 120 Shards': '05_star-shatter_jagged-120-shards.glb',
+  'Jagged - 60 fragments': 'jagged/Broken 60 fragments.glb',
 };
 
 // The wall's home position. Its LIVE z is CONFIG.wallZ (Wall Z in the GUI) --
@@ -1740,7 +1741,7 @@ function loadModel(filename) {
   glassMaterial = null;
 
   gltfLoader.load(
-    `${STAR_SHATTER_BASE_URL}/${filename}`,
+    `${STAR_SHATTER_BASE_URL}/${encodeURI(filename)}`,
     (gltf) => {
       gltf.scene.traverse((child) => {
         if (child.isMesh) {
@@ -1885,6 +1886,50 @@ window.setScrollSource = function setScrollSource(source) {
   scrollSourceController?.updateDisplay();
 };
 
+// Same host-page contract as setScrollSource: a plain Webflow <script> can hide
+// (or restore) Theatre Studio without importing this module. Safe to call before
+// Studio finishes loading -- the mode is remembered and applied on initialize.
+const THEATRE_UI_MODES = ['hidden', 'visible'];
+let theatreStudio = null;
+let theatreUiMode = 'visible';
+
+function applyTheatreUi() {
+  if (!theatreStudio) return;
+  if (theatreUiMode === 'hidden') theatreStudio.ui.hide();
+  else theatreStudio.ui.restore();
+}
+
+window.setTheatreJSUI = function setTheatreJSUI(mode) {
+  if (!THEATRE_UI_MODES.includes(mode)) {
+    console.warn(`setTheatreJSUI: "${mode}" must be one of ${THEATRE_UI_MODES.join(', ')}`);
+    return;
+  }
+  theatreUiMode = mode;
+  applyTheatreUi();
+};
+
+// Same host-page contract for lil-gui: hide/show the debug panel from a plain
+// Webflow <script>. Safe before the GUI is constructed -- mode is remembered
+// and applied when `new GUI(...)` runs.
+const LIL_GUI_UI_MODES = ['hidden', 'visible'];
+let lilGui = null;
+let lilGuiUiMode = 'visible';
+
+function applyLilGuiUi() {
+  if (!lilGui) return;
+  if (lilGuiUiMode === 'hidden') lilGui.hide();
+  else lilGui.show();
+}
+
+window.setLilGUIVisibility = function setLilGUIVisibility(mode) {
+  if (!LIL_GUI_UI_MODES.includes(mode)) {
+    console.warn(`setLilGUIVisibility: "${mode}" must be one of ${LIL_GUI_UI_MODES.join(', ')}`);
+    return;
+  }
+  lilGuiUiMode = mode;
+  applyLilGuiUi();
+};
+
 // -- 'page' source ----------------------------------------------------------
 function readPageScroll() {
   const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
@@ -1984,7 +2029,12 @@ if (THEATRE_STUDIO) {
   // fire-and-forget: the scene doesn't need the editor to finish loading before
   // it starts rendering, so this deliberately isn't awaited
   import('@theatre/studio')
-    .then(({ default: studio }) => studio.initialize())
+    .then(({ default: studio }) => {
+      studio.initialize();
+      theatreStudio = studio;
+      // honor any setTheatreJSUI() call that landed before Studio was ready
+      applyTheatreUi();
+    })
     .catch((err) => console.error('Failed to load Theatre Studio', err));
 }
 
@@ -2002,7 +2052,7 @@ const sceneTrack = sceneSheet.object('Scene', {
   fov: types.number(50, { range: [25, 100] }),
   // scales the grid's glow hotspots and the wall spill together
   glowIntensity: types.number(CONFIG.gridIntensity, { range: [0, 4], nudgeMultiplier: 0.01 }),
-  glowColor: types.rgba({ r: 0, g: 1, b: 0.941, a: 1 }),
+  glowColor: types.rgba({ r: 0.353, g: 0, b: 0.639, a: 1 }), // #5a00a3
   // 0..1 multiplier on the alarm beacon's pulse, for keyframing the alarm in
   // partway through the scroll rather than having it blink from the start
   alarmLevel: types.number(0, { range: [0, 1], nudgeMultiplier: 0.01 }),
@@ -2136,6 +2186,9 @@ stats.dom.style.cssText = 'position:fixed;top:0;left:80px;cursor:pointer;opacity
 document.body.appendChild(stats.dom);
 
 const gui = new GUI({ title: 'Timeline 03 Controls' });
+lilGui = gui;
+// honor any setLilGUIVisibility() call that landed before the GUI existed
+applyLilGuiUi();
 
 const tips = { theatreTip: '⌥/Alt + \\ toggles Theatre UI (?minify omits it)' };
 gui.add(tips, 'theatreTip').name('Tip').disable();
