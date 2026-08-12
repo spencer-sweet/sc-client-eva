@@ -1,7 +1,7 @@
 :root{--ink:#dfe9ff;--dim:#8fa0c8;--cyan:#66d2ff;--mag:#cea7fc;--panel:rgba(8,10,26,.82);--line:rgba(120,150,220,.2)}
   *{box-sizing:border-box}
   html,body{margin:0;overflow-x:hidden;color:var(--ink);background:#040718;font-family:ui-monospace,Menlo,Consolas,monospace}
-  #app{position:fixed;inset:0}canvas{display:block}
+  #scene{position:fixed;inset:0;width:100vw;height:100vh;display:block}
   [data-fs-card]{height:200vh;width:1px}
   #scrollReadout{position:fixed;bottom:14px;right:16px;z-index:12;max-width:46vw;color:rgba(223,233,255,.55);font-size:11px;line-height:1.7;text-align:right;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 11px;backdrop-filter:blur(8px)}
   #scrollReadout b{color:var(--cyan)}

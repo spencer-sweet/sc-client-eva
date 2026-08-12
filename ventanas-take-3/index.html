@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <canvas id="scene"></canvas>
     <div id="bar">
       <button id="actBtn" class="act">✦ Activar estrella</button>
       <button id="resetBtn">Reset</button>
@@ -34,7 +34,7 @@
 
     <div id="scrollReadout"></div>
 
-    <!-- Scroll-driven timeline runway. Invisible spacers -- the fixed #app canvas
+    <!-- Scroll-driven timeline runway. Invisible spacers -- the fixed #scene canvas
          renders on top the whole time; scrolling past these just advances the
          Theatre.js sequence (see measureCards() in main.js). -->
     <section data-fs-section="1">

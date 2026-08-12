@@ -101,11 +101,13 @@ let wallTex=buildWallTexture();
 /* =========================================================================
    THREE.JS
    ========================================================================= */
-const app=document.getElementById('app');
-const renderer=new THREE.WebGLRenderer({ antialias:true });
+// mounts onto a pre-existing <canvas id="scene">, same contract as
+// timeline-03/timeline-04, so this drops into a host page's markup instead of
+// requiring a bespoke <div id="app"> wrapper to append into.
+const canvas=document.getElementById('scene');
+const renderer=new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-app.appendChild(renderer.domElement);
 const scene=new THREE.Scene(); scene.background=new THREE.Color(0x020410);
 // environment procedural (solo para que el vidrio PBR de la estrella tenga reflejos/transmision creibles;
 // costo unico al arrancar, no por cuadro)
