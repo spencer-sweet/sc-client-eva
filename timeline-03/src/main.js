@@ -10,6 +10,8 @@ import Stats from 'stats.js';
 import { getProject, types } from '@theatre/core';
 import timelineState from './timeline-03-state.json';
 
+const DEFAULT_MATCAP_TEXTURE = 'Crystal-2.png';
+
 // ---------------------------------------------------------------------------
 // timeline-02 = star-shatter (the exploding glass glb + scroll-scrubbed
 // AnimationMixer) forked and fused with paths-grid (the 4-point star mask,
@@ -234,7 +236,7 @@ const CONFIG = {
   glowAnimate: true, // off freezes the hotspots where they are
   showGlass: true,
   // which material the shards wear -- see GLASS_MATERIAL_MODES
-  glassMaterialMode: 'glassmatcap',
+  glassMaterialMode: `matcap:${DEFAULT_MATCAP_TEXTURE}`,
   showAuras: true,
   showReflection: true, // the live CubeCamera envMap on the glass
   fresnelRim: true,
@@ -1530,6 +1532,36 @@ const clearMatcapGlassMaterial = new THREE.MeshMatcapMaterial({
 });
 addMatcapGlassAlpha(clearMatcapGlassMaterial);
 
+function matcapTextureLabel(filename) {
+  return `${filename.replace(/\.(jpg|jpeg|png)$/i, '').replace(/[-_]/g, ' ')} (matcap)`;
+}
+
+function makeImportedMatcapGlassMaterial(url) {
+  const tex = new THREE.TextureLoader().load(url);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshMatcapMaterial({
+    matcap: tex,
+    transparent: true,
+    depthWrite: false,
+  });
+  addMatcapGlassAlpha(mat);
+  return mat;
+}
+
+// Every image in src/textures/ becomes a see-through matcap glass option.
+const MATCAP_TEXTURE_URLS = import.meta.glob('./textures/*.{jpg,png,JPG,PNG}', {
+  eager: true,
+  import: 'default',
+});
+const importedMatcapGlassMaterials = {};
+const importedMatcapGlassModes = {};
+for (const [path, url] of Object.entries(MATCAP_TEXTURE_URLS)) {
+  const filename = path.split('/').pop();
+  const mode = `matcap:${filename}`;
+  importedMatcapGlassMaterials[mode] = makeImportedMatcapGlassMaterial(url);
+  importedMatcapGlassModes[matcapTextureLabel(filename)] = mode;
+}
+
 // Persistent, shared across every loaded model -- loadModel() must not dispose
 // these when swapping glbs (the authored material is per-glb and IS disposed).
 const SHARED_GLASS_MATERIALS = new Set([
@@ -1537,6 +1569,7 @@ const SHARED_GLASS_MATERIALS = new Set([
   threeGlassMaterial,
   matcapGlassMaterial,
   clearMatcapGlassMaterial,
+  ...Object.values(importedMatcapGlassMaterials),
 ]);
 
 // label -> CONFIG.glassMaterialMode value, for the GUI dropdown
@@ -1546,9 +1579,12 @@ const GLASS_MATERIAL_MODES = {
   'Solid Grey': 'grey',
   'Shiny Matcap': 'matcap',
   'Shiny Glass Matcap': 'glassmatcap',
+  ...importedMatcapGlassModes,
 };
 
 function activeGlassMaterial() {
+  const imported = importedMatcapGlassMaterials[CONFIG.glassMaterialMode];
+  if (imported) return imported;
   switch (CONFIG.glassMaterialMode) {
     case 'physical':
       return threeGlassMaterial;
