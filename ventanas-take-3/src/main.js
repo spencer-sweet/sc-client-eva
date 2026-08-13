@@ -10,8 +10,24 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { getProject, types as t, onChange } from '@theatre/core';
 import studio from '@theatre/studio';
 import theatreState from './theatre-state/theatre-state_2026-08-13-1728.json';
+import {
+  ensureDevHelpers,
+  initDevHelpers,
+  tickScroll,
+  setParallaxButton,
+  setVortexDrawButton,
+} from './dev-helpers/index.js';
 
-const bail=(m)=>{ const e=document.getElementById('err'); e.style.display='grid'; e.firstElementChild.innerHTML=m; };
+// Mounts #scene / #bar / #help / #err (+ inlined styles) before any wiring below.
+ensureDevHelpers();
+
+const bail=(m)=>{
+  const e=document.getElementById('err');
+  if(!e){ console.error(m); return; }
+  e.style.display='grid';
+  if(e.firstElementChild) e.firstElementChild.innerHTML=m;
+  else e.innerHTML='<div>'+m+'</div>';
+};
 
 // Studio loads by default (same authoring workflow as the single-file HTML).
 // Pass ?minify to skip it (e.g. Webflow embed).
@@ -309,7 +325,7 @@ function removeVortexPoint(){
 }
 function resetVortexPath(){
   CTRL=[ new THREE.Vector3(0,0,15), new THREE.Vector3(0,0,-17), new THREE.Vector3(0,0,-49), new THREE.Vector3(0,0,-81) ];
-  pathTension=0.5; const ti=document.getElementById('vortexTensionInput'); if(ti) ti.value=0.5;
+  pathTension=0.5;
   vortexSelected=-1; rebuildVortexTube(); rebuildVortexMarkers(); saveVortexPath();
 }
 function vortexScreenToWorldAtDist(v2, dist){ const v=new THREE.Vector3(v2.x,v2.y,0.5).unproject(camera);
@@ -713,7 +729,8 @@ composer.addPass(new OutputPass());
 
 /* ---------- THEATRE ---------- */
 const num=(v,a,b)=>t.number(v,{range:[a,b]});
-const project=getProject('Ventanas 3D SVG', { state: theatreState }); const sheet=project.sheet('Scene');
+const PROJECT_ID='Ventanas 3D SVG';
+const project=getProject(PROJECT_ID, { state: theatreState }); const sheet=project.sheet('Scene');
 // vortexSheet removed: everything lives on the SAME sheet ('Scene') so there's one timeline
 try{ onChange(sheet.sequence.pointer.playing, p=>{ seqPlayingMain=!!p; }); }catch(e){}
 
@@ -882,66 +899,20 @@ const bloomObj=sheet.object('Bloom',{ strength:num(0.4,0,3), radius:num(0.5,0,2)
 // so these must exist before that callback runs (TDZ otherwise).
 let parallaxEnabled=false, mouseNX=0, mouseNY=0, paraX=0, paraY=0;
 let paraxIntensity=1;
-const paraxBtn=document.getElementById('paraxBtn');
 try{
   const paraxObj=sheet.object('Parallax',{ enabled:num(0,0,1), intensity:num(1,0,3) });
-  paraxObj.onValuesChange(v=>{ const on=v.enabled>=0.5; parallaxEnabled=on; paraxBtn.textContent='Parallax: '+(on?'ON':'OFF'); paraxBtn.classList.toggle('on',on); paraxIntensity=v.intensity; });
+  paraxObj.onValuesChange(v=>{ const on=v.enabled>=0.5; parallaxEnabled=on; setParallaxButton(on); paraxIntensity=v.intensity; });
 }catch(err){ console.error('Parallax Theatre object', err); }
 bloomObj.onValuesChange(v=>{ bloom.strength=v.strength; bloom.radius=v.radius; bloom.threshold=v.threshold; });
 
 try{ if(studioReady) studio.setSelection([starObj]); }catch(e){}
 
-/* ---------- camera editor + triggers ---------- */
+/* ---------- camera editor (OrbitControls); bar buttons wired in initDevHelpers ---------- */
 let orbit=null;
 try{
   orbit=new OrbitControls(camera, renderer.domElement); orbit.target.set(0,-0.4,0); orbit.enableDamping=true; orbit.enabled=false; orbit.update();
-  const navBtn=document.getElementById('navBtn');
-  navBtn.addEventListener('click', ()=>{ orbiting=!orbiting; orbit.enabled=orbiting;
-    if(orbiting){ const f=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion); orbit.target.copy(camera.position).add(f.multiplyScalar(18)); orbit.update(); }
-    navBtn.textContent='Orbit: '+(orbiting?'ON':'OFF'); navBtn.classList.toggle('on',orbiting); });
-  document.getElementById('grabBtn').addEventListener('click', ()=>{ const e=new THREE.Euler().setFromQuaternion(camera.quaternion,'YXZ');
-    if(!studioReady) return; const scr=studio.scrub(); scr.capture(({set})=>{ set(camObj.props.position.x,camera.position.x); set(camObj.props.position.y,camera.position.y); set(camObj.props.position.z,camera.position.z);
-      set(camObj.props.rotation.x,e.x); set(camObj.props.rotation.y,e.y); set(camObj.props.rotation.z,e.z); set(camObj.props.fov,camera.fov); }); scr.commit();
-    const b=document.getElementById('grabBtn'), o=b.textContent; b.textContent='✓ keyframe'; setTimeout(()=>b.textContent=o,900); });
-  document.getElementById('resetCamBtn').addEventListener('click', ()=>{
-    camera.position.set(0,0,18); camera.rotation.set(0,0,0,'YXZ'); camera.fov=42; camera.updateProjectionMatrix();
-    if(orbit){ orbit.target.set(0,-0.4,0); orbit.update(); }
-    if(!studioReady) return; const scr=studio.scrub(); scr.capture(({set})=>{ set(camObj.props.position.x,0); set(camObj.props.position.y,0); set(camObj.props.position.z,18);
-      set(camObj.props.rotation.x,0); set(camObj.props.rotation.y,0); set(camObj.props.rotation.z,0); set(camObj.props.fov,42); }); scr.commit();
-  });
 }catch(err){ console.error('orbit',err); }
-document.getElementById('actBtn').addEventListener('click', activate);
-document.getElementById('resetBtn').addEventListener('click', resetStar);
 
-const theatreUiBtn=document.getElementById('theatreUiBtn');
-function syncTheatreUiBtn(){
-  if(!theatreUiBtn) return;
-  if(!studioReady){
-    theatreUiBtn.textContent='Theatre UI: N/A';
-    theatreUiBtn.disabled=true;
-    theatreUiBtn.classList.remove('on');
-    return;
-  }
-  const hidden=!!studio.ui.isHidden;
-  theatreUiBtn.textContent='Theatre UI: '+(hidden?'OFF':'ON');
-  theatreUiBtn.classList.toggle('on', !hidden);
-}
-theatreUiBtn?.addEventListener('click', ()=>{
-  if(!studioReady) return;
-  if(studio.ui.isHidden) studio.ui.restore();
-  else studio.ui.hide();
-  syncTheatreUiBtn();
-});
-syncTheatreUiBtn();
-document.getElementById('loadGlbBtn').addEventListener('click', ()=> document.getElementById('glbFileInput').click());
-document.getElementById('glbFileInput').addEventListener('change', ev=>{
-  const f=ev.target.files[0]; if(!f) return;
-  const reader=new FileReader();
-  reader.onload=()=>{ loadGLBFromBuffer(reader.result);
-    const b=document.getElementById('loadGlbBtn'), o=b.textContent; b.textContent='✓ '+f.name; setTimeout(()=>b.textContent=o,1500); };
-  reader.readAsArrayBuffer(f);
-  ev.target.value=''; // allow picking the same file again later
-});
 const ray=new THREE.Raycaster(), ptr=new THREE.Vector2();
 const vortexNdc=(ev)=>new THREE.Vector2((ev.clientX/innerWidth)*2-1, -(ev.clientY/innerHeight)*2+1);
 renderer.domElement.addEventListener('pointerdown', ev=>{
@@ -951,14 +922,14 @@ renderer.domElement.addEventListener('pointerdown', ev=>{
   const hMarker=ray.intersectObjects(vortexMarkers,false)[0];
   if(hMarker){ selectVortexPoint(hMarker.object.userData.i); return; } // click a path point: select it (always available, like the original)
   selectVortexPoint(-1); // click empty space: deselect
-  const h=ray.intersectObjects(fillMeshes,false)[0]; if(h && h.object.userData.main) activate(); });
+});
 renderer.domElement.addEventListener('pointermove', ev=>{ if(!vortexDrawMode||!vortexDrawing) return; const p=vortexNdc(ev);
   const last=vortexStroke[vortexStroke.length-1]; if(!last||Math.hypot(p.x-last.x,p.y-last.y)>0.012) vortexStroke.push(p); });
 const vortexFinishDraw=()=>{ if(!vortexDrawing) return; vortexDrawing=false;
   if(vortexStroke.length>=2){ const K=Math.min(9,Math.max(3,Math.round(vortexStroke.length/6))); const pts=[];
     for(let j=0;j<K;j++){ const f=j/(K-1); const idx=Math.round(f*(vortexStroke.length-1)); pts.push(vortexScreenToWorldAtDist(vortexStroke[idx], 6+(vortexDrawDepth-6)*f)); }
     CTRL=pts; vortexSelected=-1; rebuildVortexTube(); rebuildVortexMarkers(); saveVortexPath(); }
-  setVortexDrawMode(false); const b=document.getElementById('vortexDrawBtn'); b.classList.remove('on'); };
+  setVortexDrawMode(false); setVortexDrawButton(false); };
 renderer.domElement.addEventListener('pointerup', vortexFinishDraw);
 renderer.domElement.addEventListener('pointerleave', vortexFinishDraw);
 
@@ -973,28 +944,35 @@ try{
     CTRL[vortexSelected].copy(vortexMarkers[vortexSelected].position); rebuildVortexTube(); saveVortexPath();
   });
 }catch(err){ console.error('TransformControls', err); }
-document.getElementById('vortexDrawBtn').addEventListener('click', ()=>{
-  setVortexDrawMode(!vortexDrawMode); document.getElementById('vortexDrawBtn').classList.toggle('on',vortexDrawMode);
-});
-document.getElementById('vortexTensionInput').addEventListener('input', ev=>{ pathTension=parseFloat(ev.target.value); rebuildVortexTube(); saveVortexPath(); });
-document.getElementById('vortexDepthInput').addEventListener('input', ev=>{ vortexDrawDepth=parseFloat(ev.target.value); });
-document.getElementById('vortexAddBtn').addEventListener('click', addVortexPoint);
-document.getElementById('vortexRemoveBtn').addEventListener('click', removeVortexPoint);
-document.getElementById('vortexResetPathBtn').addEventListener('click', resetVortexPath);
-document.getElementById('helpToggleBtn').addEventListener('click', ()=> document.getElementById('help').classList.toggle('on'));
 
-/* ---------- parallax effect (toggle), driven by mouse ---------- */
+/* ---------- parallax mouse + Dev UI wiring ---------- */
 addEventListener('pointermove', ev=>{ mouseNX=(ev.clientX/innerWidth)*2-1; mouseNY=(ev.clientY/innerHeight)*2-1; });
-paraxBtn.addEventListener('click', ()=>{ parallaxEnabled=!parallaxEnabled; paraxBtn.textContent='Parallax: '+(parallaxEnabled?'ON':'OFF'); paraxBtn.classList.toggle('on',parallaxEnabled); });
 
-document.getElementById('help').innerHTML='<b>Center window</b>: nearly invisible at rest (clear for the GLB), but reacts to the alarm. Normal glass on the side windows. <b>Trigger:</b> ✦ Activate or click the center (live preview). '+
-  '<b>Star (GLB) → shatterProgress</b>: scrub the exact explosion frame from the timeline. <b>Load another GLB…</b>: pick any .glb from disk to try it in the same spot. '+
-  '<b>Parallax</b>: button or the timeline boolean; moves wall+glass+neon, star, and background at different depths with the mouse. '+
-  '<b>Masks</b>: <b>Center Window</b> = its own offset/scale; <b>Side Windows</b> = one control for both. '+
-  '<b>Star background → swingRange</b>: limits how far the stars rotate (they used to spin without a cap). '+
-  '<b>Wall & Grid Fade → blackout</b>: fades ONLY the wall and grid to black, leaving glass, neon, and the GLB visible. The grid already clips itself around whatever window positions you set. '+
-  '<b>Orbit</b> = free-look; <b>Capture</b> = camera keyframe; <b>Reset camera</b> if it drifted too far/near.';
-if(!studioReady){ const h=document.getElementById('help'); h.innerHTML='⚠ Timeline failed to start. '+h.innerHTML; }
+initDevHelpers({
+  THREE,
+  studio,
+  studioReady,
+  projectId: PROJECT_ID,
+  camera,
+  camObj,
+  orbit,
+  isOrbiting: ()=>orbiting,
+  setOrbiting: (v)=>{ orbiting=v; },
+  activate,
+  resetStar,
+  loadGLBFromBuffer,
+  isParallaxEnabled: ()=>parallaxEnabled,
+  setParallaxEnabled: (v)=>{ parallaxEnabled=v; },
+  isVortexDrawMode: ()=>vortexDrawMode,
+  setVortexDrawMode,
+  setPathTension: (v)=>{ pathTension=v; },
+  setVortexDrawDepth: (v)=>{ vortexDrawDepth=v; },
+  rebuildVortexTube,
+  saveVortexPath,
+  addVortexPoint,
+  removeVortexPoint,
+  resetVortexPath,
+});
 
 addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); bloom.setSize(innerWidth,innerHeight); });
@@ -1043,199 +1021,8 @@ function tick(){
   }
   tmpW.copy(tmpC0).add(tmpC1).multiplyScalar(0.14); starU.uAlarm.value.copy(tmpW);
   if(orbit && orbiting) orbit.update();
-  if(scrollState.source==='external'){
-    currentGlobalT=targetGlobalT;
-  }else{
-    currentGlobalT += (targetGlobalT-currentGlobalT)*Math.min(1, dt*scrollState.damping);
-  }
-  // Off while authoring in Studio -- otherwise every frame snaps Theatre's
-  // playhead back to scroll T, so Sequence scrubbing never sticks.
-  if(scrollState.syncTheatreToScroll) sheet.sequence.position = currentGlobalT * SEQUENCE_LENGTH;
+  tickScroll(dt, sheet);
   composer.render();
 }
-/* ---------- SCROLL SECTIONS ----------
-   13 cards (1010,1020,1030 / 2010..2060 / 3010..3030 / 4010) act as invisible
-   scroll runway. Each reports its own 0-100% scroll-through progress (same
-   measurement timeline-04 uses per-section); the overall span from the first
-   card entering to the last card exiting collapses to one global T (0..1)
-   that scrubs sheet.sequence.position directly.
 
-   T can come from three interchangeable sources, same contract as
-   timeline-03: 'page' reads this document's own scroll, 'sections' measures
-   the [data-fs-card] runway below (the default here, since that's what this
-   page actually has), and 'external' hands T over entirely to a host page
-   (Webflow + Lenis, etc.) calling window.seekTimelineTo(t) itself. */
-// sheet.sequence has no public .length getter in this @theatre/core version (only
-// position/pointer/play/pause) -- hardcode it, same workaround timeline-04 uses.
-const SEQUENCE_LENGTH=14.44;
-const cardEls=Array.from(document.querySelectorAll('[data-fs-card]'));
-const cardProgress=new Map();
-let currentGlobalT=0, targetGlobalT=0;
-
-const SCROLL_SOURCES=['page','sections','external'];
-const scrollState={ source:'sections', damping:4.5, syncTheatreToScroll:true };
-
-// query-param fallback, same as timeline-03 -- lets a bare `import` embed (no
-// access to this module's internals) pick a source before the scene starts
-// driving itself off page scroll
-{ const qp=new URLSearchParams(location.search).get('scrollSource');
-  if(SCROLL_SOURCES.includes(qp)) scrollState.source=qp; }
-
-function readPageScroll(){
-  const maxScroll=document.documentElement.scrollHeight-innerHeight;
-  return maxScroll>0 ? THREE.MathUtils.clamp(scrollY/maxScroll,0,1) : 0;
-}
-
-function measureCards(){
-  const vh=innerHeight;
-  let firstTopAbs=null, lastBottomAbs=null;
-  for(let i=0;i<cardEls.length;i++){
-    const el=cardEls[i], rect=el.getBoundingClientRect();
-    const pct=THREE.MathUtils.clamp(((vh-rect.top)/rect.height)*100,0,100);
-    cardProgress.set(el.dataset.fsCard, pct);
-    if(i===0) firstTopAbs=rect.top+scrollY;
-    if(i===cardEls.length-1) lastBottomAbs=rect.bottom+scrollY;
-  }
-  if(firstTopAbs===null) return 0;
-  const startScroll=firstTopAbs-vh, endScroll=lastBottomAbs-vh, span=endScroll-startScroll;
-  return span>0 ? THREE.MathUtils.clamp((scrollY-startScroll)/span,0,1) : 0;
-}
-
-const scrollReadoutEl=document.getElementById('scrollReadout');
-const scrollSourceSelect=document.getElementById('scrollSourceSelect');
-const syncTheatreCheckbox=document.getElementById('syncTheatreToScroll');
-const seekTSlider=document.getElementById('seekTSlider');
-const seekTNumber=document.getElementById('seekTNumber');
-let seekTDragging=false;
-
-function syncSeekControls(t){
-  if(seekTDragging) return;
-  const v=Number(t).toFixed(3);
-  if(seekTSlider && seekTSlider.value!==v) seekTSlider.value=v;
-  if(seekTNumber && seekTNumber.value!==v) seekTNumber.value=v;
-}
-
-function applyScrollSourceUi(){
-  if(scrollSourceSelect && scrollSourceSelect.value!==scrollState.source){
-    scrollSourceSelect.value=scrollState.source;
-  }
-  // Card runway readout is meaningless (and noisy) when a host page owns T.
-  if(scrollReadoutEl) scrollReadoutEl.hidden = scrollState.source==='external';
-}
-
-function updateScrollReadout(){
-  applyScrollSourceUi();
-  syncSeekControls(targetGlobalT);
-  if(!scrollReadoutEl || scrollReadoutEl.hidden) return;
-  const rows=cardEls.map(el=>{
-    const id=el.dataset.fsCard;
-    return '<div class="readoutRow"><span>'+id+'</span><span class="readoutDots" aria-hidden="true"></span><b>'+(cardProgress.get(id)??0).toFixed(0)+'%</b></div>';
-  });
-  scrollReadoutEl.innerHTML=
-    rows.join('')+
-    '<div class="readoutMeta">source <b>'+scrollState.source+'</b><br>T <b>'+targetGlobalT.toFixed(3)+'</b></div>';
-}
-
-// rAF-throttled, so a burst of scroll events collapses into one measure per
-// rendered frame
-let scrollTicking=false;
-function onScroll(){
-  if(scrollTicking) return; scrollTicking=true;
-  requestAnimationFrame(()=>{
-    scrollTicking=false;
-    // measured unconditionally so the card readout stays live in 'page' mode
-    // too -- only which value drives T depends on the source
-    const cardsT=measureCards();
-    if(scrollState.source==='page') window.seekTimelineTo(readPageScroll());
-    else if(scrollState.source==='sections') window.seekTimelineTo(cardsT);
-    updateScrollReadout();
-  });
-}
-
-// Only attached for the two internal sources; 'external' leaves this page's
-// scroll alone entirely so a host-page Lenis handler is the sole driver.
-function syncScrollListener(){
-  removeEventListener('scroll', onScroll);
-  if(scrollState.source!=='external'){ addEventListener('scroll', onScroll, {passive:true}); onScroll(); }
-  updateScrollReadout();
-}
-
-// The public API. T is a 0..1 fraction of the whole timeline. Kept on
-// `window` (not just exported) precisely so a plain <script> in Webflow --
-// which cannot import from this module -- can still drive it. Defined before
-// syncScrollListener() runs since it calls onScroll(), which calls these.
-window.seekTimelineTo=function(v){
-  const n=Number(v);
-  if(Number.isFinite(n)) targetGlobalT=THREE.MathUtils.clamp(n,0,1);
-  syncSeekControls(targetGlobalT);
-};
-window.setTimelineTo=function(v){ window.seekTimelineTo(v); currentGlobalT=targetGlobalT; };
-window.setScrollSource=function(source){
-  if(!SCROLL_SOURCES.includes(source)){ console.warn('setScrollSource: "'+source+'" must be one of '+SCROLL_SOURCES.join(', ')); return; }
-  scrollState.source=source;
-  syncScrollListener();
-};
-
-scrollSourceSelect?.addEventListener('change', ()=>{
-  window.setScrollSource(scrollSourceSelect.value);
-});
-if(syncTheatreCheckbox){
-  syncTheatreCheckbox.checked=scrollState.syncTheatreToScroll;
-  syncTheatreCheckbox.addEventListener('change', ()=>{
-    scrollState.syncTheatreToScroll=syncTheatreCheckbox.checked;
-  });
-}
-function onSeekTInput(ev){
-  const n=Number(ev.target.value);
-  if(!Number.isFinite(n)) return;
-  seekTDragging=true;
-  if(seekTSlider && ev.target!==seekTSlider) seekTSlider.value=String(n);
-  if(seekTNumber && ev.target!==seekTNumber) seekTNumber.value=String(n);
-  window.setTimelineTo(n);
-}
-function endSeekTDrag(){ seekTDragging=false; syncSeekControls(targetGlobalT); }
-seekTSlider?.addEventListener('input', onSeekTInput);
-seekTNumber?.addEventListener('input', onSeekTInput);
-seekTSlider?.addEventListener('pointerup', endSeekTDrag);
-seekTSlider?.addEventListener('change', endSeekTDrag);
-seekTNumber?.addEventListener('change', endSeekTDrag);
-applyScrollSourceUi();
-
-// Host-page contract for the top-left #bar: hide it entirely, collapse to the
-// toggle chip, or show all controls. Safe before/after the bar exists.
-const DEV_BAR_MODES=['hidden','minified','expanded'];
-const barEl=document.getElementById('bar');
-const devBarToggleBtn=document.getElementById('devBarToggleBtn');
-let devBarMode='expanded';
-
-function applyDevBar(){
-  if(!barEl) return;
-  barEl.dataset.devBar=devBarMode;
-  if(!devBarToggleBtn) return;
-  if(devBarMode==='expanded'){
-    devBarToggleBtn.textContent='▾ Dev UI';
-    devBarToggleBtn.title='Collapse dev ui bar';
-    devBarToggleBtn.classList.add('on');
-  }else if(devBarMode==='minified'){
-    devBarToggleBtn.textContent='▸ Dev UI';
-    devBarToggleBtn.title='Expand dev ui bar';
-    devBarToggleBtn.classList.remove('on');
-  }
-}
-
-window.setDevBar=function setDevBar(mode){
-  if(!DEV_BAR_MODES.includes(mode)){
-    console.warn('setDevBar: "'+mode+'" must be one of '+DEV_BAR_MODES.join(', '));
-    return;
-  }
-  devBarMode=mode;
-  applyDevBar();
-};
-
-devBarToggleBtn?.addEventListener('click', ()=>{
-  window.setDevBar(devBarMode==='expanded' ? 'minified' : 'expanded');
-});
-applyDevBar();
-
-syncScrollListener();
 tick();
