@@ -41,7 +41,7 @@ const LOGO_URL = `${import.meta.env.BASE_URL}eva-logo.png`;
 const SVG_W=1440, SVG_H=1627;
 const CRISP  = ["M719.309 493.4813C720.7344 488.5062 728.5656 488.5062 729.991 493.4813C741.1842 532.5542 769.7592 619.1548 813.7022 663.0978C857.6452 707.0408 944.2458 735.6158 983.3187 746.809C988.2938 748.2344 988.2938 756.0656 983.3187 757.491C944.2458 768.6842 857.6452 797.2592 813.7022 841.2022C769.7592 885.1452 741.1842 971.7458 729.991 1010.8187C728.5656 1015.7938 720.7344 1015.7938 719.309 1010.8187C708.1158 971.7458 679.5408 885.1452 635.5978 841.2022C591.6548 797.2592 505.0542 768.6842 465.9813 757.491C461.0062 756.0656 461.0062 748.2344 465.9813 746.809C505.0542 735.6158 591.6548 707.0408 635.5978 663.0978C679.5408 619.1548 708.1158 532.5542 719.309 493.4813Z","M376.8714 872.0336C378.1066 867.7221 384.8934 867.7221 386.1286 872.0336C395.8288 905.8948 420.5923 980.9442 458.674 1019.026C496.7558 1057.1077 571.8052 1081.8712 605.6664 1091.5714C609.9779 1092.8066 609.9779 1099.5934 605.6664 1100.8286C571.8052 1110.5288 496.7558 1135.2923 458.674 1173.374C420.5923 1211.4558 395.8288 1286.5052 386.1286 1320.3664C384.8934 1324.6779 378.1066 1324.6779 376.8714 1320.3664C367.1712 1286.5052 342.4077 1211.4558 304.326 1173.374C266.2442 1135.2923 191.1948 1110.5288 157.3336 1100.8286C153.0221 1099.5934 153.0221 1092.8066 157.3336 1091.5714C191.1948 1081.8712 266.2442 1057.1077 304.326 1019.026C342.4077 980.9442 367.1712 905.8948 376.8714 872.0336Z","M1060.1714 872.0336C1061.4066 867.7221 1068.1934 867.7221 1069.4286 872.0336C1079.1288 905.8948 1103.8923 980.9442 1141.974 1019.026C1180.0558 1057.1077 1255.1052 1081.8712 1288.9664 1091.5714C1293.2779 1092.8066 1293.2779 1099.5934 1288.9664 1100.8286C1255.1052 1110.5288 1180.0558 1135.2923 1141.974 1173.374C1103.8923 1211.4558 1079.1288 1286.5052 1069.4286 1320.3664C1068.1934 1324.6779 1061.4066 1324.6779 1060.1714 1320.3664C1050.4712 1286.5052 1025.7077 1211.4558 987.626 1173.374C949.5442 1135.2923 874.4948 1110.5288 840.6336 1100.8286C836.3221 1099.5934 836.3221 1092.8066 840.6336 1091.5714C874.4948 1081.8712 949.5442 1057.1077 987.626 1019.026C1025.7077 980.9442 1050.4712 905.8948 1060.1714 872.0336Z"];   // 3 sharp stars (correct 4star_03a shape)
 const GHOST  = ["M450.694 741.196C613.306 701.874 687.614 593.858 715.762 477.01C717.935 467.99 734.184 467.934 736.157 476.999C762.019 595.846 815.569 689.936 999.766 742.392C1008.03 744.746 1007.9 757.506 999.537 759.509C843.939 796.776 767.394 862.741 733.408 1033.78C731.644 1042.65 717.051 1043.05 714.759 1034.3C672.547 873.064 584.443 795.59 450.57 762.703C441.536 760.484 441.653 743.382 450.694 741.196Z","M824.972 1084.11C967.056 1047.48 1029.64 953.868 1054.53 855.062C1056.8 846.066 1073.34 846.033 1075.4 855.078C1098.79 957.575 1147.21 1039.37 1305.28 1085.53C1313.53 1087.94 1313.29 1100.79 1304.95 1102.85C1170.52 1135.86 1103.91 1194.03 1073.51 1341.27C1071.68 1350.13 1056.88 1350.54 1054.51 1341.81C1016.86 1203.34 940.306 1135.5 824.938 1105.9C815.961 1103.59 815.998 1086.43 824.972 1084.11Z","M144.516 1084.72C292.433 1049.25 349.175 954.899 372.068 855.941C374.159 846.902 390.229 846.799 392.275 855.848C415.4 958.129 463.014 1040.07 620.447 1086.16C628.698 1088.57 628.46 1101.43 620.11 1103.48C485.16 1136.61 419.527 1194.82 389.681 1344.16C387.932 1352.91 374.038 1353.41 371.716 1344.79C332.157 1197.93 269.453 1136.05 144.39 1105.96C135.343 1103.79 135.467 1086.89 144.516 1084.72Z"];   // 3 large soft stars behind (glow)
-const BLOBS  = ["M999.394 742.78L985.498 746.704C988.135 748.555 987.792 752.989 985.498 754.873C986.665 754.873 999.696 759.086 999.696 759.086C1008.31 756.382 1006.48 743.849 999.394 742.78Z","M449.075 761.351L462.167 755.162C459.531 753.311 459.873 748.877 462.167 746.993C461 746.993 447.97 742.78 447.97 742.78C443.287 746.396 442.772 758.83 449.075 761.351Z","M716.464 475.857L720.478 491.208C722.328 488.572 727.151 488.481 729.036 490.775C729.036 490.073 735.729 475.857 735.729 475.857C730.554 467.518 718.313 470.162 716.464 475.857Z","M732.926 1034.3L727.497 1013.29C725.646 1015.93 721.372 1015.58 719.487 1013.29C719.487 1013.99 715.514 1034.79 715.514 1034.79C718.555 1043.13 731.602 1040.97 732.926 1034.3Z","M620.923 1087.66L608.799 1091.09C611.1 1092.7 610.801 1096.57 608.799 1098.22C609.818 1098.22 621.186 1101.89 621.186 1101.89C628.705 1099.53 627.103 1088.6 620.923 1087.66Z","M142.529 1103.87L153.952 1098.47C151.652 1096.85 151.951 1092.98 153.952 1091.34C152.934 1091.34 141.565 1087.66 141.565 1087.66C137.48 1090.82 137.03 1101.67 142.529 1103.87Z","M373.791 853.751L377.293 867.145C378.907 864.844 383.115 864.766 384.76 866.767C384.76 866.154 390.599 853.751 390.599 853.751C386.084 846.475 375.404 848.782 373.791 853.751Z","M389.492 1344.58L384.092 1323.68C382.252 1326.31 378.001 1325.97 376.127 1323.68C376.127 1324.38 372.176 1345.07 372.176 1345.07C375.2 1353.36 388.175 1351.21 389.492 1344.58Z","M1305.81 1087.11L1293.68 1090.54C1295.98 1092.15 1295.68 1096.02 1293.68 1097.66C1294.7 1097.66 1306.07 1101.34 1306.07 1101.34C1313.59 1098.98 1311.99 1088.05 1305.81 1087.11Z","M822.617 1102.87L834.04 1097.47C831.74 1095.85 832.039 1091.98 834.04 1090.34C833.022 1090.34 821.653 1086.66 821.653 1086.66C817.568 1089.82 817.118 1100.67 822.617 1102.87Z","M1056.86 853.492L1060.37 866.886C1061.98 864.586 1066.19 864.507 1067.83 866.508C1067.83 865.895 1073.67 853.492 1073.67 853.492C1069.16 846.216 1058.48 848.523 1056.86 853.492Z","M1072.55 1342.26L1067.31 1321.98C1065.53 1324.53 1061.4 1324.2 1059.58 1321.98C1059.58 1322.66 1055.75 1342.74 1055.75 1342.74C1058.68 1350.79 1071.27 1348.7 1072.55 1342.26Z"];   // 12 tip flares
+// const BLOBS  = ["M999.394 742.78L985.498 746.704C988.135 748.555 987.792 752.989 985.498 754.873C986.665 754.873 999.696 759.086 999.696 759.086C1008.31 756.382 1006.48 743.849 999.394 742.78Z","M449.075 761.351L462.167 755.162C459.531 753.311 459.873 748.877 462.167 746.993C461 746.993 447.97 742.78 447.97 742.78C443.287 746.396 442.772 758.83 449.075 761.351Z","M716.464 475.857L720.478 491.208C722.328 488.572 727.151 488.481 729.036 490.775C729.036 490.073 735.729 475.857 735.729 475.857C730.554 467.518 718.313 470.162 716.464 475.857Z","M732.926 1034.3L727.497 1013.29C725.646 1015.93 721.372 1015.58 719.487 1013.29C719.487 1013.99 715.514 1034.79 715.514 1034.79C718.555 1043.13 731.602 1040.97 732.926 1034.3Z","M620.923 1087.66L608.799 1091.09C611.1 1092.7 610.801 1096.57 608.799 1098.22C609.818 1098.22 621.186 1101.89 621.186 1101.89C628.705 1099.53 627.103 1088.6 620.923 1087.66Z","M142.529 1103.87L153.952 1098.47C151.652 1096.85 151.951 1092.98 153.952 1091.34C152.934 1091.34 141.565 1087.66 141.565 1087.66C137.48 1090.82 137.03 1101.67 142.529 1103.87Z","M373.791 853.751L377.293 867.145C378.907 864.844 383.115 864.766 384.76 866.767C384.76 866.154 390.599 853.751 390.599 853.751C386.084 846.475 375.404 848.782 373.791 853.751Z","M389.492 1344.58L384.092 1323.68C382.252 1326.31 378.001 1325.97 376.127 1323.68C376.127 1324.38 372.176 1345.07 372.176 1345.07C375.2 1353.36 388.175 1351.21 389.492 1344.58Z","M1305.81 1087.11L1293.68 1090.54C1295.98 1092.15 1295.68 1096.02 1293.68 1097.66C1294.7 1097.66 1306.07 1101.34 1306.07 1101.34C1313.59 1098.98 1311.99 1088.05 1305.81 1087.11Z","M822.617 1102.87L834.04 1097.47C831.74 1095.85 832.039 1091.98 834.04 1090.34C833.022 1090.34 821.653 1086.66 821.653 1086.66C817.568 1089.82 817.118 1100.67 822.617 1102.87Z","M1056.86 853.492L1060.37 866.886C1061.98 864.586 1066.19 864.507 1067.83 866.508C1067.83 865.895 1073.67 853.492 1073.67 853.492C1069.16 846.216 1058.48 848.523 1056.86 853.492Z","M1072.55 1342.26L1067.31 1321.98C1065.53 1324.53 1061.4 1324.2 1059.58 1321.98C1059.58 1322.66 1055.75 1342.74 1055.75 1342.74C1058.68 1350.79 1071.27 1348.7 1072.55 1342.26Z"];   // 12 tip flares
 const LINES  = ["M1005.88 751.015L1036.34 751.015","M1093.19 751.015L1440 751.015","M1065.27 848.06L1065.27 778.954","M1065.27 722.193L1065.27 -79.887","M443.613 751.013H410.125","M705.094 1074.31L401.569 770.785","M361.82 730.803L0.396173 369.38","M745.398 1074.31L1046.97 772.735","M1086.6 732.518L1440.17 378.946","M705.094 1113.7L-5.43758 1824.24","M745.398 1113.7L1443.53 1811.84","M353.274 751.014L-0.00440376 751.014","M381.194 848.653L381.194 778.953","M381.197 722.972L381.197 -80.0007","M724.609 1040.64L724.609 1065.55","M724.609 -80.381L724.609 470.274","M626.383 1093.98L696.745 1093.98","M-1.95518 1093.98H137.083","M753.538 1093.98H817.924","M724.609 1122.4L724.609 1442","M1311.1 1093.98L1452.57 1093.98"];   // 21 thin grid lines
 const CIRCLES= [{cx:1064.77,cy:750.685,r:27.9272,tf:""},{cx:20.7487,cy:20.7487,r:20.2487,tf:"matrix(-1 0 0 1 1085.52 729.937)"},{cx:20.7487,cy:20.7487,r:20.2487,tf:"matrix(-1 0 0 1 745.86 1073.23)"},{cx:28.4272,cy:28.4272,r:27.9272,tf:"matrix(-1 0 0 1 410.125 722.256)"},{cx:20.7487,cy:20.7487,r:20.2487,tf:"matrix(-1 0 0 1 402.446 729.935)"},{cx:725.111,cy:1093.98,r:27.9272,tf:"rotate(180 725.111 1093.98)"}]; // 6 nodes (circles), some with transforms
 
@@ -912,6 +912,27 @@ try{
 }catch(err){ console.error('orbit',err); }
 document.getElementById('actBtn').addEventListener('click', activate);
 document.getElementById('resetBtn').addEventListener('click', resetStar);
+
+const theatreUiBtn=document.getElementById('theatreUiBtn');
+function syncTheatreUiBtn(){
+  if(!theatreUiBtn) return;
+  if(!studioReady){
+    theatreUiBtn.textContent='Theatre UI: N/A';
+    theatreUiBtn.disabled=true;
+    theatreUiBtn.classList.remove('on');
+    return;
+  }
+  const hidden=!!studio.ui.isHidden;
+  theatreUiBtn.textContent='Theatre UI: '+(hidden?'OFF':'ON');
+  theatreUiBtn.classList.toggle('on', !hidden);
+}
+theatreUiBtn?.addEventListener('click', ()=>{
+  if(!studioReady) return;
+  if(studio.ui.isHidden) studio.ui.restore();
+  else studio.ui.hide();
+  syncTheatreUiBtn();
+});
+syncTheatreUiBtn();
 document.getElementById('loadGlbBtn').addEventListener('click', ()=> document.getElementById('glbFileInput').click());
 document.getElementById('glbFileInput').addEventListener('change', ev=>{
   const f=ev.target.files[0]; if(!f) return;
@@ -1027,7 +1048,9 @@ function tick(){
   }else{
     currentGlobalT += (targetGlobalT-currentGlobalT)*Math.min(1, dt*scrollState.damping);
   }
-  sheet.sequence.position = currentGlobalT * SEQUENCE_LENGTH;
+  // Off while authoring in Studio -- otherwise every frame snaps Theatre's
+  // playhead back to scroll T, so Sequence scrubbing never sticks.
+  if(scrollState.syncTheatreToScroll) sheet.sequence.position = currentGlobalT * SEQUENCE_LENGTH;
   composer.render();
 }
 /* ---------- SCROLL SECTIONS ----------
@@ -1050,7 +1073,7 @@ const cardProgress=new Map();
 let currentGlobalT=0, targetGlobalT=0;
 
 const SCROLL_SOURCES=['page','sections','external'];
-const scrollState={ source:'sections', damping:4.5 };
+const scrollState={ source:'sections', damping:4.5, syncTheatreToScroll:true };
 
 // query-param fallback, same as timeline-03 -- lets a bare `import` embed (no
 // access to this module's internals) pick a source before the scene starts
@@ -1079,10 +1102,38 @@ function measureCards(){
 }
 
 const scrollReadoutEl=document.getElementById('scrollReadout');
+const scrollSourceSelect=document.getElementById('scrollSourceSelect');
+const syncTheatreCheckbox=document.getElementById('syncTheatreToScroll');
+const seekTSlider=document.getElementById('seekTSlider');
+const seekTNumber=document.getElementById('seekTNumber');
+let seekTDragging=false;
+
+function syncSeekControls(t){
+  if(seekTDragging) return;
+  const v=Number(t).toFixed(3);
+  if(seekTSlider && seekTSlider.value!==v) seekTSlider.value=v;
+  if(seekTNumber && seekTNumber.value!==v) seekTNumber.value=v;
+}
+
+function applyScrollSourceUi(){
+  if(scrollSourceSelect && scrollSourceSelect.value!==scrollState.source){
+    scrollSourceSelect.value=scrollState.source;
+  }
+  // Card runway readout is meaningless (and noisy) when a host page owns T.
+  if(scrollReadoutEl) scrollReadoutEl.hidden = scrollState.source==='external';
+}
+
 function updateScrollReadout(){
-  if(!scrollReadoutEl) return;
-  const rows=cardEls.map(el=>{ const id=el.dataset.fsCard; return id+' <b>'+(cardProgress.get(id)??0).toFixed(0)+'%</b>'; });
-  scrollReadoutEl.innerHTML=rows.join(' &nbsp;·&nbsp; ')+'<br>source <b>'+scrollState.source+'</b> · T <b>'+targetGlobalT.toFixed(3)+'</b>';
+  applyScrollSourceUi();
+  syncSeekControls(targetGlobalT);
+  if(!scrollReadoutEl || scrollReadoutEl.hidden) return;
+  const rows=cardEls.map(el=>{
+    const id=el.dataset.fsCard;
+    return '<div class="readoutRow"><span>'+id+'</span><span class="readoutDots" aria-hidden="true"></span><b>'+(cardProgress.get(id)??0).toFixed(0)+'%</b></div>';
+  });
+  scrollReadoutEl.innerHTML=
+    rows.join('')+
+    '<div class="readoutMeta">source <b>'+scrollState.source+'</b><br>T <b>'+targetGlobalT.toFixed(3)+'</b></div>';
 }
 
 // rAF-throttled, so a burst of scroll events collapses into one measure per
@@ -1113,13 +1164,78 @@ function syncScrollListener(){
 // `window` (not just exported) precisely so a plain <script> in Webflow --
 // which cannot import from this module -- can still drive it. Defined before
 // syncScrollListener() runs since it calls onScroll(), which calls these.
-window.seekTimelineTo=function(v){ const n=Number(v); if(Number.isFinite(n)) targetGlobalT=THREE.MathUtils.clamp(n,0,1); };
+window.seekTimelineTo=function(v){
+  const n=Number(v);
+  if(Number.isFinite(n)) targetGlobalT=THREE.MathUtils.clamp(n,0,1);
+  syncSeekControls(targetGlobalT);
+};
 window.setTimelineTo=function(v){ window.seekTimelineTo(v); currentGlobalT=targetGlobalT; };
 window.setScrollSource=function(source){
   if(!SCROLL_SOURCES.includes(source)){ console.warn('setScrollSource: "'+source+'" must be one of '+SCROLL_SOURCES.join(', ')); return; }
   scrollState.source=source;
   syncScrollListener();
 };
+
+scrollSourceSelect?.addEventListener('change', ()=>{
+  window.setScrollSource(scrollSourceSelect.value);
+});
+if(syncTheatreCheckbox){
+  syncTheatreCheckbox.checked=scrollState.syncTheatreToScroll;
+  syncTheatreCheckbox.addEventListener('change', ()=>{
+    scrollState.syncTheatreToScroll=syncTheatreCheckbox.checked;
+  });
+}
+function onSeekTInput(ev){
+  const n=Number(ev.target.value);
+  if(!Number.isFinite(n)) return;
+  seekTDragging=true;
+  if(seekTSlider && ev.target!==seekTSlider) seekTSlider.value=String(n);
+  if(seekTNumber && ev.target!==seekTNumber) seekTNumber.value=String(n);
+  window.setTimelineTo(n);
+}
+function endSeekTDrag(){ seekTDragging=false; syncSeekControls(targetGlobalT); }
+seekTSlider?.addEventListener('input', onSeekTInput);
+seekTNumber?.addEventListener('input', onSeekTInput);
+seekTSlider?.addEventListener('pointerup', endSeekTDrag);
+seekTSlider?.addEventListener('change', endSeekTDrag);
+seekTNumber?.addEventListener('change', endSeekTDrag);
+applyScrollSourceUi();
+
+// Host-page contract for the top-left #bar: hide it entirely, collapse to the
+// toggle chip, or show all controls. Safe before/after the bar exists.
+const DEV_BAR_MODES=['hidden','minified','expanded'];
+const barEl=document.getElementById('bar');
+const devBarToggleBtn=document.getElementById('devBarToggleBtn');
+let devBarMode='expanded';
+
+function applyDevBar(){
+  if(!barEl) return;
+  barEl.dataset.devBar=devBarMode;
+  if(!devBarToggleBtn) return;
+  if(devBarMode==='expanded'){
+    devBarToggleBtn.textContent='▾ Dev UI';
+    devBarToggleBtn.title='Collapse dev ui bar';
+    devBarToggleBtn.classList.add('on');
+  }else if(devBarMode==='minified'){
+    devBarToggleBtn.textContent='▸ Dev UI';
+    devBarToggleBtn.title='Expand dev ui bar';
+    devBarToggleBtn.classList.remove('on');
+  }
+}
+
+window.setDevBar=function setDevBar(mode){
+  if(!DEV_BAR_MODES.includes(mode)){
+    console.warn('setDevBar: "'+mode+'" must be one of '+DEV_BAR_MODES.join(', '));
+    return;
+  }
+  devBarMode=mode;
+  applyDevBar();
+};
+
+devBarToggleBtn?.addEventListener('click', ()=>{
+  window.setDevBar(devBarMode==='expanded' ? 'minified' : 'expanded');
+});
+applyDevBar();
 
 syncScrollListener();
 tick();

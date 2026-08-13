@@ -8,31 +8,58 @@
   </head>
   <body>
     <canvas id="scene"></canvas>
-    <div id="bar">
-      <button id="actBtn" class="act">✦ Activate star</button>
-      <button id="resetBtn">Reset</button>
-      <button id="navBtn">Orbit: OFF</button>
-      <button id="grabBtn">Capture camera → keyframe</button>
-      <button id="resetCamBtn">Reset camera</button>
-      <button id="loadGlbBtn">Load another GLB…</button>
-      <input type="file" id="glbFileInput" accept=".glb" style="display:none" />
-      <button id="paraxBtn">Parallax: OFF</button>
-      <button id="vortexDrawBtn">✎ Draw</button>
-      <button id="vortexAddBtn">+ Point</button>
-      <button id="vortexRemoveBtn">− Point (selected)</button>
-      <label style="font-size:11px;color:#8fa0c8;display:inline-flex;align-items:center;gap:4px;background:rgba(8,10,26,.82);border:1px solid rgba(120,150,220,.2);border-radius:9px;padding:6px 10px"
-        >Tension <input type="range" id="vortexTensionInput" min="0" max="1" step="0.05" value="0.5"
-      /></label>
-      <label style="font-size:11px;color:#8fa0c8;display:inline-flex;align-items:center;gap:4px;background:rgba(8,10,26,.82);border:1px solid rgba(120,150,220,.2);border-radius:9px;padding:6px 10px"
-        >Draw depth <input type="range" id="vortexDepthInput" min="20" max="200" value="110"
-      /></label>
-      <button id="vortexResetPathBtn">Reset path</button>
-      <button id="helpToggleBtn">?</button>
+    <div id="bar" data-dev-bar="expanded">
+      <button id="devBarToggleBtn" type="button" title="Collapse / expand dev bar">▾ Dev UI</button>
+      <div id="barControls">
+        <div id="barTools">
+          <button id="actBtn" class="act">✦ Activate star</button>
+          <button id="theatreUiBtn">Theatre UI: ON</button>
+          <button id="resetBtn">Reset</button>
+          <button id="navBtn">Orbit: OFF</button>
+          <button id="grabBtn">Capture camera → keyframe</button>
+          <button id="resetCamBtn">Reset camera</button>
+          <button id="loadGlbBtn">Load another GLB…</button>
+          <input type="file" id="glbFileInput" accept=".glb" style="display:none" />
+          <button id="paraxBtn">Parallax: OFF</button>
+          <button id="vortexDrawBtn">✎ Draw</button>
+          <button id="vortexAddBtn">+ Point</button>
+          <button id="vortexRemoveBtn">− Point (selected)</button>
+          <label class="barField"
+            >Tension <input type="range" id="vortexTensionInput" min="0" max="1" step="0.05" value="0.5"
+          /></label>
+          <label class="barField"
+            >Draw depth <input type="range" id="vortexDepthInput" min="20" max="200" value="110"
+          /></label>
+          <button id="vortexResetPathBtn">Reset path</button>
+          <button id="helpToggleBtn">?</button>
+        </div>
+
+        <div id="timelinePanel">
+          <div class="timelineTitle">Timeline</div>
+          <label class="barField barFieldCol"
+            >Scroll Source
+            <select id="scrollSourceSelect">
+              <option value="page">page</option>
+              <option value="sections" selected>sections</option>
+              <option value="external">external</option>
+            </select>
+          </label>
+          <label class="barField barCheck"
+            ><input type="checkbox" id="syncTheatreToScroll" checked /> Sync Theatre to Scroll
+          </label>
+          <label class="barField barFieldCol"
+            >Seek T (manual)
+            <span class="seekRow">
+              <input type="range" id="seekTSlider" min="0" max="1" step="0.001" value="0" />
+              <input type="number" id="seekTNumber" min="0" max="1" step="0.001" value="0" />
+            </span>
+          </label>
+          <div id="scrollReadout"></div>
+        </div>
+      </div>
     </div>
     <div id="help"></div>
     <div id="err"><div></div></div>
-
-    <div id="scrollReadout"></div>
 
     <!-- Scroll-driven timeline runway. Invisible spacers -- the fixed #scene canvas
          renders on top the whole time; scrolling past these just advances the
