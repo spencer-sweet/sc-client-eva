@@ -14,12 +14,14 @@ import {
   bootDevHelpers,
   initDevHelpers,
   tickScroll,
+  statsBegin,
+  statsEnd,
   setParallaxButton,
   setVortexDrawButton,
 } from './dev-helpers/index.js';
 
 // Webflow can evaluate this module before <body> exists — wait, then mount
-// #star-scene / #bar / #help / #err (+ inlined styles) before any DOM wiring.
+// #star-scene / #bar / #help / #err / stats (+ inlined styles) before any DOM wiring.
 await bootDevHelpers();
 
 const bail=(m)=>{
@@ -985,6 +987,7 @@ addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.upd
 
 function tick(){
   requestAnimationFrame(tick);
+  statsBegin();
   const dt=clock.getDelta(), time=clock.elapsedTime;
   // grid pulse advances at constant PERCEIVED speed: if the camera is closer to the
   // wall than the reference distance, the accumulator grows slower (compensates that up
@@ -1029,6 +1032,7 @@ function tick(){
   if(orbit && orbiting) orbit.update();
   tickScroll(dt, sheet);
   composer.render();
+  statsEnd();
 }
 
 tick();

@@ -2,6 +2,7 @@
  * Dev UI mount + wiring + scroll/timeline controls.
  * Works in local Vite HTML and when only the built main.js is loaded from CDN.
  */
+import Stats from 'stats.js';
 import css from './dev-helpers.css?inline';
 
 const STYLE_ID = 'ventanas-dev-helpers-style';
@@ -27,6 +28,7 @@ const BAR_HTML = /*html*/ `
       <button id="actBtn" class="act">✦ Activate star</button>
       <button id="theatreUiBtn">Theatre UI: ON</button>
       <button id="saveTheatreBtn" type="button" title="Download current Theatre project state as JSON">Save Theatre JSON</button>
+      <button id="statsToggleBtn" type="button" title="Show / hide FPS stats">Stats: ON</button>
       <button id="resetBtn">Reset</button>
       <button id="navBtn">Orbit: OFF</button>
       <button id="grabBtn">Capture camera → keyframe</button>
@@ -74,6 +76,29 @@ const BAR_HTML = /*html*/ `
 `.trim();
 
 const byId = (id) => document.getElementById(id);
+
+/* ---------- Theatre UI host API (safe before Studio is ready) ---------- */
+const THEATRE_UI_MODES = ['hidden', 'visible'];
+let theatreUiMode = 'visible';
+let theatreStudioRef = null;
+let theatreStudioReady = false;
+let syncTheatreUiBtnFn = null;
+
+function applyTheatreUi() {
+  if (!theatreStudioReady || !theatreStudioRef?.ui) return;
+  if (theatreUiMode === 'hidden') theatreStudioRef.ui.hide();
+  else theatreStudioRef.ui.restore();
+  syncTheatreUiBtnFn?.();
+}
+
+window.setTheatreJSUI = function setTheatreJSUI(mode) {
+  if (!THEATRE_UI_MODES.includes(mode)) {
+    console.warn('setTheatreJSUI: "' + mode + '" must be one of ' + THEATRE_UI_MODES.join(', '));
+    return;
+  }
+  theatreUiMode = mode;
+  applyTheatreUi();
+};
 
 /* ---------- mount ---------- */
 
@@ -133,6 +158,33 @@ function ensureErr() {
   return err;
 }
 
+/** @type {import('stats.js') | null} */
+let stats = null;
+
+function ensureStats() {
+  const root = hostRoot();
+  if (!root) return null;
+  if (stats) return stats;
+  stats = new Stats();
+  stats.showPanel(0); // 0: fps — click the panel to cycle to ms/mb
+  // stats.js hardcodes top-left; nudge right so it doesn't sit under Theatre's outline
+  stats.dom.style.cssText =
+    'position:fixed;top:0;left:100px;cursor:pointer;opacity:0.9;z-index:10000;';
+  root.appendChild(stats.dom);
+  statsDomRef = stats.dom;
+  return stats;
+}
+
+/** Call at the start of the render loop. */
+export function statsBegin() {
+  stats?.begin();
+}
+
+/** Call at the end of the render loop. */
+export function statsEnd() {
+  stats?.end();
+}
+
 /** Sync mount. No-ops (returns false) until document.body exists. */
 export function ensureDevHelpers() {
   if (!hostRoot()) return false;
@@ -141,6 +193,7 @@ export function ensureDevHelpers() {
   if (!byId('bar')) mountFragment(BAR_HTML);
   ensureHelp();
   ensureErr();
+  ensureStats();
   return true;
 }
 
@@ -336,12 +389,26 @@ export function setVortexTensionInput(value) {
 /* ---------- wire all controls ---------- */
 
 let devBarMode = 'expanded';
+/** @type {HTMLElement | null} */
+let statsDomRef = null; // set by ensureStats()
+let statsVisible = true; // Dev UI toggle; also forced off when setDevBar('hidden')
+
+function applyStatsVisibility() {
+  if (!statsDomRef) return;
+  const show = statsVisible && devBarMode !== 'hidden';
+  statsDomRef.style.display = show ? '' : 'none';
+  const statsToggleBtn = byId('statsToggleBtn');
+  if (statsToggleBtn) {
+    statsToggleBtn.textContent = 'Stats: ' + (statsVisible ? 'ON' : 'OFF');
+    statsToggleBtn.classList.toggle('on', statsVisible);
+  }
+}
 
 function applyDevBar() {
   const barEl = byId('bar');
   const devBarToggleBtn = byId('devBarToggleBtn');
-  if (!barEl) return;
-  barEl.dataset.devBar = devBarMode;
+  if (barEl) barEl.dataset.devBar = devBarMode;
+  applyStatsVisibility();
   if (!devBarToggleBtn) return;
   if (devBarMode === 'expanded') {
     devBarToggleBtn.textContent = '▾ Dev UI';
@@ -475,15 +542,18 @@ export function initDevHelpers(api) {
       theatreUiBtn.classList.remove('on');
       return;
     }
-    const hidden = !!studio.ui.isHidden;
+    const hidden = theatreUiMode === 'hidden' || !!studio.ui.isHidden;
     theatreUiBtn.textContent = 'Theatre UI: ' + (hidden ? 'OFF' : 'ON');
     theatreUiBtn.classList.toggle('on', !hidden);
   }
+  theatreStudioRef = studio;
+  theatreStudioReady = !!studioReady;
+  syncTheatreUiBtnFn = syncTheatreUiBtn;
+  // Honor any setTheatreJSUI() call that landed before Studio was ready.
+  applyTheatreUi();
   theatreUiBtn?.addEventListener('click', () => {
     if (!studioReady) return;
-    if (studio.ui.isHidden) studio.ui.restore();
-    else studio.ui.hide();
-    syncTheatreUiBtn();
+    window.setTheatreJSUI(theatreUiMode === 'hidden' ? 'visible' : 'hidden');
   });
   syncTheatreUiBtn();
 
@@ -641,6 +711,12 @@ export function initDevHelpers(api) {
     resetVortexPath();
     setVortexTensionInput(0.5);
   });
+
+  byId('statsToggleBtn')?.addEventListener('click', () => {
+    statsVisible = !statsVisible;
+    applyStatsVisibility();
+  });
+  applyStatsVisibility();
 
   const help = byId('help');
   byId('helpToggleBtn')?.addEventListener('click', () => help?.classList.toggle('on'));
