@@ -1,6 +1,7 @@
-/* Local Vite page shell only. Dev UI chrome lives in dev-helpers.css
-   (inlined into the JS bundle for CDN/Webflow embeds). */
+/* Local Vite page shell. #star-scene must live here (not only in
+   dev-helpers.css) so production embeds work without the Dev UI import. */
 :root{--ink:#dfe9ff;--dim:#8fa0c8;--cyan:#66d2ff;--mag:#cea7fc;--panel:rgba(8,10,26,.82);--line:rgba(120,150,220,.2)}
 *{box-sizing:border-box}
 html,body{margin:0;overflow-x:hidden;color:var(--ink);background:#040718;font-family:ui-monospace,Menlo,Consolas,monospace}
+#star-scene{position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:0}
 [data-fs-card]{height:200vh;width:1px}

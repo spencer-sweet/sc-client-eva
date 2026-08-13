@@ -10,18 +10,27 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { getProject, types as t, onChange } from '@theatre/core';
 import studio from '@theatre/studio';
 import theatreState from './theatre-state/theatre-state_2026-08-13-1728.json';
+import { whenBodyReady, ensureStarScene } from './scene-shell.js';
+import { tickScroll, startTimelineScroll, useThreeClamp } from './timeline-scroll.js';
+import { bindTheatreStudio } from './theatre-ui-api.js';
+// Optional Dev UI — remove this import later to tree-shake bar/stats/help.
 import {
   bootDevHelpers,
   initDevHelpers,
-  tickScroll,
   statsBegin,
   statsEnd,
   setParallaxButton,
   setVortexDrawButton,
 } from './dev-helpers/index.js';
 
-// Webflow can evaluate this module before <body> exists — wait, then mount
-// #star-scene / #bar / #help / #err / stats (+ inlined styles) before any DOM wiring.
+useThreeClamp(THREE);
+
+// Webflow can evaluate this module before <body> exists.
+await whenBodyReady();
+ensureStarScene();
+startTimelineScroll();
+
+// Dev UI mount (bar / help / err / stats). Safe to delete with the import above.
 await bootDevHelpers();
 
 const bail=(m)=>{
@@ -50,6 +59,7 @@ if (THEATRE_STUDIO) {
     studioReady=true;
   }catch(err){ console.error(err); }
 }
+bindTheatreStudio(studio, studioReady);
 
 // Resolve against this module's URL — NOT import.meta.env.BASE_URL.
 // BASE_URL is root-relative ("/ventanas-take-3/…"), so a Webflow host page
@@ -137,9 +147,9 @@ let wallTex=buildWallTexture();
 /* =========================================================================
    THREE.JS
    ========================================================================= */
-// mounts onto #star-scene (created by bootDevHelpers if the host page has none)
+// mounts onto #star-scene (ensureStarScene / host markup)
 const canvas=document.getElementById('star-scene');
-if(!canvas) throw new Error('ventanas-take-3: #star-scene canvas missing after bootDevHelpers()');
+if(!canvas) throw new Error('ventanas-take-3: #star-scene canvas missing');
 const renderer=new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
 renderer.toneMapping=THREE.ACESFilmicToneMapping;

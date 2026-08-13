@@ -1,15 +1,20 @@
 /**
- * Dev UI mount + wiring + scroll/timeline controls.
- * Works in local Vite HTML and when only the built main.js is loaded from CDN.
+ * Optional Dev UI (bar, stats, help, timeline readout).
+ * Production scroll / Theatre host APIs live in ../timeline-scroll.js and
+ * ../theatre-ui-api.js so this module can be dropped for tree-shaking.
  */
 import Stats from 'stats.js';
 import css from './dev-helpers.css?inline';
+import { ensureStarScene } from '../scene-shell.js';
+import {
+  scrollState,
+  scrollUi,
+  getTimelineT,
+} from '../timeline-scroll.js';
+import { getTheatreUiMode, onTheatreUiApplied } from '../theatre-ui-api.js';
 
 const STYLE_ID = 'ventanas-dev-helpers-style';
 const DEV_BAR_MODES = ['hidden', 'minified', 'expanded'];
-const SCROLL_SOURCES = ['page', 'sections', 'external'];
-/** sheet.sequence has no public .length in this @theatre/core — hardcode like timeline-04. */
-export const SEQUENCE_LENGTH = 14.44;
 
 const HELP_HTML =
   '<b>Center window</b>: nearly invisible at rest (clear for the GLB), but reacts to the alarm. Normal glass on the side windows. <b>Trigger:</b> ✦ Activate star (live preview). ' +
@@ -77,29 +82,6 @@ const BAR_HTML = /*html*/ `
 
 const byId = (id) => document.getElementById(id);
 
-/* ---------- Theatre UI host API (safe before Studio is ready) ---------- */
-const THEATRE_UI_MODES = ['hidden', 'visible'];
-let theatreUiMode = 'visible';
-let theatreStudioRef = null;
-let theatreStudioReady = false;
-let syncTheatreUiBtnFn = null;
-
-function applyTheatreUi() {
-  if (!theatreStudioReady || !theatreStudioRef?.ui) return;
-  if (theatreUiMode === 'hidden') theatreStudioRef.ui.hide();
-  else theatreStudioRef.ui.restore();
-  syncTheatreUiBtnFn?.();
-}
-
-window.setTheatreJSUI = function setTheatreJSUI(mode) {
-  if (!THEATRE_UI_MODES.includes(mode)) {
-    console.warn('setTheatreJSUI: "' + mode + '" must be one of ' + THEATRE_UI_MODES.join(', '));
-    return;
-  }
-  theatreUiMode = mode;
-  applyTheatreUi();
-};
-
 /* ---------- mount ---------- */
 
 function injectStyles() {
@@ -115,14 +97,8 @@ function hostRoot() {
 }
 
 function ensureSceneCanvas() {
-  let canvas = byId('star-scene');
-  if (canvas) return canvas;
-  const root = hostRoot();
-  if (!root) return null;
-  canvas = document.createElement('canvas');
-  canvas.id = 'star-scene';
-  root.prepend(canvas);
-  return canvas;
+  if (!hostRoot()) return null;
+  return ensureStarScene();
 }
 
 function mountFragment(html) {
@@ -223,48 +199,10 @@ export function bootDevHelpers() {
   return bootPromise;
 }
 
-/* ---------- scroll / timeline state ---------- */
 
-export const scrollState = { source: 'sections', damping: 4.5, syncTheatreToScroll: true };
+/* ---------- Timeline panel UI (binds to ../timeline-scroll.js) ---------- */
 
-{
-  const qp = new URLSearchParams(location.search).get('scrollSource');
-  if (SCROLL_SOURCES.includes(qp)) scrollState.source = qp;
-}
-
-let currentGlobalT = 0;
-let targetGlobalT = 0;
 let seekTDragging = false;
-let scrollTicking = false;
-let clamp01 = (n) => Math.min(1, Math.max(0, n));
-
-const cardEls = () => Array.from(document.querySelectorAll('[data-fs-card]'));
-const cardProgress = new Map();
-
-function readPageScroll() {
-  const maxScroll = document.documentElement.scrollHeight - innerHeight;
-  return maxScroll > 0 ? clamp01(scrollY / maxScroll) : 0;
-}
-
-function measureCards() {
-  const cards = cardEls();
-  const vh = innerHeight;
-  let firstTopAbs = null;
-  let lastBottomAbs = null;
-  for (let i = 0; i < cards.length; i++) {
-    const el = cards[i];
-    const rect = el.getBoundingClientRect();
-    const pct = clamp01((vh - rect.top) / rect.height) * 100;
-    cardProgress.set(el.dataset.fsCard, pct);
-    if (i === 0) firstTopAbs = rect.top + scrollY;
-    if (i === cards.length - 1) lastBottomAbs = rect.bottom + scrollY;
-  }
-  if (firstTopAbs === null) return 0;
-  const startScroll = firstTopAbs - vh;
-  const endScroll = lastBottomAbs - vh;
-  const span = endScroll - startScroll;
-  return span > 0 ? clamp01((scrollY - startScroll) / span) : 0;
-}
 
 function syncSeekControls(t) {
   if (seekTDragging) return;
@@ -284,86 +222,43 @@ function applyScrollSourceUi() {
   if (scrollReadoutEl) scrollReadoutEl.hidden = scrollState.source === 'external';
 }
 
-function updateScrollReadout() {
+function updateScrollReadout(cardProgress, t) {
   applyScrollSourceUi();
-  syncSeekControls(targetGlobalT);
+  syncSeekControls(t ?? getTimelineT().target);
   const scrollReadoutEl = byId('scrollReadout');
   if (!scrollReadoutEl || scrollReadoutEl.hidden) return;
-  const cards = cardEls();
+  const cards = Array.from(document.querySelectorAll('[data-fs-card]'));
+  const progress = cardProgress || new Map();
   const rows = cards.map((el) => {
     const id = el.dataset.fsCard;
+    const sectionTitle = el.closest('[data-fs-section]')?.dataset?.fsSectionTitle;
+    const label = sectionTitle ? id + ' (' + sectionTitle + ')' : id;
     return (
       '<div class="readoutRow"><span>' +
-      id +
+      label +
       '</span><span class="readoutDots" aria-hidden="true"></span><b>' +
-      (cardProgress.get(id) ?? 0).toFixed(0) +
+      (progress.get(id) ?? 0).toFixed(0) +
       '%</b></div>'
     );
   });
+  const target = t ?? getTimelineT().target;
   scrollReadoutEl.innerHTML =
     rows.join('') +
     '<div class="readoutMeta">source <b>' +
     scrollState.source +
     '</b><br>T <b>' +
-    targetGlobalT.toFixed(3) +
+    target.toFixed(3) +
     '</b></div>';
 }
 
-function onScroll() {
-  if (scrollTicking) return;
-  scrollTicking = true;
-  requestAnimationFrame(() => {
-    scrollTicking = false;
-    const cardsT = measureCards();
-    if (scrollState.source === 'page') window.seekTimelineTo(readPageScroll());
-    else if (scrollState.source === 'sections') window.seekTimelineTo(cardsT);
-    updateScrollReadout();
-  });
-}
-
-function syncScrollListener() {
-  removeEventListener('scroll', onScroll);
-  if (scrollState.source !== 'external') {
-    addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-  }
-  updateScrollReadout();
-}
-
-function installScrollWindowApi(THREE) {
-  if (THREE?.MathUtils?.clamp) {
-    clamp01 = (n) => THREE.MathUtils.clamp(n, 0, 1);
-  }
-
-  window.seekTimelineTo = function (v) {
-    const n = Number(v);
-    if (Number.isFinite(n)) targetGlobalT = clamp01(n);
-    syncSeekControls(targetGlobalT);
+function wireTimelineScrollUi() {
+  scrollUi.onTargetChange = (t) => syncSeekControls(t);
+  scrollUi.onSourceChange = () => {
+    applyScrollSourceUi();
+    updateScrollReadout(null, getTimelineT().target);
   };
-  window.setTimelineTo = function (v) {
-    window.seekTimelineTo(v);
-    currentGlobalT = targetGlobalT;
-  };
-  window.setScrollSource = function (source) {
-    if (!SCROLL_SOURCES.includes(source)) {
-      console.warn('setScrollSource: "' + source + '" must be one of ' + SCROLL_SOURCES.join(', '));
-      return;
-    }
-    scrollState.source = source;
-    syncScrollListener();
-  };
-}
-
-/** Advance scroll smoothing + optionally drive Theatre playhead. Call once per frame. */
-export function tickScroll(dt, sheet) {
-  if (scrollState.source === 'external') {
-    currentGlobalT = targetGlobalT;
-  } else {
-    currentGlobalT += (targetGlobalT - currentGlobalT) * Math.min(1, dt * scrollState.damping);
-  }
-  if (scrollState.syncTheatreToScroll && sheet?.sequence) {
-    sheet.sequence.position = currentGlobalT * SEQUENCE_LENGTH;
-  }
+  scrollUi.onMeasure = (cardProgress, t) => updateScrollReadout(cardProgress, t);
+  scrollUi.isSeekDragging = () => seekTDragging;
 }
 
 /* ---------- bar UI helpers (used from scene / Theatre callbacks) ---------- */
@@ -462,7 +357,7 @@ function wireTimelinePanel() {
   }
   function endSeekTDrag() {
     seekTDragging = false;
-    syncSeekControls(targetGlobalT);
+    syncSeekControls(getTimelineT().target);
   }
   seekTSlider?.addEventListener('input', onSeekTInput);
   seekTNumber?.addEventListener('input', onSeekTInput);
@@ -500,8 +395,8 @@ function wireTimelinePanel() {
  */
 export function initDevHelpers(api) {
   ensureDevHelpers();
-  installScrollWindowApi(api.THREE);
   wireDevBarCollapse();
+  wireTimelineScrollUi();
   wireTimelinePanel();
 
   const {
@@ -542,18 +437,14 @@ export function initDevHelpers(api) {
       theatreUiBtn.classList.remove('on');
       return;
     }
-    const hidden = theatreUiMode === 'hidden' || !!studio.ui.isHidden;
+    const hidden = getTheatreUiMode() === 'hidden' || !!studio.ui.isHidden;
     theatreUiBtn.textContent = 'Theatre UI: ' + (hidden ? 'OFF' : 'ON');
     theatreUiBtn.classList.toggle('on', !hidden);
   }
-  theatreStudioRef = studio;
-  theatreStudioReady = !!studioReady;
-  syncTheatreUiBtnFn = syncTheatreUiBtn;
-  // Honor any setTheatreJSUI() call that landed before Studio was ready.
-  applyTheatreUi();
+  onTheatreUiApplied(syncTheatreUiBtn);
   theatreUiBtn?.addEventListener('click', () => {
     if (!studioReady) return;
-    window.setTheatreJSUI(theatreUiMode === 'hidden' ? 'visible' : 'hidden');
+    window.setTheatreJSUI(getTheatreUiMode() === 'hidden' ? 'visible' : 'hidden');
   });
   syncTheatreUiBtn();
 
@@ -725,7 +616,7 @@ export function initDevHelpers(api) {
     if (!studioReady) help.innerHTML = '⚠ Timeline failed to start. ' + help.innerHTML;
   }
 
-  syncScrollListener();
+  updateScrollReadout(null, getTimelineT().target);
 }
 
 export default ensureDevHelpers;
