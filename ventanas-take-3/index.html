@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,24 +9,24 @@
   <body>
     <canvas id="scene"></canvas>
     <div id="bar">
-      <button id="actBtn" class="act">✦ Activar estrella</button>
+      <button id="actBtn" class="act">✦ Activate star</button>
       <button id="resetBtn">Reset</button>
-      <button id="navBtn">Navegar: OFF</button>
-      <button id="grabBtn">Capturar cámara → keyframe</button>
-      <button id="resetCamBtn">Reset cámara</button>
-      <button id="loadGlbBtn">Cargar otro GLB…</button>
+      <button id="navBtn">Orbit: OFF</button>
+      <button id="grabBtn">Capture camera → keyframe</button>
+      <button id="resetCamBtn">Reset camera</button>
+      <button id="loadGlbBtn">Load another GLB…</button>
       <input type="file" id="glbFileInput" accept=".glb" style="display:none" />
       <button id="paraxBtn">Parallax: OFF</button>
-      <button id="vortexDrawBtn">✎ Dibujar</button>
-      <button id="vortexAddBtn">+ Punto</button>
-      <button id="vortexRemoveBtn">− Punto (seleccionado)</button>
+      <button id="vortexDrawBtn">✎ Draw</button>
+      <button id="vortexAddBtn">+ Point</button>
+      <button id="vortexRemoveBtn">− Point (selected)</button>
       <label style="font-size:11px;color:#8fa0c8;display:inline-flex;align-items:center;gap:4px;background:rgba(8,10,26,.82);border:1px solid rgba(120,150,220,.2);border-radius:9px;padding:6px 10px"
-        >Tensión <input type="range" id="vortexTensionInput" min="0" max="1" step="0.05" value="0.5"
+        >Tension <input type="range" id="vortexTensionInput" min="0" max="1" step="0.05" value="0.5"
       /></label>
       <label style="font-size:11px;color:#8fa0c8;display:inline-flex;align-items:center;gap:4px;background:rgba(8,10,26,.82);border:1px solid rgba(120,150,220,.2);border-radius:9px;padding:6px 10px"
-        >Prof. dibujo <input type="range" id="vortexDepthInput" min="20" max="200" value="110"
+        >Draw depth <input type="range" id="vortexDepthInput" min="20" max="200" value="110"
       /></label>
-      <button id="vortexResetPathBtn">Reset recorrido</button>
+      <button id="vortexResetPathBtn">Reset path</button>
       <button id="helpToggleBtn">?</button>
     </div>
     <div id="help"></div>

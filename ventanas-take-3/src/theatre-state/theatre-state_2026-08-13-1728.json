@@ -1,9 +1,9 @@
 {
   "sheetsById": {
-    "Escena": {
+    "Scene": {
       "staticOverrides": {
         "byObject": {
-          "Estrella (GLB)": {
+          "Star (GLB)": {
             "posZ": -0.2405063291139246,
             "shatterProgress": 0.018987341772152024,
             "emissiveColor": {
@@ -27,10 +27,10 @@
             "intensity": 1,
             "enabled": 0
           },
-          "Trim del Recorrido": {
+          "Path Trim": {
             "trimStart": 1
           },
-          "Look del Vortex": {
+          "Vortex Look": {
             "colorCore": {
               "r": 0.9058823529411765,
               "g": 0.047058823529411764,
@@ -56,22 +56,22 @@
             "taperStart": 0.02,
             "exitGlow": 0
           },
-          "Grilla": {
+          "Grid": {
             "nodeBaseOpacity": 0,
             "pulseWidth": 0.4681012658227847,
             "pulseSpeed": 1.1284810126582276,
             "pulseBright": 1.6911392405063292,
             "nodePulseBright": 1.7721518987341782
           },
-          "Alarma / Foco 1": {
+          "Alarm / Light 1": {
             "intensity": 0,
             "posX": 1.2658227848101244
           },
-          "Alarma / Foco 2": {
+          "Alarm / Light 2": {
             "intensity": 2.0962025316455697,
             "posX": 2.8481012658227836
           },
-          "Trazo Horizontal": {
+          "Horizontal Stroke": {
             "enabled": 0,
             "growStart": 0,
             "growEnd": 0,
@@ -83,10 +83,10 @@
             },
             "opacity": 0
           },
-          "Derrame de luz en Pared": {
+          "Wall Light Spill": {
             "intensity": 0.189873417721519
           },
-          "Ventanas": {
+          "Windows": {
             "neonColor": {
               "r": 0.5372549019607843,
               "g": 0.07058823529411765,
@@ -95,7 +95,7 @@
             },
             "neonWidth": 0.2
           },
-          "Ventana Central (vidrio)": {
+          "Center Window (glass)": {
             "neonColor": {
               "r": 0.5372549019607843,
               "g": 0.07058823529411765,
@@ -126,11 +126,11 @@
         "length": 14.44,
         "type": "PositionalSequence",
         "tracksByObject": {
-          "Camara": {
+          "Camera": {
             "trackData": {
               "Xi2pdCHgYi": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Camara:[\"position\",\"x\"]",
+                "__debugName": "Camera:[\"position\",\"x\"]",
                 "keyframes": [
                   {
                     "id": "82MtmlYD1W",
@@ -227,7 +227,7 @@
               },
               "1uWLn4M_Ow": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Camara:[\"position\",\"y\"]",
+                "__debugName": "Camera:[\"position\",\"y\"]",
                 "keyframes": [
                   {
                     "id": "AVrBcMZfBx",
@@ -324,7 +324,7 @@
               },
               "e_DIx_4CLP": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Camara:[\"position\",\"z\"]",
+                "__debugName": "Camera:[\"position\",\"z\"]",
                 "keyframes": [
                   {
                     "id": "Mgu7ABvY12",
@@ -421,7 +421,7 @@
               },
               "JfUnNjSXD-": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Camara:[\"rotation\",\"x\"]",
+                "__debugName": "Camera:[\"rotation\",\"x\"]",
                 "keyframes": [
                   {
                     "id": "B_d23L9O87",
@@ -518,7 +518,7 @@
               },
               "JkgS8sfJeG": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Camara:[\"rotation\",\"y\"]",
+                "__debugName": "Camera:[\"rotation\",\"y\"]",
                 "keyframes": [
                   {
                     "id": "IqmCiTNzBF",
@@ -615,7 +615,7 @@
               },
               "ocAzBzOI50": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Camara:[\"rotation\",\"z\"]",
+                "__debugName": "Camera:[\"rotation\",\"z\"]",
                 "keyframes": [
                   {
                     "id": "DB1cBakjs8",
@@ -712,7 +712,7 @@
               },
               "SCfYhEx2wH": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Camara:[\"fov\"]",
+                "__debugName": "Camera:[\"fov\"]",
                 "keyframes": [
                   {
                     "id": "OeiDtIOT6U",
@@ -818,11 +818,11 @@
               "[\"fov\"]": "SCfYhEx2wH"
             }
           },
-          "Trim del Recorrido": {
+          "Path Trim": {
             "trackData": {
               "4VdOPBu0uN": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Trim del Recorrido:[\"trimStart\"]",
+                "__debugName": "Path Trim:[\"trimStart\"]",
                 "keyframes": [
                   {
                     "id": "pCS7mZLMRe",
@@ -841,7 +841,7 @@
               },
               "Zs8lDRBtdF": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Trim del Recorrido:[\"trimEnd\"]",
+                "__debugName": "Path Trim:[\"trimEnd\"]",
                 "keyframes": [
                   {
                     "id": "H43b-MP36x",
@@ -877,11 +877,11 @@
               "[\"trimEnd\"]": "Zs8lDRBtdF"
             }
           },
-          "Estrella (GLB)": {
+          "Star (GLB)": {
             "trackData": {
               "bqdYkmth7U": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"shatterProgress\"]",
+                "__debugName": "Star (GLB):[\"shatterProgress\"]",
                 "keyframes": [
                   {
                     "id": "G0sEvPSdor",
@@ -952,7 +952,7 @@
               },
               "bL0IlN1oQ9": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"opacity\"]",
+                "__debugName": "Star (GLB):[\"opacity\"]",
                 "keyframes": [
                   {
                     "id": "k3Y680XtBJ",
@@ -1023,7 +1023,7 @@
               },
               "ScE66zt0HN": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"transmission\"]",
+                "__debugName": "Star (GLB):[\"transmission\"]",
                 "keyframes": [
                   {
                     "id": "dHT9qMhqt0",
@@ -1068,11 +1068,11 @@
               },
               "JeOJHVt8Ks": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"scale\"]",
+                "__debugName": "Star (GLB):[\"scale\"]",
                 "keyframes": [
                   {
-                    "id": "2hVDsPWgBi",
-                    "position": 2.767,
+                    "id": "JSEQYN5zEc",
+                    "position": 1.467,
                     "connectedRight": true,
                     "handles": [
                       0.5,
@@ -1081,7 +1081,7 @@
                       0
                     ],
                     "type": "bezier",
-                    "value": 1.1563291139240501
+                    "value": 0.9999999999999992
                   },
                   {
                     "id": "8qfuz0eS0i",
@@ -1113,11 +1113,11 @@
               },
               "PyL_BESvY7": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"posY\"]",
+                "__debugName": "Star (GLB):[\"posY\"]",
                 "keyframes": [
                   {
-                    "id": "OxI87mf3tU",
-                    "position": 2.767,
+                    "id": "BUCXkthCK9",
+                    "position": 1.467,
                     "connectedRight": true,
                     "handles": [
                       0.5,
@@ -1126,7 +1126,7 @@
                       0
                     ],
                     "type": "bezier",
-                    "value": 0
+                    "value": 0.6
                   },
                   {
                     "id": "l9Q7cS2F8g",
@@ -1158,7 +1158,7 @@
               },
               "nzPOiWR-Pr": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"emissiveColor\"]",
+                "__debugName": "Star (GLB):[\"emissiveColor\"]",
                 "keyframes": [
                   {
                     "id": "d_72KNPSby",
@@ -1254,11 +1254,11 @@
               },
               "S8LrxaSc1m": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"posX\"]",
+                "__debugName": "Star (GLB):[\"posX\"]",
                 "keyframes": [
                   {
-                    "id": "iw-2w60sOY",
-                    "position": 2.767,
+                    "id": "kI1GWZsFbd",
+                    "position": 1.467,
                     "connectedRight": true,
                     "handles": [
                       0.5,
@@ -1267,17 +1267,17 @@
                       0
                     ],
                     "type": "bezier",
-                    "value": 0
+                    "value": 0.05
                   }
                 ]
               },
               "9eIf5OFh2Q": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"posZ\"]",
+                "__debugName": "Star (GLB):[\"posZ\"]",
                 "keyframes": [
                   {
-                    "id": "7E0WYy01rS",
-                    "position": 2.767,
+                    "id": "L03Q4ReJfh",
+                    "position": 1.467,
                     "connectedRight": true,
                     "handles": [
                       0.5,
@@ -1286,13 +1286,13 @@
                       0
                     ],
                     "type": "bezier",
-                    "value": 3.316455696202532
+                    "value": -0.025316455696203083
                   }
                 ]
               },
               "7p7Wxm6_Cv": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"emissiveIntensity\"]",
+                "__debugName": "Star (GLB):[\"emissiveIntensity\"]",
                 "keyframes": [
                   {
                     "id": "Me1coMTHU4",
@@ -1363,27 +1363,27 @@
               },
               "wePn3Md7QU": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"glowSize\"]",
+                "__debugName": "Star (GLB):[\"glowSize\"]",
                 "keyframes": []
               },
               "YyB6nBgKT1": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"glowIntensity\"]",
+                "__debugName": "Star (GLB):[\"glowIntensity\"]",
                 "keyframes": []
               },
               "chAD4Ya1h9": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"roughness\"]",
+                "__debugName": "Star (GLB):[\"roughness\"]",
                 "keyframes": []
               },
               "1k6p6YEXct": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"ior\"]",
+                "__debugName": "Star (GLB):[\"ior\"]",
                 "keyframes": []
               },
               "NPY8SurIcK": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Estrella (GLB):[\"thickness\"]",
+                "__debugName": "Star (GLB):[\"thickness\"]",
                 "keyframes": []
               }
             },
@@ -1404,11 +1404,11 @@
               "[\"thickness\"]": "NPY8SurIcK"
             }
           },
-          "Fundido": {
+          "Fade": {
             "trackData": {
               "YlaDquoDWO": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Fundido:[\"blackOpacity\"]",
+                "__debugName": "Fade:[\"blackOpacity\"]",
                 "keyframes": [
                   {
                     "id": "YVIs2igavM",
@@ -1443,11 +1443,11 @@
               "[\"blackOpacity\"]": "YlaDquoDWO"
             }
           },
-          "Ventanas Laterales": {
+          "Side Windows": {
             "trackData": {
               "7WP_nJNArD": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventanas Laterales:[\"offsetX\"]",
+                "__debugName": "Side Windows:[\"offsetX\"]",
                 "keyframes": [
                   {
                     "id": "thizcDpCkw",
@@ -1492,7 +1492,7 @@
               },
               "_p192S7daA": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventanas Laterales:[\"offsetY\"]",
+                "__debugName": "Side Windows:[\"offsetY\"]",
                 "keyframes": [
                   {
                     "id": "DWqubsPgwo",
@@ -1537,7 +1537,7 @@
               },
               "2C6WjOf_SQ": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventanas Laterales:[\"scale\"]",
+                "__debugName": "Side Windows:[\"scale\"]",
                 "keyframes": [
                   {
                     "id": "ukONNf0rBJ",
@@ -1574,11 +1574,11 @@
               "[\"scale\"]": "2C6WjOf_SQ"
             }
           },
-          "Look del Vortex": {
+          "Vortex Look": {
             "trackData": {
               "dFMdE4Dhy0": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Look del Vortex:[\"enabled\"]",
+                "__debugName": "Vortex Look:[\"enabled\"]",
                 "keyframes": [
                   {
                     "id": "0RdjsIO2l6",
@@ -1636,7 +1636,7 @@
               },
               "SYn2UTe2TA": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Look del Vortex:[\"taperEnd\"]",
+                "__debugName": "Vortex Look:[\"taperEnd\"]",
                 "keyframes": [
                   {
                     "id": "04OB1x09vV",
@@ -1655,7 +1655,7 @@
               },
               "W-gPV3jSrM": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Look del Vortex:[\"taperStart\"]",
+                "__debugName": "Vortex Look:[\"taperStart\"]",
                 "keyframes": [
                   {
                     "id": "JvfBJt5J-N",
@@ -1692,11 +1692,11 @@
               "[\"taperStart\"]": "W-gPV3jSrM"
             }
           },
-          "Fundido Pared y Grilla": {
+          "Wall & Grid Fade": {
             "trackData": {
               "pfg97YxXqm": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Fundido Pared y Grilla:[\"blackout\"]",
+                "__debugName": "Wall & Grid Fade:[\"blackout\"]",
                 "keyframes": [
                   {
                     "id": "a8zxmJZrvK",
@@ -1731,11 +1731,11 @@
               "[\"blackout\"]": "pfg97YxXqm"
             }
           },
-          "Fondo estrellas": {
+          "Star Background": {
             "trackData": {
               "uAHHjBy7fb": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Fondo estrellas:[\"count\"]",
+                "__debugName": "Star Background:[\"count\"]",
                 "keyframes": [
                   {
                     "id": "88rAr9kQYE",
@@ -1767,17 +1767,17 @@
               },
               "lW90T5lF_q": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Fondo estrellas:[\"brightness\"]",
+                "__debugName": "Star Background:[\"brightness\"]",
                 "keyframes": []
               },
               "mZ-eAoZePM": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Fondo estrellas:[\"drift\"]",
+                "__debugName": "Star Background:[\"drift\"]",
                 "keyframes": []
               },
               "Mh989Z0M_l": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Fondo estrellas:[\"swingRange\"]",
+                "__debugName": "Star Background:[\"swingRange\"]",
                 "keyframes": []
               }
             },
@@ -1788,11 +1788,11 @@
               "[\"swingRange\"]": "Mh989Z0M_l"
             }
           },
-          "Alarma / Foco 1": {
+          "Alarm / Light 1": {
             "trackData": {
               "mEJzv4xotN": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 1:[\"color\"]",
+                "__debugName": "Alarm / Light 1:[\"color\"]",
                 "keyframes": [
                   {
                     "id": "0ydfSeGsyg",
@@ -1816,7 +1816,7 @@
               },
               "I02hemXZFE": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 1:[\"intensity\"]",
+                "__debugName": "Alarm / Light 1:[\"intensity\"]",
                 "keyframes": [
                   {
                     "id": "H0Vm4dutZb",
@@ -1835,22 +1835,22 @@
               },
               "y2udBcdsf_": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 1:[\"flicker\"]",
+                "__debugName": "Alarm / Light 1:[\"flicker\"]",
                 "keyframes": []
               },
               "MhbjAgWoXY": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 1:[\"speed\"]",
+                "__debugName": "Alarm / Light 1:[\"speed\"]",
                 "keyframes": []
               },
               "866Ti9064c": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 1:[\"posX\"]",
+                "__debugName": "Alarm / Light 1:[\"posX\"]",
                 "keyframes": []
               },
               "JJzPRQC3MI": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 1:[\"posY\"]",
+                "__debugName": "Alarm / Light 1:[\"posY\"]",
                 "keyframes": []
               }
             },
@@ -1863,11 +1863,11 @@
               "[\"posY\"]": "JJzPRQC3MI"
             }
           },
-          "Alarma / Foco 2": {
+          "Alarm / Light 2": {
             "trackData": {
               "wo6G_SSh-e": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 2:[\"intensity\"]",
+                "__debugName": "Alarm / Light 2:[\"intensity\"]",
                 "keyframes": [
                   {
                     "id": "gMUl5soPHf",
@@ -1938,27 +1938,27 @@
               },
               "ULiBXkyISw": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 2:[\"color\"]",
+                "__debugName": "Alarm / Light 2:[\"color\"]",
                 "keyframes": []
               },
               "f9-tBiRbN2": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 2:[\"flicker\"]",
+                "__debugName": "Alarm / Light 2:[\"flicker\"]",
                 "keyframes": []
               },
               "CV0jKnDEuu": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 2:[\"speed\"]",
+                "__debugName": "Alarm / Light 2:[\"speed\"]",
                 "keyframes": []
               },
               "X6FteLY0Vx": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 2:[\"posX\"]",
+                "__debugName": "Alarm / Light 2:[\"posX\"]",
                 "keyframes": []
               },
               "J371tlpuT2": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Alarma / Foco 2:[\"posY\"]",
+                "__debugName": "Alarm / Light 2:[\"posY\"]",
                 "keyframes": []
               }
             },
@@ -1971,21 +1971,21 @@
               "[\"posY\"]": "J371tlpuT2"
             }
           },
-          "Grilla": {
+          "Grid": {
             "trackData": {
               "R1TeEhVxRj": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Grilla:[\"color\"]",
+                "__debugName": "Grid:[\"color\"]",
                 "keyframes": []
               },
               "U-awvwl1Db": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Grilla:[\"baseOpacity\"]",
+                "__debugName": "Grid:[\"baseOpacity\"]",
                 "keyframes": []
               },
               "MShENuxm88": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Grilla:[\"pulseSpeed\"]",
+                "__debugName": "Grid:[\"pulseSpeed\"]",
                 "keyframes": [
                   {
                     "id": "t7_HJKdjRg",
@@ -2030,7 +2030,7 @@
               },
               "9ncH9zv3yR": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Grilla:[\"pulseWidth\"]",
+                "__debugName": "Grid:[\"pulseWidth\"]",
                 "keyframes": [
                   {
                     "id": "5yw_I4CfF-",
@@ -2049,7 +2049,7 @@
               },
               "KU73T1ksWS": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Grilla:[\"pulseBright\"]",
+                "__debugName": "Grid:[\"pulseBright\"]",
                 "keyframes": [
                   {
                     "id": "sFnYDSaYgU",
@@ -2068,12 +2068,12 @@
               },
               "FMLDwVAKw3": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Grilla:[\"nodeBaseOpacity\"]",
+                "__debugName": "Grid:[\"nodeBaseOpacity\"]",
                 "keyframes": []
               },
               "scuJLGWTKo": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Grilla:[\"nodePulseBright\"]",
+                "__debugName": "Grid:[\"nodePulseBright\"]",
                 "keyframes": []
               }
             },
@@ -2087,11 +2087,11 @@
               "[\"nodePulseBright\"]": "scuJLGWTKo"
             }
           },
-          "Ventanas": {
+          "Windows": {
             "trackData": {
               "rq0OmeelPa": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventanas:[\"glassTint\"]",
+                "__debugName": "Windows:[\"glassTint\"]",
                 "keyframes": [
                   {
                     "id": "YeBkCmVVbo",
@@ -2133,7 +2133,7 @@
               },
               "gy6n5Yg8Ht": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventanas:[\"glassEdge\"]",
+                "__debugName": "Windows:[\"glassEdge\"]",
                 "keyframes": [
                   {
                     "id": "86YfQiOoN1",
@@ -2157,7 +2157,7 @@
               },
               "LQUa5Xh_UC": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventanas:[\"glassOpacity\"]",
+                "__debugName": "Windows:[\"glassOpacity\"]",
                 "keyframes": [
                   {
                     "id": "M6-Szu9i07",
@@ -2241,7 +2241,7 @@
               },
               "zcCHLhbF5e": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventanas:[\"dissolve\"]",
+                "__debugName": "Windows:[\"dissolve\"]",
                 "keyframes": [
                   {
                     "id": "q8yKnAqoM2",
@@ -2299,7 +2299,7 @@
               },
               "P4EffeyU8G": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventanas:[\"neonColor\"]",
+                "__debugName": "Windows:[\"neonColor\"]",
                 "keyframes": [
                   {
                     "id": "nx-JpDZY3q",
@@ -2548,11 +2548,11 @@
               "[\"posZ\"]": "TAlE7mp5a3"
             }
           },
-          "Ventana Central (vidrio)": {
+          "Center Window (glass)": {
             "trackData": {
               "b7eubU4KJ4": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventana Central (vidrio):[\"dissolve\"]",
+                "__debugName": "Center Window (glass):[\"dissolve\"]",
                 "keyframes": [
                   {
                     "id": "yWazBzRSN2",
@@ -2584,7 +2584,7 @@
               },
               "9HSWi4usZp": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventana Central (vidrio):[\"neonColor\"]",
+                "__debugName": "Center Window (glass):[\"neonColor\"]",
                 "keyframes": [
                   {
                     "id": "TnNQuFwSPy",
@@ -2626,7 +2626,7 @@
               },
               "76dv5JQXVF": {
                 "type": "BasicKeyframedTrack",
-                "__debugName": "Ventana Central (vidrio):[\"glassTint\"]",
+                "__debugName": "Center Window (glass):[\"glassTint\"]",
                 "keyframes": [
                   {
                     "id": "vE3qBacesD",
@@ -2771,6 +2771,7 @@
   },
   "definitionVersion": "0.4.0",
   "revisionHistory": [
+    "Htq2rDffYlTnItwD",
     "eKW1nG0ZrfrZzSh6",
     "-TV890TcwUkQ54rW",
     "Q-ZaGKhcJxoKjO84",

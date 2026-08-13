@@ -9,32 +9,43 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { getProject, types as t, onChange } from '@theatre/core';
 import studio from '@theatre/studio';
-import theatreState from './ventanas-state.json';
+import theatreState from './theatre-state/theatre-state_2026-08-13-1728.json';
 
 const bail=(m)=>{ const e=document.getElementById('err'); e.style.display='grid'; e.firstElementChild.innerHTML=m; };
 
 // Studio loads by default (same authoring workflow as the single-file HTML).
 // Pass ?minify to skip it (e.g. Webflow embed).
+//
+// persistenceKey is versioned: bumping it discards Studio's old localStorage
+// (which still held Spanish object names like Escena / Estrella (GLB) after the
+// English rename) so the committed theatre-state_*.json keyframes actually win
+// instead of flashing once then getting overwritten by empty defaults.
 const THEATRE_STUDIO = !new URLSearchParams(window.location.search).has('minify');
 let studioReady=false;
 if (THEATRE_STUDIO) {
-  try{ studio.initialize({ usePersistentStorage: true }); studioReady=true; }catch(err){ console.error(err); }
+  try{
+    studio.initialize({
+      usePersistentStorage: true,
+      persistenceKey: 'theatrejs:ventanas-take-3:en-v1',
+    });
+    studioReady=true;
+  }catch(err){ console.error(err); }
 }
 
 const GLB_URL = `${import.meta.env.BASE_URL}estrella.glb`;
 const LOGO_URL = `${import.meta.env.BASE_URL}eva-logo.png`;
 
 /* =========================================================================
-   DATOS VECTORIALES EXACTOS extraídos de Window_set.svg (viewBox 1440x1627)
+   Exact vector data extracted from Window_set.svg (viewBox 1440x1627)
    ========================================================================= */
 const SVG_W=1440, SVG_H=1627;
-const CRISP  = ["M719.309 493.4813C720.7344 488.5062 728.5656 488.5062 729.991 493.4813C741.1842 532.5542 769.7592 619.1548 813.7022 663.0978C857.6452 707.0408 944.2458 735.6158 983.3187 746.809C988.2938 748.2344 988.2938 756.0656 983.3187 757.491C944.2458 768.6842 857.6452 797.2592 813.7022 841.2022C769.7592 885.1452 741.1842 971.7458 729.991 1010.8187C728.5656 1015.7938 720.7344 1015.7938 719.309 1010.8187C708.1158 971.7458 679.5408 885.1452 635.5978 841.2022C591.6548 797.2592 505.0542 768.6842 465.9813 757.491C461.0062 756.0656 461.0062 748.2344 465.9813 746.809C505.0542 735.6158 591.6548 707.0408 635.5978 663.0978C679.5408 619.1548 708.1158 532.5542 719.309 493.4813Z","M376.8714 872.0336C378.1066 867.7221 384.8934 867.7221 386.1286 872.0336C395.8288 905.8948 420.5923 980.9442 458.674 1019.026C496.7558 1057.1077 571.8052 1081.8712 605.6664 1091.5714C609.9779 1092.8066 609.9779 1099.5934 605.6664 1100.8286C571.8052 1110.5288 496.7558 1135.2923 458.674 1173.374C420.5923 1211.4558 395.8288 1286.5052 386.1286 1320.3664C384.8934 1324.6779 378.1066 1324.6779 376.8714 1320.3664C367.1712 1286.5052 342.4077 1211.4558 304.326 1173.374C266.2442 1135.2923 191.1948 1110.5288 157.3336 1100.8286C153.0221 1099.5934 153.0221 1092.8066 157.3336 1091.5714C191.1948 1081.8712 266.2442 1057.1077 304.326 1019.026C342.4077 980.9442 367.1712 905.8948 376.8714 872.0336Z","M1060.1714 872.0336C1061.4066 867.7221 1068.1934 867.7221 1069.4286 872.0336C1079.1288 905.8948 1103.8923 980.9442 1141.974 1019.026C1180.0558 1057.1077 1255.1052 1081.8712 1288.9664 1091.5714C1293.2779 1092.8066 1293.2779 1099.5934 1288.9664 1100.8286C1255.1052 1110.5288 1180.0558 1135.2923 1141.974 1173.374C1103.8923 1211.4558 1079.1288 1286.5052 1069.4286 1320.3664C1068.1934 1324.6779 1061.4066 1324.6779 1060.1714 1320.3664C1050.4712 1286.5052 1025.7077 1211.4558 987.626 1173.374C949.5442 1135.2923 874.4948 1110.5288 840.6336 1100.8286C836.3221 1099.5934 836.3221 1092.8066 840.6336 1091.5714C874.4948 1081.8712 949.5442 1057.1077 987.626 1019.026C1025.7077 980.9442 1050.4712 905.8948 1060.1714 872.0336Z"];   // 3 estrellas nitidas (forma correcta 4star_03a)
-const GHOST  = ["M450.694 741.196C613.306 701.874 687.614 593.858 715.762 477.01C717.935 467.99 734.184 467.934 736.157 476.999C762.019 595.846 815.569 689.936 999.766 742.392C1008.03 744.746 1007.9 757.506 999.537 759.509C843.939 796.776 767.394 862.741 733.408 1033.78C731.644 1042.65 717.051 1043.05 714.759 1034.3C672.547 873.064 584.443 795.59 450.57 762.703C441.536 760.484 441.653 743.382 450.694 741.196Z","M824.972 1084.11C967.056 1047.48 1029.64 953.868 1054.53 855.062C1056.8 846.066 1073.34 846.033 1075.4 855.078C1098.79 957.575 1147.21 1039.37 1305.28 1085.53C1313.53 1087.94 1313.29 1100.79 1304.95 1102.85C1170.52 1135.86 1103.91 1194.03 1073.51 1341.27C1071.68 1350.13 1056.88 1350.54 1054.51 1341.81C1016.86 1203.34 940.306 1135.5 824.938 1105.9C815.961 1103.59 815.998 1086.43 824.972 1084.11Z","M144.516 1084.72C292.433 1049.25 349.175 954.899 372.068 855.941C374.159 846.902 390.229 846.799 392.275 855.848C415.4 958.129 463.014 1040.07 620.447 1086.16C628.698 1088.57 628.46 1101.43 620.11 1103.48C485.16 1136.61 419.527 1194.82 389.681 1344.16C387.932 1352.91 374.038 1353.41 371.716 1344.79C332.157 1197.93 269.453 1136.05 144.39 1105.96C135.343 1103.79 135.467 1086.89 144.516 1084.72Z"];   // 3 estrellas grandes difusas detras (glow)
-const BLOBS  = ["M999.394 742.78L985.498 746.704C988.135 748.555 987.792 752.989 985.498 754.873C986.665 754.873 999.696 759.086 999.696 759.086C1008.31 756.382 1006.48 743.849 999.394 742.78Z","M449.075 761.351L462.167 755.162C459.531 753.311 459.873 748.877 462.167 746.993C461 746.993 447.97 742.78 447.97 742.78C443.287 746.396 442.772 758.83 449.075 761.351Z","M716.464 475.857L720.478 491.208C722.328 488.572 727.151 488.481 729.036 490.775C729.036 490.073 735.729 475.857 735.729 475.857C730.554 467.518 718.313 470.162 716.464 475.857Z","M732.926 1034.3L727.497 1013.29C725.646 1015.93 721.372 1015.58 719.487 1013.29C719.487 1013.99 715.514 1034.79 715.514 1034.79C718.555 1043.13 731.602 1040.97 732.926 1034.3Z","M620.923 1087.66L608.799 1091.09C611.1 1092.7 610.801 1096.57 608.799 1098.22C609.818 1098.22 621.186 1101.89 621.186 1101.89C628.705 1099.53 627.103 1088.6 620.923 1087.66Z","M142.529 1103.87L153.952 1098.47C151.652 1096.85 151.951 1092.98 153.952 1091.34C152.934 1091.34 141.565 1087.66 141.565 1087.66C137.48 1090.82 137.03 1101.67 142.529 1103.87Z","M373.791 853.751L377.293 867.145C378.907 864.844 383.115 864.766 384.76 866.767C384.76 866.154 390.599 853.751 390.599 853.751C386.084 846.475 375.404 848.782 373.791 853.751Z","M389.492 1344.58L384.092 1323.68C382.252 1326.31 378.001 1325.97 376.127 1323.68C376.127 1324.38 372.176 1345.07 372.176 1345.07C375.2 1353.36 388.175 1351.21 389.492 1344.58Z","M1305.81 1087.11L1293.68 1090.54C1295.98 1092.15 1295.68 1096.02 1293.68 1097.66C1294.7 1097.66 1306.07 1101.34 1306.07 1101.34C1313.59 1098.98 1311.99 1088.05 1305.81 1087.11Z","M822.617 1102.87L834.04 1097.47C831.74 1095.85 832.039 1091.98 834.04 1090.34C833.022 1090.34 821.653 1086.66 821.653 1086.66C817.568 1089.82 817.118 1100.67 822.617 1102.87Z","M1056.86 853.492L1060.37 866.886C1061.98 864.586 1066.19 864.507 1067.83 866.508C1067.83 865.895 1073.67 853.492 1073.67 853.492C1069.16 846.216 1058.48 848.523 1056.86 853.492Z","M1072.55 1342.26L1067.31 1321.98C1065.53 1324.53 1061.4 1324.2 1059.58 1321.98C1059.58 1322.66 1055.75 1342.74 1055.75 1342.74C1058.68 1350.79 1071.27 1348.7 1072.55 1342.26Z"];   // 12 destellos en las puntas
-const LINES  = ["M1005.88 751.015L1036.34 751.015","M1093.19 751.015L1440 751.015","M1065.27 848.06L1065.27 778.954","M1065.27 722.193L1065.27 -79.887","M443.613 751.013H410.125","M705.094 1074.31L401.569 770.785","M361.82 730.803L0.396173 369.38","M745.398 1074.31L1046.97 772.735","M1086.6 732.518L1440.17 378.946","M705.094 1113.7L-5.43758 1824.24","M745.398 1113.7L1443.53 1811.84","M353.274 751.014L-0.00440376 751.014","M381.194 848.653L381.194 778.953","M381.197 722.972L381.197 -80.0007","M724.609 1040.64L724.609 1065.55","M724.609 -80.381L724.609 470.274","M626.383 1093.98L696.745 1093.98","M-1.95518 1093.98H137.083","M753.538 1093.98H817.924","M724.609 1122.4L724.609 1442","M1311.1 1093.98L1452.57 1093.98"];   // 21 lineas finas de la grilla
-const CIRCLES= [{cx:1064.77,cy:750.685,r:27.9272,tf:""},{cx:20.7487,cy:20.7487,r:20.2487,tf:"matrix(-1 0 0 1 1085.52 729.937)"},{cx:20.7487,cy:20.7487,r:20.2487,tf:"matrix(-1 0 0 1 745.86 1073.23)"},{cx:28.4272,cy:28.4272,r:27.9272,tf:"matrix(-1 0 0 1 410.125 722.256)"},{cx:20.7487,cy:20.7487,r:20.2487,tf:"matrix(-1 0 0 1 402.446 729.935)"},{cx:725.111,cy:1093.98,r:27.9272,tf:"rotate(180 725.111 1093.98)"}]; // 6 nodos (circulos), algunos con transform
+const CRISP  = ["M719.309 493.4813C720.7344 488.5062 728.5656 488.5062 729.991 493.4813C741.1842 532.5542 769.7592 619.1548 813.7022 663.0978C857.6452 707.0408 944.2458 735.6158 983.3187 746.809C988.2938 748.2344 988.2938 756.0656 983.3187 757.491C944.2458 768.6842 857.6452 797.2592 813.7022 841.2022C769.7592 885.1452 741.1842 971.7458 729.991 1010.8187C728.5656 1015.7938 720.7344 1015.7938 719.309 1010.8187C708.1158 971.7458 679.5408 885.1452 635.5978 841.2022C591.6548 797.2592 505.0542 768.6842 465.9813 757.491C461.0062 756.0656 461.0062 748.2344 465.9813 746.809C505.0542 735.6158 591.6548 707.0408 635.5978 663.0978C679.5408 619.1548 708.1158 532.5542 719.309 493.4813Z","M376.8714 872.0336C378.1066 867.7221 384.8934 867.7221 386.1286 872.0336C395.8288 905.8948 420.5923 980.9442 458.674 1019.026C496.7558 1057.1077 571.8052 1081.8712 605.6664 1091.5714C609.9779 1092.8066 609.9779 1099.5934 605.6664 1100.8286C571.8052 1110.5288 496.7558 1135.2923 458.674 1173.374C420.5923 1211.4558 395.8288 1286.5052 386.1286 1320.3664C384.8934 1324.6779 378.1066 1324.6779 376.8714 1320.3664C367.1712 1286.5052 342.4077 1211.4558 304.326 1173.374C266.2442 1135.2923 191.1948 1110.5288 157.3336 1100.8286C153.0221 1099.5934 153.0221 1092.8066 157.3336 1091.5714C191.1948 1081.8712 266.2442 1057.1077 304.326 1019.026C342.4077 980.9442 367.1712 905.8948 376.8714 872.0336Z","M1060.1714 872.0336C1061.4066 867.7221 1068.1934 867.7221 1069.4286 872.0336C1079.1288 905.8948 1103.8923 980.9442 1141.974 1019.026C1180.0558 1057.1077 1255.1052 1081.8712 1288.9664 1091.5714C1293.2779 1092.8066 1293.2779 1099.5934 1288.9664 1100.8286C1255.1052 1110.5288 1180.0558 1135.2923 1141.974 1173.374C1103.8923 1211.4558 1079.1288 1286.5052 1069.4286 1320.3664C1068.1934 1324.6779 1061.4066 1324.6779 1060.1714 1320.3664C1050.4712 1286.5052 1025.7077 1211.4558 987.626 1173.374C949.5442 1135.2923 874.4948 1110.5288 840.6336 1100.8286C836.3221 1099.5934 836.3221 1092.8066 840.6336 1091.5714C874.4948 1081.8712 949.5442 1057.1077 987.626 1019.026C1025.7077 980.9442 1050.4712 905.8948 1060.1714 872.0336Z"];   // 3 sharp stars (correct 4star_03a shape)
+const GHOST  = ["M450.694 741.196C613.306 701.874 687.614 593.858 715.762 477.01C717.935 467.99 734.184 467.934 736.157 476.999C762.019 595.846 815.569 689.936 999.766 742.392C1008.03 744.746 1007.9 757.506 999.537 759.509C843.939 796.776 767.394 862.741 733.408 1033.78C731.644 1042.65 717.051 1043.05 714.759 1034.3C672.547 873.064 584.443 795.59 450.57 762.703C441.536 760.484 441.653 743.382 450.694 741.196Z","M824.972 1084.11C967.056 1047.48 1029.64 953.868 1054.53 855.062C1056.8 846.066 1073.34 846.033 1075.4 855.078C1098.79 957.575 1147.21 1039.37 1305.28 1085.53C1313.53 1087.94 1313.29 1100.79 1304.95 1102.85C1170.52 1135.86 1103.91 1194.03 1073.51 1341.27C1071.68 1350.13 1056.88 1350.54 1054.51 1341.81C1016.86 1203.34 940.306 1135.5 824.938 1105.9C815.961 1103.59 815.998 1086.43 824.972 1084.11Z","M144.516 1084.72C292.433 1049.25 349.175 954.899 372.068 855.941C374.159 846.902 390.229 846.799 392.275 855.848C415.4 958.129 463.014 1040.07 620.447 1086.16C628.698 1088.57 628.46 1101.43 620.11 1103.48C485.16 1136.61 419.527 1194.82 389.681 1344.16C387.932 1352.91 374.038 1353.41 371.716 1344.79C332.157 1197.93 269.453 1136.05 144.39 1105.96C135.343 1103.79 135.467 1086.89 144.516 1084.72Z"];   // 3 large soft stars behind (glow)
+const BLOBS  = ["M999.394 742.78L985.498 746.704C988.135 748.555 987.792 752.989 985.498 754.873C986.665 754.873 999.696 759.086 999.696 759.086C1008.31 756.382 1006.48 743.849 999.394 742.78Z","M449.075 761.351L462.167 755.162C459.531 753.311 459.873 748.877 462.167 746.993C461 746.993 447.97 742.78 447.97 742.78C443.287 746.396 442.772 758.83 449.075 761.351Z","M716.464 475.857L720.478 491.208C722.328 488.572 727.151 488.481 729.036 490.775C729.036 490.073 735.729 475.857 735.729 475.857C730.554 467.518 718.313 470.162 716.464 475.857Z","M732.926 1034.3L727.497 1013.29C725.646 1015.93 721.372 1015.58 719.487 1013.29C719.487 1013.99 715.514 1034.79 715.514 1034.79C718.555 1043.13 731.602 1040.97 732.926 1034.3Z","M620.923 1087.66L608.799 1091.09C611.1 1092.7 610.801 1096.57 608.799 1098.22C609.818 1098.22 621.186 1101.89 621.186 1101.89C628.705 1099.53 627.103 1088.6 620.923 1087.66Z","M142.529 1103.87L153.952 1098.47C151.652 1096.85 151.951 1092.98 153.952 1091.34C152.934 1091.34 141.565 1087.66 141.565 1087.66C137.48 1090.82 137.03 1101.67 142.529 1103.87Z","M373.791 853.751L377.293 867.145C378.907 864.844 383.115 864.766 384.76 866.767C384.76 866.154 390.599 853.751 390.599 853.751C386.084 846.475 375.404 848.782 373.791 853.751Z","M389.492 1344.58L384.092 1323.68C382.252 1326.31 378.001 1325.97 376.127 1323.68C376.127 1324.38 372.176 1345.07 372.176 1345.07C375.2 1353.36 388.175 1351.21 389.492 1344.58Z","M1305.81 1087.11L1293.68 1090.54C1295.98 1092.15 1295.68 1096.02 1293.68 1097.66C1294.7 1097.66 1306.07 1101.34 1306.07 1101.34C1313.59 1098.98 1311.99 1088.05 1305.81 1087.11Z","M822.617 1102.87L834.04 1097.47C831.74 1095.85 832.039 1091.98 834.04 1090.34C833.022 1090.34 821.653 1086.66 821.653 1086.66C817.568 1089.82 817.118 1100.67 822.617 1102.87Z","M1056.86 853.492L1060.37 866.886C1061.98 864.586 1066.19 864.507 1067.83 866.508C1067.83 865.895 1073.67 853.492 1073.67 853.492C1069.16 846.216 1058.48 848.523 1056.86 853.492Z","M1072.55 1342.26L1067.31 1321.98C1065.53 1324.53 1061.4 1324.2 1059.58 1321.98C1059.58 1322.66 1055.75 1342.74 1055.75 1342.74C1058.68 1350.79 1071.27 1348.7 1072.55 1342.26Z"];   // 12 tip flares
+const LINES  = ["M1005.88 751.015L1036.34 751.015","M1093.19 751.015L1440 751.015","M1065.27 848.06L1065.27 778.954","M1065.27 722.193L1065.27 -79.887","M443.613 751.013H410.125","M705.094 1074.31L401.569 770.785","M361.82 730.803L0.396173 369.38","M745.398 1074.31L1046.97 772.735","M1086.6 732.518L1440.17 378.946","M705.094 1113.7L-5.43758 1824.24","M745.398 1113.7L1443.53 1811.84","M353.274 751.014L-0.00440376 751.014","M381.194 848.653L381.194 778.953","M381.197 722.972L381.197 -80.0007","M724.609 1040.64L724.609 1065.55","M724.609 -80.381L724.609 470.274","M626.383 1093.98L696.745 1093.98","M-1.95518 1093.98H137.083","M753.538 1093.98H817.924","M724.609 1122.4L724.609 1442","M1311.1 1093.98L1452.57 1093.98"];   // 21 thin grid lines
+const CIRCLES= [{cx:1064.77,cy:750.685,r:27.9272,tf:""},{cx:20.7487,cy:20.7487,r:20.2487,tf:"matrix(-1 0 0 1 1085.52 729.937)"},{cx:20.7487,cy:20.7487,r:20.2487,tf:"matrix(-1 0 0 1 745.86 1073.23)"},{cx:28.4272,cy:28.4272,r:27.9272,tf:"matrix(-1 0 0 1 410.125 722.256)"},{cx:20.7487,cy:20.7487,r:20.2487,tf:"matrix(-1 0 0 1 402.446 729.935)"},{cx:725.111,cy:1093.98,r:27.9272,tf:"rotate(180 725.111 1093.98)"}]; // 6 nodes (circles), some with transforms
 
-/* ---------- parser SVG path (M/C/L/H/V/Z) -> puntos flatten ---------- */
+/* ---------- SVG path parser (M/C/L/H/V/Z) -> flattened points ---------- */
 function flattenPath(d, steps=10){
   const toks = d.match(/[MCLHVZ]|-?\d*\.?\d+(?:e-?\d+)?/g);
   let i=0, x=0,y=0, pts=[];
@@ -61,7 +72,7 @@ function centroid(pts){ let cx=0,cy=0; for(const p of pts){cx+=p[0];cy+=p[1];} r
 
 const winFlat = CRISP.map(d=>flattenPath(d,12));
 const winCenters = winFlat.map(centroid);
-// mundo: x=SVGx-CX0 (centrado), y = SVG_H/2 - SVGy (y-up), escala 1/100
+// world: x=SVGx-CX0 (centered), y = SVG_H/2 - SVGy (y-up), scale 1/100
 const WSCALE=1/100;
 function toWorld(p){ return [ (p[0]-SVG_W/2)*WSCALE, (SVG_H/2-p[1])*WSCALE ]; }
 function applyTf(tf,x,y){
@@ -77,25 +88,25 @@ const winCentersW = winCenters.map(toWorld);
 const WINDOWS=[0,1,2].map(i=>({ idx:i, center:winCentersW[i], main: i===0 }));
 
 /* =========================================================================
-   TEXTURA DE PARED: dibujada con los MISMOS paths del SVG (Path2D nativo)
+   WALL TEXTURE: painted with the SAME SVG paths (native Path2D)
    ========================================================================= */
 function buildWallTexture(){
   const SS=2; const W=SVG_W*SS, H=SVG_H*SS;
   const c=document.createElement('canvas'); c.width=W; c.height=H;
   const ctx=c.getContext('2d'); ctx.scale(SS,SS);
-  // fondo
+  // background
   const cx0=SVG_W*0.5, cy0=SVG_H*0.46;
   const rad=Math.max(SVG_W,SVG_H)*0.75;
   const g=ctx.createRadialGradient(cx0,cy0,0, cx0,cy0,rad);
   g.addColorStop(0.0, WALL_COLORS.center); g.addColorStop(0.55, WALL_COLORS.mid); g.addColorStop(1.0, WALL_COLORS.edge);
   ctx.fillStyle=g; ctx.fillRect(0,0,SVG_W,SVG_H);
-  // NOTA: el neon/glow/destellos de las 3 ventanas YA NO se hornean aca (antes se dibujaban con
-  // Path2D a posicion fija). Ahora que las ventanas se pueden mover/escalar, viven como objetos
-  // 3D vivos (ver mas abajo, per-window group) para que sigan la mascara sin desalinearse.
+  // NOTE: neon/glow/flares for the 3 windows are NO LONGER baked in here (they used to be
+  // drawn with Path2D at fixed positions). Now that windows can move/scale, they live as live
+  // 3D objects (see per-window group below) so they stay aligned with the mask.
   const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=8;
   return tex;
 }
-let WALL_COLORS={ center:'#463a86', mid:'#0e1330', edge:'#0a0d1c' }; // antes casi identico al fondo (#020410) -> la pared 'desaparecia' en sus bordes y parecia un circulo
+let WALL_COLORS={ center:'#463a86', mid:'#0e1330', edge:'#0a0d1c' }; // used to nearly match the bg (#020410) -> wall 'vanished' at its edges and looked like a circle
 let wallTex=buildWallTexture();
 
 /* =========================================================================
@@ -109,15 +120,15 @@ const renderer=new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 const scene=new THREE.Scene(); scene.background=new THREE.Color(0x020410);
-// environment procedural (solo para que el vidrio PBR de la estrella tenga reflejos/transmision creibles;
-// costo unico al arrancar, no por cuadro)
+// procedural environment (only so the star's PBR glass gets believable reflections/transmission;
+// one-time cost at startup, not per frame)
 const pmrem=new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 const camera=new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.1, 500);
 camera.position.set(0,0,18); camera.rotation.order='YXZ';
 const clock=new THREE.Clock();
 
-/* ---------- fondo de estrellas ---------- */
+/* ---------- starfield background ---------- */
 const starU={ uTime:{value:0}, uSize:{value:2.2}, uBright:{value:1.0}, uAlarm:{value:new THREE.Color(0,0,0)}, uPixelRatio:{value:renderer.getPixelRatio()} };
 const starMat=new THREE.ShaderMaterial({ uniforms:starU, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
   vertexShader:`attribute float aRand; uniform float uSize,uPixelRatio; varying float vR;
@@ -133,19 +144,19 @@ function buildStars(n){ n=Math.max(0,Math.round(n)); if(n===lastStarCount) retur
   for(let i=0;i<n;i++){ pos[i*3]=(Math.random()*2-1)*26; pos[i*3+1]=(Math.random()*2-1)*22; pos[i*3+2]=-8-Math.random()*40; rnd[i]=Math.random(); }
   starGeo=new THREE.BufferGeometry(); starGeo.setAttribute('position',new THREE.BufferAttribute(pos,3)); starGeo.setAttribute('aRand',new THREE.BufferAttribute(rnd,1));
   starPoints=new THREE.Points(starGeo,starMat); starPoints.frustumCulled=false; starGroup.add(starPoints); }
-let starDrift=0.02; let starSwingRange=0.12; // rango maximo de giro (radianes) -- antes rotation.y sumaba sin limite y las estrellas terminaban girando demasiado lejos
+let starDrift=0.02; let starSwingRange=0.12; // max swing range (radians) -- rotation.y used to accumulate without a cap and stars spun too far
 
 /* =========================================================================
-   VORTEX / TUNEL DE FONDO -- puerto fiel de vortex-interior-theatre_4.html
-   (shader real: ruido simplex + fbm + domain-warp/turbulencia, formacion de haces
-   con "detail" ajustable, "fill", tinte cian/violeta por region angular, nucleo
-   caliente en los haces mas brillantes, trim con corte duro + punta brillante).
-   Reusa la camara y el fondo de estrellas de ESTA escena (sin Camara/Background propios).
+   VORTEX / BACKGROUND TUNNEL -- faithful port of vortex-interior-theatre_4.html
+   (real shader: simplex noise + fbm + domain-warp/turbulence, beam formation
+   with adjustable "detail", "fill", cyan/violet tint by angular region, hot
+   core in the brightest beams, trim with hard cut + bright tip).
+   Reuses THIS scene's camera and starfield (no separate Camera/Background of its own).
    ========================================================================= */
 const TAU=Math.PI*2;
 const VTX_RADIUS_DEFAULT=8, TSEG=240, RSEG=48;
 
-/* ---------- PATH: independiente de Theatre, igual que el original ---------- */
+/* ---------- PATH: independent of Theatre, same as the original ---------- */
 let CTRL=[ new THREE.Vector3(0,0,15), new THREE.Vector3(0,0,-17), new THREE.Vector3(0,0,-49), new THREE.Vector3(0,0,-81) ];
 let pathTension=0.5;
 function saveVortexPath(){ try{ localStorage.setItem('vortexPath_ventanas_v2', JSON.stringify({ p:CTRL.map(v=>[v.x,v.y,v.z]), tension:pathTension })); }catch(e){} }
@@ -153,7 +164,7 @@ function loadVortexPath(){ try{ const s=localStorage.getItem('vortexPath_ventana
   if(o.p&&o.p.length>=2){ CTRL=o.p.map(a=>new THREE.Vector3(a[0],a[1],a[2])); } if(typeof o.tension==='number') pathTension=o.tension; } }catch(e){} }
 loadVortexPath();
 
-/* ---------- glow al final del tunel ("la luz al fondo") ---------- */
+/* ---------- glow at the end of the tunnel ("light at the far end") ---------- */
 function vortexGlowTex(){ const s=256,c=document.createElement('canvas'); c.width=c.height=s; const x=c.getContext('2d');
   const g=x.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
   g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(.4,'rgba(255,255,255,.35)'); g.addColorStop(1,'rgba(255,255,255,0)');
@@ -161,7 +172,7 @@ function vortexGlowTex(){ const s=256,c=document.createElement('canvas'); c.widt
 const vortexGlowMat=new THREE.SpriteMaterial({ map:vortexGlowTex(), color:0x88aaff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0.25 });
 const vortexGlowSprite=new THREE.Sprite(vortexGlowMat); vortexGlowSprite.scale.set(6,6,1); vortexGlowSprite.renderOrder=0.05; scene.add(vortexGlowSprite);
 
-/* ---------- shader del tunel (puerto fiel: simplex noise + fbm + turbulencia) ---------- */
+/* ---------- tunnel shader (faithful port: simplex noise + fbm + turbulence) ---------- */
 const vortexU={
   uTime:{value:0},
   uColorCore:{value:new THREE.Color(0xd9ffff)}, uColorMid:{value:new THREE.Color(0x1fd9e0)}, uColorEdge:{value:new THREE.Color(0x7f47e6)},
@@ -184,13 +195,13 @@ const vortexMat=new THREE.ShaderMaterial({
     void main(){
       vUv=uv.yx;
       vec3 pos=position;
-      // taper: radio distinto en el extremo inicial (uv.x=0) vs el final (uv.x=1) del recorrido.
-      // "normal" en TubeGeometry apunta radialmente hacia afuera del eje, asi que reconstruimos
-      // el punto de la "columna" (spine) y volvemos a aplicar el radio ya escalado por el taper.
+      // taper: different radius at the start (uv.x=0) vs end (uv.x=1) of the path.
+      // TubeGeometry "normal" points radially outward from the axis, so we rebuild the
+      // spine point and re-apply the radius already scaled by the taper.
       float taperMul = mix(uTaperStart, uTaperEnd, uv.x);
       pos += normal * uRadiusBase * (taperMul - 1.0);
-      // "displace": empuja cada vertice a lo largo de su normal segun ruido -- deforma la forma
-      // EXTERIOR real del tubo (geometria de verdad, no un efecto de shader plano), tipo Spline.
+      // "displace": push each vertex along its normal by noise -- deforms the tube's real
+      // EXTERIOR shape (true geometry, not a flat shader effect), Spline-style.
       if(uDispAmount>0.0001){
         float n=dnoise(pos*uDispScale + vec3(0.0,0.0,uTime*uDispSpeed));
         pos += normal * ((n-0.5)*2.0*uDispAmount);
@@ -254,7 +265,7 @@ const vortexMat=new THREE.ShaderMaterial({
     }`,
 });
 
-const vortexGroup=new THREE.Group(); scene.add(vortexGroup); // tubo + marcadores + linea del recorrido -> "scale" los mueve a todos juntos
+const vortexGroup=new THREE.Group(); scene.add(vortexGroup); // tube + markers + path line -> "scale" moves them all together
 let vortexRadius=VTX_RADIUS_DEFAULT;
 function buildVortexCurve(){ return new THREE.CatmullRomCurve3(CTRL.map(v=>v.clone()), false, 'catmullrom', pathTension); }
 let vortexMesh=new THREE.Mesh(new THREE.TubeGeometry(buildVortexCurve(),TSEG,vortexRadius,RSEG,false), vortexMat);
@@ -269,7 +280,7 @@ function rebuildVortexTube(){
 }
 rebuildVortexTube();
 let vortexEnabled=true;
-let seqPlayingMain=false; // oculta marcadores/gizmo durante el play del (unico) timeline
+let seqPlayingMain=false; // hide markers/gizmo while the (single) timeline is playing
 
 /* ---------- editor: marcadores + gizmo + dibujar + agregar/quitar ---------- */
 const vortexMarkerGroup=new THREE.Group(); vortexGroup.add(vortexMarkerGroup);
@@ -305,34 +316,34 @@ function vortexScreenToWorldAtDist(v2, dist){ const v=new THREE.Vector3(v2.x,v2.
   const dir=v.sub(camera.position).normalize(); return camera.position.clone().add(dir.multiplyScalar(dist)); }
 
 
-/* ---------- luces de alarma (estado) ---------- */
+/* ---------- alarm lights (state) ---------- */
 const L=[ { color:new THREE.Color(0xff2a2a), intensity:1.4, flicker:0.7, speed:2.2, x:-8, y:0, z:-8 },
          { color:new THREE.Color(0xff2a2a), intensity:1.4, flicker:0.7, speed:1.5, x: 8, y:0, z:-8 } ];
 const tmpC0=new THREE.Color(), tmpC1=new THREE.Color(), tmpW=new THREE.Color();
 function flick(time,speed,amt){ let b=0.5+0.5*Math.sin(time*speed*Math.PI*2); b=b*b; return (1-amt)+amt*b; }
 
-/* ---------- pared (textura fiel al SVG) con agujeros REALES y RECALCULABLES ----------
-   Cada ventana puede moverse/escalarse (mascara). Como recalcular una ShapeGeometry con
-   ~3 agujeros de unos pocos cientos de vertices es barato (sub-milisegundo), reconstruimos
-   la pared entera cada vez que cambia un offset/escala -- sin shaders de mascara, sin los
-   bugs de arrays truncados que tuvimos antes. Simple y robusto. */
+/* ---------- wall (SVG-faithful texture) with REAL, REBUILDABLE holes ----------
+   Each window can move/scale (mask). Since rebuilding a ShapeGeometry with ~3 holes of
+   a few hundred vertices is cheap (sub-millisecond), we rebuild the whole wall whenever
+   an offset/scale changes -- no mask shaders, none of the truncated-array bugs we hit
+   before. Simple and robust. */
 const crispLocal = winFlat.map((flat,i)=>{ const c=winCentersW[i]; return flat.map(toWorld).map(p=>[p[0]-c[0], p[1]-c[1]]); });
 
-// estado de mascara: central independiente (offset+escala propios), laterales compartido
-const winMask=[ {offX:0,offY:0,scX:1,scY:1} ]; // solo la central usa esto directamente
-const sideState={ offsetX:0, offsetY:0, scale:1 }; // izquierda(1)/derecha(2) comparten esto
+// mask state: center independent (own offset+scale), sides shared
+const winMask=[ {offX:0,offY:0,scX:1,scY:1} ]; // only the center uses this directly
+const sideState={ offsetX:0, offsetY:0, scale:1 }; // left(1)/right(2) share this
 
 function winTransform(i){
   if(i===0) return { ox:winMask[0].offX, oy:winMask[0].offY, sx:winMask[0].scX, sy:winMask[0].scY };
-  // izquierda(1): offsetX positivo = se aleja (mas a la izquierda); derecha(2): offsetX positivo = se aleja (mas a la derecha)
-  // offsetY: ambas suben/bajan juntas (mismo sentido). scale: comparten el mismo tamaño.
+  // left(1): positive offsetX = moves farther left; right(2): positive offsetX = moves farther right
+  // offsetY: both move up/down together (same direction). scale: they share the same size.
   const dirX = (i===1) ? -1 : 1;
   return { ox: dirX*sideState.offsetX, oy: sideState.offsetY, sx: sideState.scale, sy: sideState.scale };
 }
 
-const wallMat=new THREE.MeshBasicMaterial({ map:wallTex, transparent:false, opacity:1 }); // arranca opaca de verdad; el fundido la pasa a transparent:true SOLO mientras blackout>0
+const wallMat=new THREE.MeshBasicMaterial({ map:wallTex, transparent:false, opacity:1 }); // starts truly opaque; the fade flips it to transparent:true ONLY while blackout>0
 let wallGeo=null;
-const nearLayer=new THREE.Group(); scene.add(nearLayer); // pared+grilla+vidrios+neon: todo junto, para que el parallax no los desalinee
+const nearLayer=new THREE.Group(); scene.add(nearLayer); // wall+grid+glass+neon: one group so parallax never misaligns them
 const wall=new THREE.Mesh(new THREE.BufferGeometry(), wallMat); wall.position.z=0; wall.renderOrder=1; nearLayer.add(wall);
 
 function currentHolePoints(i){
@@ -356,13 +367,13 @@ function rebuildWall(){
 }
 rebuildWall();
 
-/* ---------- grupos por ventana: vidrio + neon vivo, siguen la mascara ---------- */
+/* ---------- per-window groups: glass + live neon, follow the mask ---------- */
 const winGroups=[];
 function applyWinTransform(i){
   const t=winTransform(i); const c=winCentersW[i];
   winGroups[i].position.set(c[0]+t.ox, c[1]+t.oy, 0);
   winGroups[i].scale.set(t.sx, t.sy, 1);
-  // mantiene sincronizado el recorte de la grilla con la posicion/escala real de la ventana
+  // keep the grid cutout synced with the window's real position/scale
   if(typeof maskUniformsShared !== 'undefined'){
     maskUniformsShared['uOff'+i].value.set(t.ox, t.oy);
     maskUniformsShared['uScale'+i].value.set(t.sx, t.sy);
@@ -377,12 +388,12 @@ function applyWinTransform(i){
    si las movés/escalás desde el timeline el recorte las sigue automaticamente.
    ========================================================================= */
 const gridState={ color:new THREE.Color(0.81,0.65,0.99), baseOpacity:0.16, pulseSpeed:0.35, pulseWidth:0.22, pulseBright:2.4,
-  nodeBaseOpacity:0.21, nodePulseBright:2.4 }; // independientes del brillo de las lineas
-let wallGridBlackout=0; // 0 = normal, 1 = pared+grilla totalmente a negro (solo quedan las ventanas)
-let gridPulseTime=0; // acumulador propio del pulso, compensado por la distancia de la camara a la pared
-const GRID_REF_DIST=18; // distancia de referencia (posicion inicial de la camara) para la que la velocidad se ve "normal"
+  nodeBaseOpacity:0.21, nodePulseBright:2.4 }; // independent of the line brightness
+let wallGridBlackout=0; // 0 = normal, 1 = wall+grid fully black (only windows remain)
+let gridPulseTime=0; // own pulse accumulator, compensated by camera distance to the wall
+const GRID_REF_DIST=18; // reference distance (camera start position) at which the speed looks "normal"
 
-const MAXN=104; // las 3 ventanas tienen 97 puntos c/u (8 curvas a steps=12); dejamos margen
+const MAXN=104; // the 3 windows have 97 points each (8 curves at steps=12); leave headroom
 function padPoly(pts){ const out=new Float32Array(MAXN*2); const n=Math.min(pts.length,MAXN);
   for(let i=0;i<n;i++){ out[i*2]=pts[i][0]; out[i*2+1]=pts[i][1]; }
   for(let i=n;i<MAXN;i++){ out[i*2]=pts[n-1][0]; out[i*2+1]=pts[n-1][1]; } return {arr:out, n}; }
@@ -473,10 +484,10 @@ function updateGrid(time){
 }
 
 
-/* ---------- vidrios (Fresnel + tinte por luces), forma EXACTA del SVG ----------
-   Fabrica reusable: la central usa una variante casi transparente en reposo (para no
-   tapar el GLB) pero que SI reacciona a la luz de alarma -- asi el rojo de la alarma
-   se nota tambien en la ventana central, que antes quedaba completamente muda. */
+/* ---------- glass (Fresnel + light tint), EXACT SVG shape ----------
+   Reusable factory: the center uses a near-transparent-at-rest variant (so it doesn't
+   cover the GLB) that DOES react to alarm light -- so the alarm red also shows on the
+   center window, which used to stay completely mute. */
 function makeGlass(tint, opacity){
   const u={ uGlassTint:{value:new THREE.Color(tint)}, uGlassEdge:{value:new THREE.Color(0.81,0.65,0.99)},
     uGlassOpacity:{value:opacity}, uDissolve:{value:0.0}, uEdgeWidth:{value:3.0}, uEdgeIntensity:{value:2.2},
@@ -487,34 +498,34 @@ function makeGlass(tint, opacity){
       uniform vec3 uGlassTint,uGlassEdge; uniform float uGlassOpacity,uDissolve,uEdgeWidth,uEdgeIntensity; uniform vec3 uLightPos[2]; uniform vec3 uLightColI[2];
       void main(){
         vec3 N=vec3(0.0,0.0,1.0); vec3 V=normalize(cameraPosition-vW);
-        // uEdgeWidth es el exponente del fresnel: valores CHICOS ensanchan el borde (cubre mas
-        // superficie), valores GRANDES lo afinan (un filo mas nitido, pegado al contorno).
+        // uEdgeWidth is the fresnel exponent: SMALL values widen the rim (covers more
+        // surface), LARGE values thin it (sharper edge hugging the contour).
         float fres=pow(1.0-clamp(dot(N,V),0.0,1.0),uEdgeWidth);
         vec3 tint=vec3(0.0);
         for(int i=0;i<2;i++){ vec3 Ld=uLightPos[i]-vW; float att=1.0/(1.0+dot(Ld,Ld)*0.02); tint+=uLightColI[i]*att; }
         vec3 col=uGlassTint + tint + uGlassEdge*fres*uEdgeIntensity;
-        // uDissolve apaga el alfa COMPLETO (incluido el brillo de borde/fresnel) -- a diferencia de
-        // bajar solo uGlassOpacity, esto asegura que no quede ningun contorno visible en absoluto.
+        // uDissolve kills COMPLETE alpha (including rim/fresnel glow) -- unlike lowering
+        // only uGlassOpacity, this ensures no outline remains visible at all.
         float alpha=clamp(uGlassOpacity + fres*0.55 + (tint.r+tint.g+tint.b)*0.15, 0.0, 0.95) * (1.0-uDissolve);
         gl_FragColor=vec4(col,alpha);
       }`,
   });
   return {mat:m, uniforms:u};
 }
-const glassInst=makeGlass(0x1a1f38, 0.30);       // laterales: vidrio normal
+const glassInst=makeGlass(0x1a1f38, 0.30);       // sides: normal glass
 const glassU=glassInst.uniforms, glassMat=glassInst.mat;
-const centralInst=makeGlass(0x000000, 0.0);       // central: invisible en reposo, pero SI reacciona a la alarma
+const centralInst=makeGlass(0x000000, 0.0);       // center: invisible at rest, but DOES react to the alarm
 const centralU=centralInst.uniforms, centralMat=centralInst.mat;
 
-// uniforms COMPARTIDOS de luz para el neon de las 3 ventanas -- se actualizan una sola vez por
-// cuadro (en tick) y los 3 marcos los referencian, igual patron que ya usan glassU/centralU.
+// SHARED light uniforms for all 3 windows' neon -- updated once per frame (in tick)
+// and referenced by all 3 frames, same pattern glassU/centralU already use.
 const neonLightU = { uLightPos:{value:[new THREE.Vector3(),new THREE.Vector3()]}, uLightColI:{value:[new THREE.Color(),new THREE.Color()]} };
 function makeNeonMat(colorHex, opacityBase, widthBase){
   const u = { uColor:{value:new THREE.Color(colorHex)}, uOpacityBase:{value:opacityBase}, uDissolve:{value:0.0}, uWidth:{value:widthBase}, ...neonLightU };
   return new THREE.ShaderMaterial({ uniforms:u, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
     vertexShader:`attribute vec3 aOffset; uniform float uWidth; varying vec3 vW;
       void main(){
-        vec3 pos = position + aOffset*uWidth; // "aOffset" es la direccion perpendicular al trazo (precalculada); el ancho es 100% tiempo real
+        vec3 pos = position + aOffset*uWidth; // "aOffset" is the stroke's perpendicular direction (precomputed); width is fully real-time
         vW=(modelMatrix*vec4(pos,1.0)).xyz;
         gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);
       }`,
@@ -523,19 +534,19 @@ function makeNeonMat(colorHex, opacityBase, widthBase){
       void main(){
         vec3 tint=vec3(0.0);
         for(int i=0;i<2;i++){ vec3 Ld=uLightPos[i]-vW; float att=1.0/(1.0+dot(Ld,Ld)*0.02); tint+=uLightColI[i]*att; }
-        vec3 col=uColor + tint*1.4; // el marco/neon "refleja" la luz de la alarma cuando esta cerca
+        vec3 col=uColor + tint*1.4; // frame/neon "reflects" the alarm light when nearby
         gl_FragColor=vec4(col, uOpacityBase*(1.0-uDissolve));
       }`,
   });
 }
-// construye una cinta de triangulos (ancho real, no una THREE.Line -- en WebGL las lineas NO
-// pueden engrosarse mas alla de 1px, es una limitacion del navegador) alrededor de un contorno cerrado.
+// build a triangle ribbon (real width, not a THREE.Line -- in WebGL lines CANNOT
+// thicken past 1px, a browser limit) around a closed contour.
 function buildRibbonGeometry(loopPts){
   const n=loopPts.length, positions=new Float32Array(n*2*3), offsets=new Float32Array(n*2*3);
   for(let k=0;k<n;k++){
     const prev=loopPts[(k-1+n)%n], curr=loopPts[k], next=loopPts[(k+1)%n];
     let tx=next[0]-prev[0], ty=next[1]-prev[1]; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
-    const nx=-ty, ny=tx; // perpendicular al trazo
+    const nx=-ty, ny=tx; // perpendicular to the stroke
     const i0=k*6;
     positions[i0]=curr[0]; positions[i0+1]=curr[1]; positions[i0+2]=0.01;
     positions[i0+3]=curr[0]; positions[i0+4]=curr[1]; positions[i0+5]=0.01;
@@ -552,13 +563,13 @@ function buildRibbonGeometry(loopPts){
 }
 
 const fillMeshes=[];
-const neonMats=[]; // { halo, core, haloBase, coreBase } por ventana -- para poder disolver el contorno
+const neonMats=[]; // { halo, core, haloBase, coreBase } per window -- so the outline can dissolve
 for(let i=0;i<3;i++){
   const shp=new THREE.Shape(crispLocal[i].map(p=>new THREE.Vector2(p[0],p[1])));
   const mesh=new THREE.Mesh(new THREE.ShapeGeometry(shp), i===0 ? centralMat : glassMat);
   mesh.position.z=-0.02; mesh.renderOrder=2; mesh.userData.main=(i===0); mesh.frustumCulled=false;
   const grp=new THREE.Group(); grp.add(mesh);
-  // neon vivo (contorno con ancho real), sigue el mismo grupo -> nunca se desalinea del agujero
+  // live neon (real-width outline), same group -> never misaligns from the hole
   { const geo=buildRibbonGeometry(crispLocal[i]);
     const haloBase=0.35, coreBase=0.9, haloWidthBase=0.10, coreWidthBase=0.035;
     const haloMat=makeNeonMat(0xcea7fc, haloBase, haloWidthBase);
@@ -571,7 +582,7 @@ for(let i=0;i<3;i++){
   applyWinTransform(i);
 }
 
-/* ---------- derrame de luz sobre la pared, alrededor de cada ventana (sobre todo la de alarma) ---------- */
+/* ---------- light spill on the wall around each window (especially the alarm one) ---------- */
 function wallSpillTex(){ const s=256,c=document.createElement('canvas'); c.width=c.height=s; const x=c.getContext('2d');
   const g=x.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
   g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(0.5,'rgba(255,255,255,0.35)'); g.addColorStop(1,'rgba(255,255,255,0)');
@@ -579,15 +590,15 @@ function wallSpillTex(){ const s=256,c=document.createElement('canvas'); c.width
 const wallSpillMat=new THREE.SpriteMaterial({ map:wallSpillTex(), color:0x000000, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0 });
 const wallSpillSprites=[0,1,2].map(i=>{
   const sp=new THREE.Sprite(wallSpillMat.clone()); const rad=Math.max(...crispLocal[i].map(p=>Math.hypot(p[0],p[1])));
-  sp.scale.set(rad*3.2, rad*3.2, 1); sp.position.set(winCentersW[i][0], winCentersW[i][1], 0.02); sp.renderOrder=1.2; // justo encima de la pared, debajo del vidrio/neon
+  sp.scale.set(rad*3.2, rad*3.2, 1); sp.position.set(winCentersW[i][0], winCentersW[i][1], 0.02); sp.renderOrder=1.2; // just above the wall, below glass/neon
   nearLayer.add(sp); return sp;
 });
 
 /* =========================================================================
-   LOGO EVA -- imagen del logo (un solo tono turquesa, con transparencia) usada
-   SOLO como mascara de forma (canal alfa). El color se rellena con un uniform
-   propio, asi se puede recolorear a CUALQUIER color (no solo variaciones del
-   turquesa original) -- color/tamaño/posicion, todo controlable.
+   EVA LOGO -- logo image (single turquoise tone + transparency) used ONLY as a
+   shape mask (alpha channel). Color is filled via its own uniform so it can be
+   recolored to ANY color (not just variants of the original turquoise) --
+   color/size/position are all controllable.
    ========================================================================= */
 const evaLogoTex = (function(){
   const tex = new THREE.TextureLoader().load(LOGO_URL);
@@ -600,18 +611,18 @@ const evaLogoMat = new THREE.ShaderMaterial({ uniforms:evaLogoU, transparent:tru
   fragmentShader:`precision highp float; varying vec2 vUv; uniform sampler2D uMap; uniform vec3 uColor; uniform float uOpacity;
     void main(){ float a=texture2D(uMap,vUv).a; gl_FragColor=vec4(uColor, a*uOpacity); }`,
 });
-const evaLogoGeo = new THREE.PlaneGeometry(4,4*311/320); // relacion de aspecto real del recorte (320x311)
+const evaLogoGeo = new THREE.PlaneGeometry(4,4*311/320); // real crop aspect ratio (320x311)
 const evaLogoMesh = new THREE.Mesh(evaLogoGeo, evaLogoMat);
 evaLogoMesh.position.set(0,0,5); evaLogoMesh.renderOrder=7; scene.add(evaLogoMesh);
 
 /* =========================================================================
-   TRAZO HORIZONTAL entre las 3 ventanas -- el arco que en el logo EVA conecta
-   las 3 estrellitas, pero acomodado a las 3 ventanas reales de la pared.
-   Crece de izquierda a derecha con trim (igual tecnica que el trim del vortex).
+   HORIZONTAL STROKE between the 3 windows -- the arc that connects the 3 stars
+   in the EVA logo, fitted to the wall's real 3 windows.
+   Grows left-to-right via trim (same technique as the vortex trim).
    ========================================================================= */
-const traceSideCenters = [WINDOWS[1].center, WINDOWS[2].center].sort((a,b)=>a[0]-b[0]); // [izquierda, derecha]
+const traceSideCenters = [WINDOWS[1].center, WINDOWS[2].center].sort((a,b)=>a[0]-b[0]); // [left, right]
 const traceLeft = traceSideCenters[0], traceRight = traceSideCenters[1];
-const traceMidTop = [WINDOWS[0].center[0], WINDOWS[0].center[1] + (WINDOWS[0].center[1]-traceLeft[1])*0.15 + 3.5]; // arco por ENCIMA de las ventanas, como en el logo
+const traceMidTop = [WINDOWS[0].center[0], WINDOWS[0].center[1] + (WINDOWS[0].center[1]-traceLeft[1])*0.15 + 3.5]; // arc ABOVE the windows, like in the logo
 const traceCurve = new THREE.QuadraticBezierCurve3(
   new THREE.Vector3(traceLeft[0], traceLeft[1], 6),
   new THREE.Vector3(traceMidTop[0], traceMidTop[1], 6),
@@ -631,9 +642,9 @@ function makeTraceMat(width, opacityMul){
     vertexShader:`attribute float aProg; varying float vProg; void main(){ vProg=aProg; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader:`precision highp float; varying float vProg; uniform vec3 uColor; uniform float uGrowStart,uGrowEnd,uOpacity;
       void main(){
-        if(vProg<uGrowStart || vProg>uGrowEnd) discard; // trim: solo se dibuja el tramo ya "crecido"
+        if(vProg<uGrowStart || vProg>uGrowEnd) discard; // trim: only draw the already-"grown" segment
         float tipW=0.03;
-        float tip=1.0-smoothstep(0.0,tipW,abs(vProg-uGrowEnd)); // punta brillante justo donde va creciendo
+        float tip=1.0-smoothstep(0.0,tipW,abs(vProg-uGrowEnd)); // bright tip right where growth is advancing
         gl_FragColor=vec4(uColor, (${opacityMul}+tip*0.8)*uOpacity);
       }`,
   });
@@ -642,7 +653,7 @@ const traceHalo=new THREE.Line(traceGeo, makeTraceMat(0.35,'0.35')); traceHalo.r
 const traceCore=new THREE.Line(traceGeo, makeTraceMat(0.9,'0.9')); traceCore.renderOrder=7.1; traceCore.frustumCulled=false;
 scene.add(traceHalo); scene.add(traceCore);
 
-/* ---------- GLB estrella (central, fija, de frente) ---------- */
+/* ---------- star GLB (center, fixed, facing camera) ---------- */
 const glow=(function(){ const s=256,c=document.createElement('canvas'); c.width=c.height=s; const x=c.getContext('2d');
   const g=x.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2); g.addColorStop(0,'rgba(255,255,255,0.9)'); g.addColorStop(0.35,'rgba(255,255,255,0.25)'); g.addColorStop(1,'rgba(255,255,255,0)');
   x.fillStyle=g; x.fillRect(0,0,s,s); const m=new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), color:0x6ab0ff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false });
@@ -650,47 +661,47 @@ const glow=(function(){ const s=256,c=document.createElement('canvas'); c.width=
 const mainC=WINDOWS[0].center;
 glow.position.set(mainC[0], mainC[1], 0.05); scene.add(glow);
 const starGroup2=new THREE.Group(); starGroup2.position.set(mainC[0], mainC[1], 3.0); scene.add(starGroup2);
-const starPos={ x:mainC[0], y:mainC[1], z:3.0 }; // lejos de la pared (z=0): asi ningun fragmento del shatter queda detras de ella al dispersarse
+const starPos={ x:mainC[0], y:mainC[1], z:3.0 }; // away from the wall (z=0): so no shatter fragment ends up behind it when dispersing
 const glbMat=new THREE.MeshPhysicalMaterial({ color:0xdff0ff, emissive:new THREE.Color(0x4aa0ff), emissiveIntensity:1.6,
   roughness:0.12, transmission:0.6, ior:1.45, thickness:0.6, metalness:0.0, depthWrite:false,
-  // depthWrite:false (NUEVO): sin esto, el vidrio "reservaba" su lugar en el buffer de profundidad como si
-  // fuera opaco y bloqueaba que el vortex (detras) se dibujara ahi -- por eso las estrellas (que ya
-  // ignoraban profundidad) se veian pero el vortex no. depthTest se deja en su default (true): eso es
-  // lo que evita que los ~55 fragmentos del shatter se mezclen mal entre si (el bug de manchas negras).
-  // OJO: transmission=1 + EffectComposer (nuestro Bloom) tiene bugs documentados en Three.js
-  // (la pasada especial que "fotografia" lo de atras se rompe con postproceso). Por eso bajamos
-  // transmission y sumamos opacity/transparent real: el alpha blending clasico SI funciona
-  // siempre con Bloom, sin depender de ese mecanismo fragil -- asi las estrellas/vortex se ven seguro.
-  transparent:true, opacity:0.4, side:THREE.DoubleSide }); // depthTest queda en su default (true) -- eso arreglo las manchas negras la vez pasada
+  // depthWrite:false (NEW): without this, glass "reserved" its spot in the depth buffer as if
+  // opaque and blocked the vortex (behind) from drawing there -- so stars (which already
+  // ignored depth) showed but the vortex didn't. depthTest stays at its default (true): that
+  // is what keeps the ~55 shatter fragments from blending badly into each other (black-blob bug).
+  // NOTE: transmission=1 + EffectComposer (our Bloom) has documented Three.js bugs
+  // (the special pass that "photographs" what's behind breaks with post-processing). So we
+  // lower transmission and add real opacity/transparent: classic alpha blending DOES work
+  // with Bloom, without relying on that fragile path -- so stars/vortex stay visible.
+  transparent:true, opacity:0.4, side:THREE.DoubleSide }); // depthTest stays at its default (true) -- that fixed the black blobs last time
 scene.add(new THREE.AmbientLight(0x99aadd,1.1)); const dl=new THREE.DirectionalLight(0xffffff,1.4); dl.position.set(0.3,0.4,1); scene.add(dl);
 const starState={ scale:0.7, emiColor:new THREE.Color(0x4aa0ff), emiInt:1.6, opacity:0.4, glowSize:2.6, glowInt:0.85 };
 let glbRoot=null, mixer=null, action=null, clipDuration=1, liveShatter=false;
 function applyStar(){ if(glbRoot) glbRoot.scale.setScalar(starState.scale); glbMat.emissive.copy(starState.emiColor); glbMat.emissiveIntensity=starState.emiInt; glbMat.opacity=starState.opacity;
   glow.material.color.copy(starState.emiColor); glow.material.opacity=starState.glowInt; glow.scale.setScalar(starState.glowSize); }
-// funcion reusable: permite cargar el GLB inicial Y tambien reemplazarlo en caliente (ver selector de archivo mas abajo)
+// reusable: load the initial GLB AND hot-swap it later (see file picker below)
 function loadGLBFromBuffer(buf){
   try{
     new GLTFLoader().parse(buf, '', gltf=>{
       if(glbRoot){ starGroup2.remove(glbRoot); }
       glbRoot=gltf.scene;
-      // El modelo es plano con normal en +Y local; +90 en X lo orienta con la cara "frontal" mirando +Z (hacia la camara)
+      // Model is flat with local +Y normal; +90 on X orients the "front" face toward +Z (toward camera)
       glbRoot.rotation.x = Math.PI/2;
-      glbRoot.traverse(o=>{ if(o.isMesh){ o.material=glbMat; o.frustumCulled=false; o.renderOrder=6; } }); // > que wall.renderOrder(1): sin esto, la pared (transparent:true por el fundido) dibujaba DESPUES y borraba el vidrio salvo donde coincidia con un agujero
+      glbRoot.traverse(o=>{ if(o.isMesh){ o.material=glbMat; o.frustumCulled=false; o.renderOrder=6; } }); // > wall.renderOrder(1): without this, the wall (transparent:true from the fade) drew AFTER and erased glass except where a hole lined up
       starGroup2.add(glbRoot); applyStar();
       mixer=null; action=null; clipDuration=1; liveShatter=false;
       if(gltf.animations && gltf.animations.length){ mixer=new THREE.AnimationMixer(glbRoot);
         action=mixer.clipAction(gltf.animations[0]); action.loop=THREE.LoopOnce; action.clampWhenFinished=true;
         clipDuration=gltf.animations[0].duration||1;
         action.play(); action.paused=true; action.time=0; mixer.update(0);
-        // si ya existe el control de timeline (recarga de GLB en caliente), respetar el valor actual
+        // if the timeline control already exists (hot GLB reload), honor its current value
         try{ const p=starObj.value.shatterProgress||0; action.time=p*clipDuration; mixer.update(0); }catch(e){} }
-    }, err=>{ console.error('GLB',err); bail('No se pudo interpretar el GLB.'); });
+    }, err=>{ console.error('GLB',err); bail('Could not parse the GLB.'); });
   }catch(err){ console.error(err); }
 }
 fetch(GLB_URL)
   .then((r)=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.arrayBuffer(); })
   .then((buf)=> loadGLBFromBuffer(buf))
-  .catch((err)=>{ console.error(err); bail('No se pudo cargar <code>estrella.glb</code>.'); });
+  .catch((err)=>{ console.error(err); bail('Could not load <code>estrella.glb</code>.'); });
 function activate(){ if(action){ liveShatter=true; action.reset(); action.paused=false; } }
 function resetStar(){ if(action){ liveShatter=false; action.reset(); action.paused=true; mixer.update(0); } }
 
@@ -702,17 +713,17 @@ composer.addPass(new OutputPass());
 
 /* ---------- THEATRE ---------- */
 const num=(v,a,b)=>t.number(v,{range:[a,b]});
-const project=getProject('Ventanas 3D SVG', { state: theatreState }); const sheet=project.sheet('Escena');
-// vortexSheet eliminado: todo vive en el MISMO sheet ('Escena') para que haya un solo timeline
+const project=getProject('Ventanas 3D SVG', { state: theatreState }); const sheet=project.sheet('Scene');
+// vortexSheet removed: everything lives on the SAME sheet ('Scene') so there's one timeline
 try{ onChange(sheet.sequence.pointer.playing, p=>{ seqPlayingMain=!!p; }); }catch(e){}
 
 try{
-  const trimObj=sheet.object('Trim del Recorrido',{ trimStart:num(0.0,0,1), trimEnd:num(1.0,0,1) });
+  const trimObj=sheet.object('Path Trim',{ trimStart:num(0.0,0,1), trimEnd:num(1.0,0,1) });
   trimObj.onValuesChange(v=>{ vortexU.uTrimStart.value=Math.min(v.trimStart,v.trimEnd); vortexU.uTrimEnd.value=Math.max(v.trimStart,v.trimEnd); });
-}catch(err){ console.error('Trim del Recorrido', err); }
+}catch(err){ console.error('Path Trim', err); }
 
 try{
-  const lookObj=sheet.object('Look del Vortex',{
+  const lookObj=sheet.object('Vortex Look',{
     enabled:num(1,0,1), scale:num(1,0.2,4), radius:num(VTX_RADIUS_DEFAULT,1,40),
     taperStart:num(1.0,0.02,3), taperEnd:num(1.0,0.02,3),
     colorCore:t.rgba({r:.851,g:1.0,b:1.0,a:1}), colorMid:t.rgba({r:.12,g:.851,b:.878,a:1}), colorEdge:t.rgba({r:.5,g:.278,b:.9,a:1}),
@@ -721,10 +732,10 @@ try{
   });
   lookObj.onValuesChange(v=>{
     vortexEnabled=v.enabled>=0.5; vortexMesh.visible=vortexEnabled;
-    vortexGroup.scale.setScalar(v.scale); // afecta tubo Y marcadores juntos (antes solo el tubo, por eso se desincronizaba del path)
+    vortexGroup.scale.setScalar(v.scale); // affects tube AND markers together (used to be tube-only, which desynced from the path)
     if(v.radius!==vortexRadius){ vortexRadius=v.radius; rebuildVortexTube(); }
-    vortexU.uRadiusBase.value=vortexRadius; // el taper reescala relativo a este radio "base" de la geometria
-    vortexU.uTaperStart.value=v.taperStart; vortexU.uTaperEnd.value=v.taperEnd; // tramo inicial vs final: vertices mas chicos/grandes
+    vortexU.uRadiusBase.value=vortexRadius; // taper rescales relative to this geometry "base" radius
+    vortexU.uTaperStart.value=v.taperStart; vortexU.uTaperEnd.value=v.taperEnd; // start vs end segment: smaller/larger vertices
     vortexU.uColorCore.value.setRGB(v.colorCore.r,v.colorCore.g,v.colorCore.b);
     vortexU.uColorMid.value.setRGB(v.colorMid.r,v.colorMid.g,v.colorMid.b);
     vortexU.uColorEdge.value.setRGB(v.colorEdge.r,v.colorEdge.g,v.colorEdge.b);
@@ -732,32 +743,32 @@ try{
     vortexU.uTurbulence.value=v.turbulence; vortexU.uGlow.value=v.glow; vortexU.uDetail.value=v.detail; vortexU.uFill.value=v.fill;
     vortexGlowMat.opacity=v.exitGlow; vortexGlowSprite.scale.setScalar(6*Math.max(0.001,v.exitGlow));
   });
-}catch(err){ console.error('Look del Vortex', err); }
+}catch(err){ console.error('Vortex Look', err); }
 
 try{
-  const dispObj=sheet.object('Distorsión (Displace)',{ amount:num(0,0,4), scale:num(0.3,0.02,2), speed:num(0.15,-2,2) });
+  const dispObj=sheet.object('Distortion (Displace)',{ amount:num(0,0,4), scale:num(0.3,0.02,2), speed:num(0.15,-2,2) });
   dispObj.onValuesChange(v=>{ vortexU.uDispAmount.value=v.amount; vortexU.uDispScale.value=v.scale; vortexU.uDispSpeed.value=v.speed; });
-}catch(err){ console.error('Distorsión (Displace)', err); }
+}catch(err){ console.error('Distortion (Displace)', err); }
 
 let orbiting=false;
-const camObj=sheet.object('Camara',{ position:{x:num(0,-60,60),y:num(0,-60,60),z:num(18,1,80)},
+const camObj=sheet.object('Camera',{ position:{x:num(0,-60,60),y:num(0,-60,60),z:num(18,1,80)},
   rotation:{x:num(0,-Math.PI,Math.PI),y:num(0,-Math.PI,Math.PI),z:num(0,-Math.PI,Math.PI)}, fov:num(42,15,90) });
 camObj.onValuesChange(v=>{ if(orbiting) return; camera.position.set(v.position.x,v.position.y,v.position.z);
   camera.rotation.set(v.rotation.x,v.rotation.y,v.rotation.z,'YXZ'); if(camera.fov!==v.fov){ camera.fov=v.fov; camera.updateProjectionMatrix(); } });
 
-const winObj=sheet.object('Ventanas',{ glassTint:t.rgba({r:.10,g:.12,b:.22,a:1}), glassEdge:t.rgba({r:.81,g:.65,b:.99,a:1}), glassOpacity:num(0.30,0,1), dissolve:num(0,0,1),
+const winObj=sheet.object('Windows',{ glassTint:t.rgba({r:.10,g:.12,b:.22,a:1}), glassEdge:t.rgba({r:.81,g:.65,b:.99,a:1}), glassOpacity:num(0.30,0,1), dissolve:num(0,0,1),
   edgeWidth:num(3.0,0.3,8), edgeIntensity:num(2.2,0,6), neonColor:t.rgba({r:1,g:1,b:1,a:1}), neonWidth:num(1.0,0.1,6) });
 winObj.onValuesChange(v=>{ glassU.uGlassTint.value.setRGB(v.glassTint.r,v.glassTint.g,v.glassTint.b); glassU.uGlassEdge.value.setRGB(v.glassEdge.r,v.glassEdge.g,v.glassEdge.b); glassU.uGlassOpacity.value=v.glassOpacity;
   glassU.uDissolve.value=v.dissolve; glassU.uEdgeWidth.value=v.edgeWidth; glassU.uEdgeIntensity.value=v.edgeIntensity;
-  // dissolve=1: ademas del vidrio, apaga tambien el neon de las 2 ventanas laterales (indices 1 y 2) -- sin esto quedaba el contorno visible igual
+  // dissolve=1: besides glass, also kills neon on the 2 side windows (indices 1 and 2) -- otherwise the outline stayed visible
   [1,2].forEach(i=>{ const nm=neonMats[i];
     nm.halo.uniforms.uDissolve.value=v.dissolve; nm.core.uniforms.uDissolve.value=v.dissolve;
     nm.halo.uniforms.uColor.value.setRGB(v.neonColor.r,v.neonColor.g,v.neonColor.b); nm.core.uniforms.uColor.value.setRGB(v.neonColor.r,v.neonColor.g,v.neonColor.b);
     nm.halo.uniforms.uWidth.value=nm.haloWidthBase*v.neonWidth; nm.core.uniforms.uWidth.value=nm.coreWidthBase*v.neonWidth; }); });
 
-// antes el vidrio central tenia color fijo (casi invisible); ahora tambien puede tomar color propio,
-// por ejemplo para acercarlo al turquesa del Logo EVA
-const centralWinObj=sheet.object('Ventana Central (vidrio)',{ glassTint:t.rgba({r:0,g:0,b:0,a:1}), glassEdge:t.rgba({r:.81,g:.65,b:.99,a:1}), glassOpacity:num(0.0,0,1), dissolve:num(0,0,1),
+// center glass used to have a fixed color (nearly invisible); now it can take its own color,
+// e.g. to approach the EVA Logo turquoise
+const centralWinObj=sheet.object('Center Window (glass)',{ glassTint:t.rgba({r:0,g:0,b:0,a:1}), glassEdge:t.rgba({r:.81,g:.65,b:.99,a:1}), glassOpacity:num(0.0,0,1), dissolve:num(0,0,1),
   edgeWidth:num(3.0,0.3,8), edgeIntensity:num(2.2,0,6), neonColor:t.rgba({r:1,g:1,b:1,a:1}), neonWidth:num(1.0,0.1,6) });
 centralWinObj.onValuesChange(v=>{ centralU.uGlassTint.value.setRGB(v.glassTint.r,v.glassTint.g,v.glassTint.b); centralU.uGlassEdge.value.setRGB(v.glassEdge.r,v.glassEdge.g,v.glassEdge.b); centralU.uGlassOpacity.value=v.glassOpacity;
   centralU.uDissolve.value=v.dissolve; centralU.uEdgeWidth.value=v.edgeWidth; centralU.uEdgeIntensity.value=v.edgeIntensity;
@@ -767,33 +778,33 @@ centralWinObj.onValuesChange(v=>{ centralU.uGlassTint.value.setRGB(v.glassTint.r
   nm.halo.uniforms.uWidth.value=nm.haloWidthBase*v.neonWidth; nm.core.uniforms.uWidth.value=nm.coreWidthBase*v.neonWidth; });
 
 try{
-  const centralMaskObj=sheet.object('Ventana Central (máscara)',{
+  const centralMaskObj=sheet.object('Center Window (mask)',{
     offsetX:num(0,-6,6), offsetY:num(0,-6,6), scaleX:num(1,0.2,3), scaleY:num(1,0.2,3) });
   centralMaskObj.onValuesChange(v=>{ winMask[0].offX=v.offsetX; winMask[0].offY=v.offsetY; winMask[0].scX=v.scaleX; winMask[0].scY=v.scaleY; applyWinTransform(0); });
-}catch(err){ console.error('Ventana Central (máscara)', err); }
+}catch(err){ console.error('Center Window (mask)', err); }
 
 try{
-  const sideMaskObj=sheet.object('Ventanas Laterales',{
+  const sideMaskObj=sheet.object('Side Windows',{
     offsetX:num(0,-4,4), offsetY:num(0,-4,4), scale:num(1,0.3,2) });
   sideMaskObj.onValuesChange(v=>{ sideState.offsetX=v.offsetX; sideState.offsetY=v.offsetY; sideState.scale=v.scale; applyWinTransform(1); applyWinTransform(2); });
-}catch(err){ console.error('Ventanas Laterales', err); }
+}catch(err){ console.error('Side Windows', err); }
 
-// fundido de PARED + GRILLA solamente (deja las ventanas -- vidrio, neon, GLB -- intactas)
+// WALL + GRID fade only (leaves windows -- glass, neon, GLB -- intact)
 try{
-  const wallGridFadeObj=sheet.object('Fundido Pared y Grilla',{ blackout:num(0,0,1) });
+  const wallGridFadeObj=sheet.object('Wall & Grid Fade',{ blackout:num(0,0,1) });
   wallGridFadeObj.onValuesChange(v=>{ wallGridBlackout=v.blackout; wallMat.opacity=1-v.blackout;
-    // clave: la pared solo es "transparent" (entra en la cola de dibujado ambigua junto al vidrio del GLB)
-    // MIENTRAS se esta desvaneciendo de verdad. En blackout=0 (su estado normal/default) vuelve a ser
-    // opaca de verdad -> se dibuja SIEMPRE antes que cualquier objeto transparente, sin depender de
-    // renderOrder ni de sorteos por distancia. Esto es lo que hacia que el vidrio del GLB desapareciera.
+    // key: the wall is only "transparent" (joins the ambiguous draw queue next to GLB glass)
+    // WHILE it is actually fading. At blackout=0 (normal/default) it goes back to truly
+    // opaque -> always draws BEFORE any transparent object, without depending on
+    // renderOrder or distance sorts. That was what made the GLB glass disappear.
     const shouldBeTransparent = v.blackout > 0.001;
     if(wallMat.transparent !== shouldBeTransparent){ wallMat.transparent = shouldBeTransparent; wallMat.needsUpdate = true; }
-    // mientras esta desvaneciendo (transparent=true), tampoco escribe profundidad -> asi no puede
-    // competir por el orden contra el vidrio del GLB ni en ese tramo intermedio (0 < blackout < 1)
+    // while fading (transparent=true), also skip depth writes -> so it can't compete
+    // for order against GLB glass even in that intermediate range (0 < blackout < 1)
     wallMat.depthWrite = !shouldBeTransparent; });
-}catch(err){ console.error('Fundido Pared y Grilla', err); }
+}catch(err){ console.error('Wall & Grid Fade', err); }
 
-const wallObj=sheet.object('Pared',{
+const wallObj=sheet.object('Wall',{
   colorCenter:t.rgba({r:.275,g:.227,b:.525,a:1}), colorMid:t.rgba({r:.055,g:.075,b:.19,a:1}), colorEdge:t.rgba({r:.04,g:.05,b:.11,a:1}),
 });
 function rgbToHex(c){ const h=v=>Math.round(Math.max(0,Math.min(1,v))*255).toString(16).padStart(2,'0'); return '#'+h(c.r)+h(c.g)+h(c.b); }
@@ -804,11 +815,11 @@ wallObj.onValuesChange(v=>{
 
 let wallSpillIntensity=1.0;
 try{
-  const spillObj=sheet.object('Derrame de luz en Pared',{ enabled:num(1,0,1), intensity:num(1.0,0,3) });
+  const spillObj=sheet.object('Wall Light Spill',{ enabled:num(1,0,1), intensity:num(1.0,0,3) });
   spillObj.onValuesChange(v=>{ wallSpillIntensity = v.enabled>=0.5 ? v.intensity : 0; });
-}catch(err){ console.error('Derrame de luz en Pared', err); }
+}catch(err){ console.error('Wall Light Spill', err); }
 
-const gridObj=sheet.object('Grilla',{
+const gridObj=sheet.object('Grid',{
   color:t.rgba({r:.81,g:.65,b:.99,a:1}), baseOpacity:num(0.16,0,1), pulseSpeed:num(0.35,0,3), pulseWidth:num(0.22,0.02,1), pulseBright:num(2.4,0,8),
   nodeBaseOpacity:num(0.21,0,1), nodePulseBright:num(2.4,0,8),
 });
@@ -816,12 +827,12 @@ gridObj.onValuesChange(v=>{ gridState.color.setRGB(v.color.r,v.color.g,v.color.b
   gridState.pulseSpeed=v.pulseSpeed; gridState.pulseWidth=v.pulseWidth; gridState.pulseBright=v.pulseBright;
   gridState.nodeBaseOpacity=v.nodeBaseOpacity; gridState.nodePulseBright=v.nodePulseBright; });
 
-function alarmObj(idx,dx){ const o=sheet.object('Alarma / Foco '+(idx+1),{
+function alarmObj(idx,dx){ const o=sheet.object('Alarm / Light '+(idx+1),{
     color:t.rgba({r:1,g:.16,b:.16,a:1}), intensity:num(1.4,0,5), flicker:num(0.7,0,1), speed:num(idx?1.5:2.2,0,8), posX:num(dx,-25,25), posY:num(0,-20,20) });
   o.onValuesChange(v=>{ L[idx].color.setRGB(v.color.r,v.color.g,v.color.b); L[idx].intensity=v.intensity; L[idx].flicker=v.flicker; L[idx].speed=v.speed; L[idx].x=v.posX; L[idx].y=v.posY; }); }
 alarmObj(0,-8); alarmObj(1,8);
 
-const bgObj=sheet.object('Fondo estrellas',{ count:num(1400,0,6000), brightness:num(1,0,3), drift:num(0.02,0,0.4), swingRange:num(0.12,0,1) });
+const bgObj=sheet.object('Star Background',{ count:num(1400,0,6000), brightness:num(1,0,3), drift:num(0.02,0,0.4), swingRange:num(0.12,0,1) });
 bgObj.onValuesChange(v=>{ buildStars(v.count); starU.uBright.value=v.brightness; starDrift=v.drift; starSwingRange=v.swingRange; });
 
 try{
@@ -838,18 +849,18 @@ try{
 }catch(err){ console.error('Logo EVA', err); }
 
 try{
-  const traceObj=sheet.object('Trazo Horizontal',{
+  const traceObj=sheet.object('Horizontal Stroke',{
     enabled:num(1,0,1), color:t.rgba({r:.094,g:.753,b:.847,a:1}), opacity:num(1.0,0,1),
-    growStart:num(0.0,0,1), growEnd:num(1.0,0,1) }); // growEnd 0->1 anima el crecimiento de izquierda a derecha
+    growStart:num(0.0,0,1), growEnd:num(1.0,0,1) }); // growEnd 0->1 animates growth left to right
   traceObj.onValuesChange(v=>{
     const on=v.enabled>=0.5; traceHalo.visible=on; traceCore.visible=on;
     traceU.uColor.value.setRGB(v.color.r,v.color.g,v.color.b);
     traceU.uOpacity.value=v.opacity;
     traceU.uGrowStart.value=Math.min(v.growStart,v.growEnd); traceU.uGrowEnd.value=Math.max(v.growStart,v.growEnd);
   });
-}catch(err){ console.error('Trazo Horizontal', err); }
+}catch(err){ console.error('Horizontal Stroke', err); }
 
-const starObj=sheet.object('Estrella (GLB)',{
+const starObj=sheet.object('Star (GLB)',{
   posX:num(mainC[0],-20,20), posY:num(mainC[1],-20,20), posZ:num(3.0,-6,10),
   scale:num(0.7,0.1,2), emissiveColor:t.rgba({r:.29,g:.63,b:1,a:1}), emissiveIntensity:num(1.6,0,6), opacity:num(0.4,0.05,1), glowSize:num(2.6,0.5,8), glowIntensity:num(0.85,0,2),
   transmission:num(0.6,0,1), roughness:num(0.12,0,1), ior:num(1.45,1,2.4), thickness:num(0.6,0,3),
@@ -859,14 +870,14 @@ starObj.onValuesChange(v=>{ starState.scale=v.scale; starState.emiColor.setRGB(v
   starGroup2.position.set(v.posX,v.posY,v.posZ); glow.position.set(v.posX,v.posY,v.posZ-0.2);
   glbMat.transmission=v.transmission; glbMat.roughness=v.roughness; glbMat.ior=v.ior; glbMat.thickness=v.thickness;
   applyStar();
-  // shatterProgress: controla el frame exacto de la explosion desde el timeline (no solo un boton de una vez)
+  // shatterProgress: scrub the exact explosion frame from the timeline (not just a one-shot button)
   if(action && !liveShatter){ action.paused=true; action.time = v.shatterProgress*clipDuration; mixer.update(0); } });
 
 const bloomObj=sheet.object('Bloom',{ strength:num(0.4,0,3), radius:num(0.5,0,2), threshold:num(0.4,0,1) });
 
-// nota: uso num(0/1) en vez de t.boolean para no depender de una API de tipos que podria no
-// existir tal cual en esta version del bundle -- si t.boolean tirara una excepcion aca, todo el
-// script se frena ANTES de llegar al loop de render (esa fue la causa real de la pantalla negra).
+// note: use num(0/1) instead of t.boolean so we don't depend on a types API that may not
+// exist as-is in this bundle version -- if t.boolean threw here, the whole script would
+// stop BEFORE reaching the render loop (that was the real cause of the black screen).
 // Hoisted before sheet.object('Parallax') — onValuesChange fires sync when state loads,
 // so these must exist before that callback runs (TDZ otherwise).
 let parallaxEnabled=false, mouseNX=0, mouseNY=0, paraX=0, paraY=0;
@@ -880,14 +891,14 @@ bloomObj.onValuesChange(v=>{ bloom.strength=v.strength; bloom.radius=v.radius; b
 
 try{ if(studioReady) studio.setSelection([starObj]); }catch(e){}
 
-/* ---------- editor cámara + triggers ---------- */
+/* ---------- camera editor + triggers ---------- */
 let orbit=null;
 try{
   orbit=new OrbitControls(camera, renderer.domElement); orbit.target.set(0,-0.4,0); orbit.enableDamping=true; orbit.enabled=false; orbit.update();
   const navBtn=document.getElementById('navBtn');
   navBtn.addEventListener('click', ()=>{ orbiting=!orbiting; orbit.enabled=orbiting;
     if(orbiting){ const f=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion); orbit.target.copy(camera.position).add(f.multiplyScalar(18)); orbit.update(); }
-    navBtn.textContent='Navegar: '+(orbiting?'ON':'OFF'); navBtn.classList.toggle('on',orbiting); });
+    navBtn.textContent='Orbit: '+(orbiting?'ON':'OFF'); navBtn.classList.toggle('on',orbiting); });
   document.getElementById('grabBtn').addEventListener('click', ()=>{ const e=new THREE.Euler().setFromQuaternion(camera.quaternion,'YXZ');
     if(!studioReady) return; const scr=studio.scrub(); scr.capture(({set})=>{ set(camObj.props.position.x,camera.position.x); set(camObj.props.position.y,camera.position.y); set(camObj.props.position.z,camera.position.z);
       set(camObj.props.rotation.x,e.x); set(camObj.props.rotation.y,e.y); set(camObj.props.rotation.z,e.z); set(camObj.props.fov,camera.fov); }); scr.commit();
@@ -908,7 +919,7 @@ document.getElementById('glbFileInput').addEventListener('change', ev=>{
   reader.onload=()=>{ loadGLBFromBuffer(reader.result);
     const b=document.getElementById('loadGlbBtn'), o=b.textContent; b.textContent='✓ '+f.name; setTimeout(()=>b.textContent=o,1500); };
   reader.readAsArrayBuffer(f);
-  ev.target.value=''; // permite volver a elegir el mismo archivo despues
+  ev.target.value=''; // allow picking the same file again later
 });
 const ray=new THREE.Raycaster(), ptr=new THREE.Vector2();
 const vortexNdc=(ev)=>new THREE.Vector2((ev.clientX/innerWidth)*2-1, -(ev.clientY/innerHeight)*2+1);
@@ -917,8 +928,8 @@ renderer.domElement.addEventListener('pointerdown', ev=>{
   if(orbiting || (vortexGizmo && vortexGizmo.dragging)) return;
   ptr.copy(vortexNdc(ev)); ray.setFromCamera(ptr,camera);
   const hMarker=ray.intersectObjects(vortexMarkers,false)[0];
-  if(hMarker){ selectVortexPoint(hMarker.object.userData.i); return; } // click en un punto del recorrido: seleccionarlo (siempre disponible, como el original)
-  selectVortexPoint(-1); // click en vacio: deseleccionar
+  if(hMarker){ selectVortexPoint(hMarker.object.userData.i); return; } // click a path point: select it (always available, like the original)
+  selectVortexPoint(-1); // click empty space: deselect
   const h=ray.intersectObjects(fillMeshes,false)[0]; if(h && h.object.userData.main) activate(); });
 renderer.domElement.addEventListener('pointermove', ev=>{ if(!vortexDrawMode||!vortexDrawing) return; const p=vortexNdc(ev);
   const last=vortexStroke[vortexStroke.length-1]; if(!last||Math.hypot(p.x-last.x,p.y-last.y)>0.012) vortexStroke.push(p); });
@@ -930,7 +941,7 @@ const vortexFinishDraw=()=>{ if(!vortexDrawing) return; vortexDrawing=false;
 renderer.domElement.addEventListener('pointerup', vortexFinishDraw);
 renderer.domElement.addEventListener('pointerleave', vortexFinishDraw);
 
-/* ---------- gizmo para arrastrar los waypoints del recorrido del vortex ---------- */
+/* ---------- gizmo to drag vortex path waypoints ---------- */
 try{
   vortexGizmo=new TransformControls(camera, renderer.domElement);
   // three r169+: TransformControls is no longer an Object3D — add its helper instead
@@ -951,18 +962,18 @@ document.getElementById('vortexRemoveBtn').addEventListener('click', removeVorte
 document.getElementById('vortexResetPathBtn').addEventListener('click', resetVortexPath);
 document.getElementById('helpToggleBtn').addEventListener('click', ()=> document.getElementById('help').classList.toggle('on'));
 
-/* ---------- efecto parallax (activar/desactivar), en base al mouse ---------- */
+/* ---------- parallax effect (toggle), driven by mouse ---------- */
 addEventListener('pointermove', ev=>{ mouseNX=(ev.clientX/innerWidth)*2-1; mouseNY=(ev.clientY/innerHeight)*2-1; });
 paraxBtn.addEventListener('click', ()=>{ parallaxEnabled=!parallaxEnabled; paraxBtn.textContent='Parallax: '+(parallaxEnabled?'ON':'OFF'); paraxBtn.classList.toggle('on',parallaxEnabled); });
 
-document.getElementById('help').innerHTML='<b>Ventana central</b>: casi invisible en reposo (libre para el GLB), pero reacciona a la alarma. Vidrio normal en las laterales. <b>Trigger:</b> ✦ Activar o click en la central (preview en vivo). '+
-  '<b>Estrella (GLB) → shatterProgress</b>: controla el frame exacto de la explosion desde el timeline. <b>Cargar otro GLB…</b>: elegí cualquier .glb de tu disco para probarlo en el mismo lugar. '+
-  '<b>Parallax</b>: botón o el booleano en el timeline; mueve pared+vidrios+neón, estrella y fondo a distinta profundidad segun el mouse. '+
-  '<b>Máscaras</b>: <b>Ventana Central</b> = offset/escala propios; <b>Ventanas Laterales</b> = un control para ambas. '+
-  '<b>Fondo estrellas → swingRange</b>: acota cuánto giran las estrellas (antes giraban sin límite). '+
-  '<b>Fundido Pared y Grilla → blackout</b>: funde SOLO la pared y la grilla a negro, dejando visibles el vidrio, el neón y el GLB. La grilla ya se recorta sola donde estén las ventanas, sigan donde sigan. '+
-  '<b>Navegar</b> = orbitá; <b>Capturar</b> = keyframe de cámara; <b>Reset cámara</b> si quedó lejos/cerca.';
-if(!studioReady){ const h=document.getElementById('help'); h.innerHTML='⚠ Timeline no arrancó. '+h.innerHTML; }
+document.getElementById('help').innerHTML='<b>Center window</b>: nearly invisible at rest (clear for the GLB), but reacts to the alarm. Normal glass on the side windows. <b>Trigger:</b> ✦ Activate or click the center (live preview). '+
+  '<b>Star (GLB) → shatterProgress</b>: scrub the exact explosion frame from the timeline. <b>Load another GLB…</b>: pick any .glb from disk to try it in the same spot. '+
+  '<b>Parallax</b>: button or the timeline boolean; moves wall+glass+neon, star, and background at different depths with the mouse. '+
+  '<b>Masks</b>: <b>Center Window</b> = its own offset/scale; <b>Side Windows</b> = one control for both. '+
+  '<b>Star background → swingRange</b>: limits how far the stars rotate (they used to spin without a cap). '+
+  '<b>Wall & Grid Fade → blackout</b>: fades ONLY the wall and grid to black, leaving glass, neon, and the GLB visible. The grid already clips itself around whatever window positions you set. '+
+  '<b>Orbit</b> = free-look; <b>Capture</b> = camera keyframe; <b>Reset camera</b> if it drifted too far/near.';
+if(!studioReady){ const h=document.getElementById('help'); h.innerHTML='⚠ Timeline failed to start. '+h.innerHTML; }
 
 addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); bloom.setSize(innerWidth,innerHeight); });
@@ -970,15 +981,15 @@ addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.upd
 function tick(){
   requestAnimationFrame(tick);
   const dt=clock.getDelta(), time=clock.elapsedTime;
-  // el pulso de la grilla avanza a velocidad PERCIBIDA constante: si la camara esta mas cerca de la
-  // pared que la distancia de referencia, el acumulador crece mas lento (compensa que de cerca la
-  // misma velocidad fisica ocupa mas pantalla); si esta mas lejos, crece mas rapido.
+  // grid pulse advances at constant PERCEIVED speed: if the camera is closer to the
+  // wall than the reference distance, the accumulator grows slower (compensates that up
+  // close the same physical speed fills more of the screen); farther away, it grows faster.
   const camDistToWall=Math.max(1, camera.position.length());
   gridPulseTime += dt * (GRID_REF_DIST/camDistToWall);
   if(mixer) mixer.update(dt);
-  // parallax: 3 capas a distinta profundidad. pared+grilla+vidrios+neon viajan JUNTOS (nearLayer,
-  // un solo grupo) para que nunca se desalineen entre si; la estrella GLB y el fondo se mueven aparte,
-  // con menos magnitud (sensacion de estar mas lejos).
+  // parallax: 3 layers at different depths. wall+grid+glass+neon travel TOGETHER (nearLayer,
+  // one group) so they never misalign; the star GLB and background move separately,
+  // with less magnitude (sense of being farther away).
   { const tX=parallaxEnabled?mouseNX:0, tY=parallaxEnabled?mouseNY:0;
     paraX += (tX-paraX)*0.06; paraY += (tY-paraY)*0.06;
     const wallK=0.18*paraxIntensity, glbK=0.09*paraxIntensity, bgK=0.03*paraxIntensity;
@@ -989,7 +1000,7 @@ function tick(){
   }
   starU.uTime.value=time; starGroup.rotation.y=Math.sin(time*starDrift*0.5)*starSwingRange;
   if(vortexEnabled) vortexU.uTime.value=time;
-  { const editVis = !vortexDrawMode && !seqPlayingMain; // siempre visibles/clickeables, como el original
+  { const editVis = !vortexDrawMode && !seqPlayingMain; // always visible/clickable, like the original
     vortexMarkerGroup.visible=editVis; vortexPathLine.visible=editVis;
     if(vortexGizmo){ const helper=vortexGizmo.getHelper(); helper.visible=editVis && vortexSelected>=0; vortexGizmo.enabled=editVis; } }
   updateGrid(gridPulseTime);
@@ -1001,7 +1012,7 @@ function tick(){
   centralU.uLightPos.value[0].set(L[0].x,L[0].y,L[0].z); centralU.uLightPos.value[1].set(L[1].x,L[1].y,L[1].z);
   neonLightU.uLightColI.value[0].copy(tmpC0); neonLightU.uLightColI.value[1].copy(tmpC1);
   neonLightU.uLightPos.value[0].set(L[0].x,L[0].y,L[0].z); neonLightU.uLightPos.value[1].set(L[1].x,L[1].y,L[1].z);
-  // derrame de luz de alarma sobre la pared, alrededor de cada ventana (misma atenuacion por distancia que el vidrio)
+  // alarm light spill on the wall around each window (same distance falloff as the glass)
   for(let wi=0; wi<3; wi++){
     const c=winCentersW[wi]; let sr=0,sg=0,sb=0;
     for(let li=0; li<2; li++){ const dx=L[li].x-c[0], dy=L[li].y-c[1], dz=L[li].z-0, d2=dx*dx+dy*dy+dz*dz;
