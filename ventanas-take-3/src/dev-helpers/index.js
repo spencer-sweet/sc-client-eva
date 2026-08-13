@@ -73,7 +73,7 @@ const BAR_HTML = /*html*/ `
 </div>
 `.trim();
 
-const $ = (id) => document.getElementById(id);
+const byId = (id) => document.getElementById(id);
 
 /* ---------- mount ---------- */
 
@@ -82,54 +82,93 @@ function injectStyles() {
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = css;
-  document.head.appendChild(style);
+  (document.head || document.documentElement).appendChild(style);
+}
+
+function hostRoot() {
+  return document.body || null;
 }
 
 function ensureSceneCanvas() {
-  let canvas = $('scene');
+  let canvas = byId('star-scene');
   if (canvas) return canvas;
+  const root = hostRoot();
+  if (!root) return null;
   canvas = document.createElement('canvas');
-  canvas.id = 'scene';
-  document.body.prepend(canvas);
+  canvas.id = 'star-scene';
+  root.prepend(canvas);
   return canvas;
 }
 
 function mountFragment(html) {
+  const root = hostRoot();
+  if (!root) return null;
   const tpl = document.createElement('template');
   tpl.innerHTML = html;
   const node = tpl.content.firstElementChild;
-  document.body.appendChild(node);
+  root.appendChild(node);
   return node;
 }
 
 function ensureHelp() {
-  let help = $('help');
+  let help = byId('help');
   if (help) return help;
+  const root = hostRoot();
+  if (!root) return null;
   help = document.createElement('div');
   help.id = 'help';
-  document.body.appendChild(help);
+  root.appendChild(help);
   return help;
 }
 
 function ensureErr() {
-  let err = $('err');
+  let err = byId('err');
   if (err) return err;
+  const root = hostRoot();
+  if (!root) return null;
   err = document.createElement('div');
   err.id = 'err';
   err.innerHTML = '<div></div>';
-  document.body.appendChild(err);
+  root.appendChild(err);
   return err;
 }
 
+/** Sync mount. No-ops (returns false) until document.body exists. */
 export function ensureDevHelpers() {
+  if (!hostRoot()) return false;
   injectStyles();
   ensureSceneCanvas();
-  if (!$('bar')) mountFragment(BAR_HTML);
+  if (!byId('bar')) mountFragment(BAR_HTML);
   ensureHelp();
   ensureErr();
+  return true;
 }
 
-ensureDevHelpers();
+/**
+ * Wait until body exists, then mount Dev UI. Required for Webflow embeds where
+ * the module can evaluate before </body> (document.body is still null).
+ */
+let bootPromise = null;
+export function bootDevHelpers() {
+  if (bootPromise) return bootPromise;
+  bootPromise = new Promise((resolve) => {
+    const run = () => {
+      ensureDevHelpers();
+      resolve();
+    };
+    if (hostRoot()) {
+      run();
+      return;
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', run, { once: true });
+      return;
+    }
+    // readyState is interactive/complete but body is somehow missing — retry next frame
+    requestAnimationFrame(run);
+  });
+  return bootPromise;
+}
 
 /* ---------- scroll / timeline state ---------- */
 
@@ -177,15 +216,15 @@ function measureCards() {
 function syncSeekControls(t) {
   if (seekTDragging) return;
   const v = Number(t).toFixed(3);
-  const seekTSlider = $('seekTSlider');
-  const seekTNumber = $('seekTNumber');
+  const seekTSlider = byId('seekTSlider');
+  const seekTNumber = byId('seekTNumber');
   if (seekTSlider && seekTSlider.value !== v) seekTSlider.value = v;
   if (seekTNumber && seekTNumber.value !== v) seekTNumber.value = v;
 }
 
 function applyScrollSourceUi() {
-  const scrollSourceSelect = $('scrollSourceSelect');
-  const scrollReadoutEl = $('scrollReadout');
+  const scrollSourceSelect = byId('scrollSourceSelect');
+  const scrollReadoutEl = byId('scrollReadout');
   if (scrollSourceSelect && scrollSourceSelect.value !== scrollState.source) {
     scrollSourceSelect.value = scrollState.source;
   }
@@ -195,7 +234,7 @@ function applyScrollSourceUi() {
 function updateScrollReadout() {
   applyScrollSourceUi();
   syncSeekControls(targetGlobalT);
-  const scrollReadoutEl = $('scrollReadout');
+  const scrollReadoutEl = byId('scrollReadout');
   if (!scrollReadoutEl || scrollReadoutEl.hidden) return;
   const cards = cardEls();
   const rows = cards.map((el) => {
@@ -277,20 +316,20 @@ export function tickScroll(dt, sheet) {
 /* ---------- bar UI helpers (used from scene / Theatre callbacks) ---------- */
 
 export function setParallaxButton(on) {
-  const paraxBtn = $('paraxBtn');
+  const paraxBtn = byId('paraxBtn');
   if (!paraxBtn) return;
   paraxBtn.textContent = 'Parallax: ' + (on ? 'ON' : 'OFF');
   paraxBtn.classList.toggle('on', on);
 }
 
 export function setVortexDrawButton(on) {
-  const btn = $('vortexDrawBtn');
+  const btn = byId('vortexDrawBtn');
   if (!btn) return;
   btn.classList.toggle('on', !!on);
 }
 
 export function setVortexTensionInput(value) {
-  const ti = $('vortexTensionInput');
+  const ti = byId('vortexTensionInput');
   if (ti) ti.value = String(value);
 }
 
@@ -299,8 +338,8 @@ export function setVortexTensionInput(value) {
 let devBarMode = 'expanded';
 
 function applyDevBar() {
-  const barEl = $('bar');
-  const devBarToggleBtn = $('devBarToggleBtn');
+  const barEl = byId('bar');
+  const devBarToggleBtn = byId('devBarToggleBtn');
   if (!barEl) return;
   barEl.dataset.devBar = devBarMode;
   if (!devBarToggleBtn) return;
@@ -316,7 +355,7 @@ function applyDevBar() {
 }
 
 function wireDevBarCollapse() {
-  const devBarToggleBtn = $('devBarToggleBtn');
+  const devBarToggleBtn = byId('devBarToggleBtn');
   window.setDevBar = function setDevBar(mode) {
     if (!DEV_BAR_MODES.includes(mode)) {
       console.warn('setDevBar: "' + mode + '" must be one of ' + DEV_BAR_MODES.join(', '));
@@ -332,10 +371,10 @@ function wireDevBarCollapse() {
 }
 
 function wireTimelinePanel() {
-  const scrollSourceSelect = $('scrollSourceSelect');
-  const syncTheatreCheckbox = $('syncTheatreToScroll');
-  const seekTSlider = $('seekTSlider');
-  const seekTNumber = $('seekTNumber');
+  const scrollSourceSelect = byId('scrollSourceSelect');
+  const syncTheatreCheckbox = byId('syncTheatreToScroll');
+  const seekTSlider = byId('seekTSlider');
+  const seekTNumber = byId('seekTNumber');
 
   scrollSourceSelect?.addEventListener('change', () => {
     window.setScrollSource(scrollSourceSelect.value);
@@ -424,10 +463,10 @@ export function initDevHelpers(api) {
     resetVortexPath,
   } = api;
 
-  $('actBtn')?.addEventListener('click', activate);
-  $('resetBtn')?.addEventListener('click', resetStar);
+  byId('actBtn')?.addEventListener('click', activate);
+  byId('resetBtn')?.addEventListener('click', resetStar);
 
-  const theatreUiBtn = $('theatreUiBtn');
+  const theatreUiBtn = byId('theatreUiBtn');
   function syncTheatreUiBtn() {
     if (!theatreUiBtn) return;
     if (!studioReady) {
@@ -448,7 +487,7 @@ export function initDevHelpers(api) {
   });
   syncTheatreUiBtn();
 
-  const saveTheatreBtn = $('saveTheatreBtn');
+  const saveTheatreBtn = byId('saveTheatreBtn');
   function theatreStateFilename() {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -500,7 +539,7 @@ export function initDevHelpers(api) {
     saveTheatreBtn.addEventListener('click', downloadTheatreState);
   }
 
-  const navBtn = $('navBtn');
+  const navBtn = byId('navBtn');
   navBtn?.addEventListener('click', () => {
     if (!orbit) return;
     const next = !isOrbiting();
@@ -515,7 +554,7 @@ export function initDevHelpers(api) {
     navBtn.classList.toggle('on', next);
   });
 
-  $('grabBtn')?.addEventListener('click', () => {
+  byId('grabBtn')?.addEventListener('click', () => {
     if (!studioReady) return;
     const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
     const scr = studio.scrub();
@@ -529,14 +568,14 @@ export function initDevHelpers(api) {
       set(camObj.props.fov, camera.fov);
     });
     scr.commit();
-    const b = $('grabBtn');
+    const b = byId('grabBtn');
     if (!b) return;
     const o = b.textContent;
     b.textContent = '✓ keyframe';
     setTimeout(() => (b.textContent = o), 900);
   });
 
-  $('resetCamBtn')?.addEventListener('click', () => {
+  byId('resetCamBtn')?.addEventListener('click', () => {
     camera.position.set(0, 0, 18);
     camera.rotation.set(0, 0, 0, 'YXZ');
     camera.fov = 42;
@@ -559,14 +598,14 @@ export function initDevHelpers(api) {
     scr.commit();
   });
 
-  $('loadGlbBtn')?.addEventListener('click', () => $('glbFileInput')?.click());
-  $('glbFileInput')?.addEventListener('change', (ev) => {
+  byId('loadGlbBtn')?.addEventListener('click', () => byId('glbFileInput')?.click());
+  byId('glbFileInput')?.addEventListener('change', (ev) => {
     const f = ev.target.files?.[0];
     if (!f) return;
     const reader = new FileReader();
     reader.onload = () => {
       loadGLBFromBuffer(reader.result);
-      const b = $('loadGlbBtn');
+      const b = byId('loadGlbBtn');
       if (!b) return;
       const o = b.textContent;
       b.textContent = '✓ ' + f.name;
@@ -576,35 +615,35 @@ export function initDevHelpers(api) {
     ev.target.value = '';
   });
 
-  $('paraxBtn')?.addEventListener('click', () => {
+  byId('paraxBtn')?.addEventListener('click', () => {
     const on = !isParallaxEnabled();
     setParallaxEnabled(on);
     setParallaxButton(on);
   });
   setParallaxButton(isParallaxEnabled());
 
-  $('vortexDrawBtn')?.addEventListener('click', () => {
+  byId('vortexDrawBtn')?.addEventListener('click', () => {
     const on = !isVortexDrawMode();
     setVortexDrawMode(on);
     setVortexDrawButton(on);
   });
-  $('vortexTensionInput')?.addEventListener('input', (ev) => {
+  byId('vortexTensionInput')?.addEventListener('input', (ev) => {
     setPathTension(parseFloat(ev.target.value));
     rebuildVortexTube();
     saveVortexPath();
   });
-  $('vortexDepthInput')?.addEventListener('input', (ev) => {
+  byId('vortexDepthInput')?.addEventListener('input', (ev) => {
     setVortexDrawDepth(parseFloat(ev.target.value));
   });
-  $('vortexAddBtn')?.addEventListener('click', addVortexPoint);
-  $('vortexRemoveBtn')?.addEventListener('click', removeVortexPoint);
-  $('vortexResetPathBtn')?.addEventListener('click', () => {
+  byId('vortexAddBtn')?.addEventListener('click', addVortexPoint);
+  byId('vortexRemoveBtn')?.addEventListener('click', removeVortexPoint);
+  byId('vortexResetPathBtn')?.addEventListener('click', () => {
     resetVortexPath();
     setVortexTensionInput(0.5);
   });
 
-  const help = $('help');
-  $('helpToggleBtn')?.addEventListener('click', () => help?.classList.toggle('on'));
+  const help = byId('help');
+  byId('helpToggleBtn')?.addEventListener('click', () => help?.classList.toggle('on'));
   if (help) {
     help.innerHTML = HELP_HTML;
     if (!studioReady) help.innerHTML = '⚠ Timeline failed to start. ' + help.innerHTML;

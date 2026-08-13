@@ -11,15 +11,16 @@ import { getProject, types as t, onChange } from '@theatre/core';
 import studio from '@theatre/studio';
 import theatreState from './theatre-state/theatre-state_2026-08-13-1728.json';
 import {
-  ensureDevHelpers,
+  bootDevHelpers,
   initDevHelpers,
   tickScroll,
   setParallaxButton,
   setVortexDrawButton,
 } from './dev-helpers/index.js';
 
-// Mounts #scene / #bar / #help / #err (+ inlined styles) before any wiring below.
-ensureDevHelpers();
+// Webflow can evaluate this module before <body> exists — wait, then mount
+// #star-scene / #bar / #help / #err (+ inlined styles) before any DOM wiring.
+await bootDevHelpers();
 
 const bail=(m)=>{
   const e=document.getElementById('err');
@@ -48,8 +49,14 @@ if (THEATRE_STUDIO) {
   }catch(err){ console.error(err); }
 }
 
-const GLB_URL = `${import.meta.env.BASE_URL}estrella.glb`;
-const LOGO_URL = `${import.meta.env.BASE_URL}eva-logo.png`;
+// Resolve against this module's URL — NOT import.meta.env.BASE_URL.
+// BASE_URL is root-relative ("/ventanas-take-3/…"), so a Webflow host page
+// would request https://<webflow-site>/ventanas-take-3/estrella.glb (404).
+// import.meta.url is the CDN script (…/ventanas-take-3/assets/index-*.js);
+// public assets sit one directory up. Same relative form works in Vite
+// (this file is /src/main.js → /estrella.glb from public/).
+const GLB_URL = new URL(/* @vite-ignore */ '../estrella.glb', import.meta.url).href;
+const LOGO_URL = new URL(/* @vite-ignore */ '../eva-logo.png', import.meta.url).href;
 
 /* =========================================================================
    Exact vector data extracted from Window_set.svg (viewBox 1440x1627)
@@ -128,10 +135,9 @@ let wallTex=buildWallTexture();
 /* =========================================================================
    THREE.JS
    ========================================================================= */
-// mounts onto a pre-existing <canvas id="scene">, same contract as
-// timeline-03/timeline-04, so this drops into a host page's markup instead of
-// requiring a bespoke <div id="app"> wrapper to append into.
-const canvas=document.getElementById('scene');
+// mounts onto #star-scene (created by bootDevHelpers if the host page has none)
+const canvas=document.getElementById('star-scene');
+if(!canvas) throw new Error('ventanas-take-3: #star-scene canvas missing after bootDevHelpers()');
 const renderer=new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
