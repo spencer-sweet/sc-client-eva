@@ -24,6 +24,10 @@ export interface NeonPair {
   core: THREE.ShaderMaterial;
   haloWidthBase: number;
   coreWidthBase: number;
+  /** Shared phase — all three rims pulse in sync. */
+  phase0: number;
+  pulseBright: number;
+  pulseSpeed: number;
 }
 
 /** Per-window neon materials, so the outline can dissolve and rescale independently. */
@@ -55,7 +59,15 @@ for (const i of WINDOW_INDICES) {
   core.renderOrder = 4;
   core.frustumCulled = false;
   grp.add(core);
-  neonMats.push({ halo: haloMat, core: coreMat, haloWidthBase, coreWidthBase });
+  neonMats.push({
+    halo: haloMat,
+    core: coreMat,
+    haloWidthBase,
+    coreWidthBase,
+    phase0: 0,
+    pulseBright: 4.5,
+    pulseSpeed: 1.1,
+  });
 
   nearLayer.add(grp);
   winGroups.push(grp);
@@ -110,7 +122,13 @@ export function applyWindowTransform(i: WindowIndex): void {
 /** Push a Theatre "Windows"/"Center Window (glass)" payload onto one window's neon. */
 export function applyNeon(
   i: WindowIndex,
-  v: { dissolve: number; neonColor: { r: number; g: number; b: number }; neonWidth: number },
+  v: {
+    dissolve: number;
+    neonColor: { r: number; g: number; b: number };
+    neonWidth: number;
+    neonPulseBright?: number;
+    neonPulseSpeed?: number;
+  },
 ): void {
   const nm = neonMats[i];
   for (const m of [nm.halo, nm.core]) {
@@ -119,4 +137,20 @@ export function applyNeon(
   }
   nm.halo.uniforms.uWidth.value = nm.haloWidthBase * v.neonWidth;
   nm.core.uniforms.uWidth.value = nm.coreWidthBase * v.neonWidth;
+  if (v.neonPulseBright !== undefined) nm.pulseBright = v.neonPulseBright;
+  if (v.neonPulseSpeed !== undefined) nm.pulseSpeed = v.neonPulseSpeed;
+}
+
+/**
+ * Gaussian brightness pulse on the neon rims — all windows share phase0 so they
+ * flash in sync (same pattern the old grid nodes used, without stagger).
+ */
+export function updateNeonPulse(time: number): void {
+  for (const nm of neonMats) {
+    const ph = (nm.phase0 + time * nm.pulseSpeed * 0.2) % 1.0;
+    const bright =
+      1.0 + nm.pulseBright * Math.exp(-Math.pow((ph - 0.5) / 0.28, 2.0));
+    nm.halo.uniforms.uBright.value = bright;
+    nm.core.uniforms.uBright.value = bright;
+  }
 }

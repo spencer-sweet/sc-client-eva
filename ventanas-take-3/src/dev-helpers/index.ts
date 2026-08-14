@@ -224,7 +224,8 @@ function flashButton(btn: HTMLElement | null, text: string, ms: number): void {
 
 /* ---------- dev bar collapse + stats visibility ---------- */
 
-let devBarMode: DevBarMode = 'expanded';
+const startExpanded = new URLSearchParams(location.search).has('dev');
+let devBarMode: DevBarMode = startExpanded ? 'expanded' : 'minified';
 let statsVisible = true; // Dev UI toggle; also forced off when setDevBar('hidden')
 
 function applyStatsVisibility(): void {
@@ -316,6 +317,19 @@ export interface DevHelpersApi {
   addVortexPoint(): void;
   removeVortexPoint(): void;
   resetVortexPath(): void;
+  /** Live post-FX flags (EffectComposer + passes). */
+  getPostFx(): {
+    composerEnabled: boolean;
+    renderPassEnabled: boolean;
+    bloomEnabled: boolean;
+    outputPassEnabled: boolean;
+  };
+  setPostFx(partial: {
+    composerEnabled?: boolean;
+    renderPassEnabled?: boolean;
+    bloomEnabled?: boolean;
+    outputPassEnabled?: boolean;
+  }): void;
 }
 
 function timestampedStateFilename(): string {
@@ -449,6 +463,27 @@ function wireVortexButtons(api: DevHelpersApi): void {
   });
 }
 
+function wirePostFxPanel(api: DevHelpersApi): void {
+  const fx = api.getPostFx();
+  const bindings: Array<{
+    id: string;
+    key: keyof ReturnType<DevHelpersApi['getPostFx']>;
+  }> = [
+    { id: 'postFxComposer', key: 'composerEnabled' },
+    { id: 'postFxRenderPass', key: 'renderPassEnabled' },
+    { id: 'postFxBloom', key: 'bloomEnabled' },
+    { id: 'postFxOutput', key: 'outputPassEnabled' },
+  ];
+  for (const { id, key } of bindings) {
+    const el = byId<HTMLInputElement>(id);
+    if (!el) continue;
+    el.checked = fx[key];
+    el.addEventListener('change', () => {
+      api.setPostFx({ [key]: el.checked });
+    });
+  }
+}
+
 export function initDevHelpers(api: DevHelpersApi): void {
   ensureDevHelpers();
   wireDevBarCollapse();
@@ -462,6 +497,7 @@ export function initDevHelpers(api: DevHelpersApi): void {
   wireCameraButtons(api);
   wireGlbPicker(api);
   wireVortexButtons(api);
+  wirePostFxPanel(api);
 
   byId('paraxBtn')?.addEventListener('click', () => {
     const on = !api.isParallaxEnabled();

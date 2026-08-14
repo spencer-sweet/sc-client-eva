@@ -17,12 +17,21 @@
   position:fixed;left:16px;top:16px;z-index:12;
   display:flex;flex-direction:column;align-items:flex-start;gap:8px;
   max-width:min(420px, calc(100vw - 32px));
+  max-height:calc(100vh - 32px);
+  overflow:hidden;
   font-family:ui-monospace,Menlo,Consolas,monospace;
   color:var(--ventanas-ink);
   box-sizing:border-box
 }
 #bar *,#bar *::before,#bar *::after{box-sizing:border-box}
-#barControls{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%}
+#barControls{
+  display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;
+  min-height:0;flex:1 1 auto;
+  overflow-x:hidden;overflow-y:auto;
+  overscroll-behavior:contain;
+  padding-right:4px;
+  scrollbar-gutter:stable
+}
 #bar[data-dev-bar="hidden"]{display:none}
 #bar[data-dev-bar="minified"] #barControls{display:none}
 
@@ -53,7 +62,7 @@
 .seekRow{display:flex;align-items:center;gap:8px}
 .seekRow input[type="range"]{flex:1}
 
-#timelinePanel{
+#timelinePanel,#postFxPanel{
   display:flex;flex-direction:column;align-items:stretch;gap:7px;
   width:min(280px, 100%);
   background:var(--ventanas-panel);border:1px solid var(--ventanas-line);border-radius:12px;
@@ -63,7 +72,7 @@
   color:var(--ventanas-ink);font-size:12px;font-weight:600;letter-spacing:.04em;
   text-transform:uppercase;padding-bottom:2px;border-bottom:1px solid var(--ventanas-line)
 }
-#timelinePanel .barField{background:transparent;border:none;padding:0;backdrop-filter:none}
+#timelinePanel .barField,#postFxPanel .barField{background:transparent;border:none;padding:0;backdrop-filter:none}
 
 #scrollReadout{
   display:flex;flex-direction:column;gap:1px;

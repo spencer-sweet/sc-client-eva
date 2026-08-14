@@ -29,10 +29,24 @@ export const clock = new THREE.Clock();
 export const nearLayer = new THREE.Group();
 scene.add(nearLayer);
 
+export interface PostFxState {
+  /** When false, skip EffectComposer and draw with renderer.render. */
+  composerEnabled: boolean;
+  renderPassEnabled: boolean;
+  bloomEnabled: boolean;
+  outputPassEnabled: boolean;
+}
+
 export interface Renderer {
   renderer: THREE.WebGLRenderer;
   composer: EffectComposer;
+  renderPass: RenderPass;
   bloom: UnrealBloomPass;
+  outputPass: OutputPass;
+  postFx: PostFxState;
+  /** Apply the current postFx flags and draw one frame. */
+  renderFrame(): void;
+  setPostFx(partial: Partial<PostFxState>): void;
 }
 
 export function createRenderer(): Renderer {
@@ -51,10 +65,39 @@ export function createRenderer(): Renderer {
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
   const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
+  const renderPass = new RenderPass(scene, camera);
   const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.7, 0.1);
+  const outputPass = new OutputPass();
+  composer.addPass(renderPass);
   composer.addPass(bloom);
-  composer.addPass(new OutputPass());
+  composer.addPass(outputPass);
+
+  const postFx: PostFxState = {
+    composerEnabled: true,
+    renderPassEnabled: true,
+    bloomEnabled: true,
+    outputPassEnabled: true,
+  };
+
+  function applyPassFlags(): void {
+    renderPass.enabled = postFx.renderPassEnabled;
+    bloom.enabled = postFx.bloomEnabled;
+    outputPass.enabled = postFx.outputPassEnabled;
+  }
+
+  function renderFrame(): void {
+    if (!postFx.composerEnabled) {
+      renderer.render(scene, camera);
+      return;
+    }
+    applyPassFlags();
+    composer.render();
+  }
+
+  function setPostFx(partial: Partial<PostFxState>): void {
+    Object.assign(postFx, partial);
+    applyPassFlags();
+  }
 
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
@@ -64,7 +107,8 @@ export function createRenderer(): Renderer {
     bloom.setSize(innerWidth, innerHeight);
   });
 
-  return { renderer, composer, bloom };
+  applyPassFlags();
+  return { renderer, composer, renderPass, bloom, outputPass, postFx, renderFrame, setPostFx };
 }
 
 /** Ambient + key light for the GLB star's physical material. */

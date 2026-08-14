@@ -10,7 +10,7 @@ export const HELP_HTML =
   '<b>Orbit</b> = free-look; <b>Capture</b> = camera keyframe; <b>Reset camera</b> if it drifted too far/near.';
 
 export const BAR_HTML = /*html*/ `
-<div id="bar" data-dev-bar="expanded">
+<div id="bar" data-dev-bar="minified">
   <button id="devBarToggleBtn" type="button" title="Collapse / expand dev bar">▾ Dev UI</button>
   <div id="barControls">
     <div id="barTools">
@@ -24,7 +24,7 @@ export const BAR_HTML = /*html*/ `
       <button id="resetCamBtn">Reset camera</button>
       <button id="loadGlbBtn">Load another GLB…</button>
       <input type="file" id="glbFileInput" accept=".glb" style="display:none" />
-      <button id="paraxBtn">Parallax: OFF</button>
+      <button id="paraxBtn">Parallax: ON</button>
       <button id="vortexDrawBtn">✎ Draw</button>
       <button id="vortexAddBtn">+ Point</button>
       <button id="vortexRemoveBtn">− Point (selected)</button>
@@ -59,6 +59,22 @@ export const BAR_HTML = /*html*/ `
         </span>
       </label>
       <div id="scrollReadout"></div>
+    </div>
+
+    <div id="postFxPanel">
+      <div class="timelineTitle">Post FX</div>
+      <label class="barField barCheck"
+        ><input type="checkbox" id="postFxComposer" checked /> EffectComposer
+      </label>
+      <label class="barField barCheck"
+        ><input type="checkbox" id="postFxRenderPass" checked /> RenderPass
+      </label>
+      <label class="barField barCheck"
+        ><input type="checkbox" id="postFxBloom" checked /> UnrealBloomPass
+      </label>
+      <label class="barField barCheck"
+        ><input type="checkbox" id="postFxOutput" checked /> OutputPass
+      </label>
     </div>
   </div>
 </div>

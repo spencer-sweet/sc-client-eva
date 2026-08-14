@@ -63,6 +63,8 @@ const glassProps = () => ({
   edgeIntensity: num(2.2, 0, 6),
   neonColor: t.rgba({ r: 1, g: 1, b: 1, a: 1 }),
   neonWidth: num(1.0, 0.1, 6),
+  neonPulseBright: num(4.5, 0, 12),
+  neonPulseSpeed: num(1.1, 0, 3),
 });
 
 type GlassValues = {
@@ -74,6 +76,8 @@ type GlassValues = {
   edgeIntensity: number;
   neonColor: Rgba;
   neonWidth: number;
+  neonPulseBright: number;
+  neonPulseSpeed: number;
 };
 
 function applyGlass(glass: GlassMaterial, v: GlassValues): void {
@@ -262,7 +266,7 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     pulseSpeed: num(0.35, 0, 3),
     pulseWidth: num(0.22, 0.02, 1),
     pulseBright: num(2.4, 0, 8),
-    nodeBaseOpacity: num(0.21, 0, 1),
+    nodeBaseOpacity: num(0.65, 0, 1),
     nodePulseBright: num(2.4, 0, 8),
   });
   gridObj.onValuesChange((v) => {
@@ -378,7 +382,7 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
   // num(0/1) instead of t.boolean: this avoids depending on a types API that may not
   // exist as-is in every bundle version. If t.boolean threw here the whole script would
   // stop BEFORE reaching the render loop — the real cause of an old black-screen bug.
-  safeObject('Parallax', { enabled: num(0, 0, 1), intensity: num(1, 0, 3) }, (o) =>
+  safeObject('Parallax', { enabled: num(1, 0, 1), intensity: num(1, 0, 3) }, (o) =>
     o.onValuesChange((v) => {
       parallax.enabled = v.enabled >= 0.5;
       parallax.intensity = v.intensity;

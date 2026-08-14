@@ -39,7 +39,7 @@ import {
   setVortexPathTension,
   vortexUniforms,
 } from './scene/vortex';
-import { applyWindowTransform } from './scene/window-frames';
+import { applyWindowTransform, updateNeonPulse } from './scene/window-frames';
 import { WINDOW_INDICES } from './windows/geometry';
 import { bindTheatre } from './theatre/bindings';
 import { initTheatre, isSequencePlaying, PROJECT_ID } from './theatre/setup';
@@ -56,7 +56,7 @@ startTimelineScroll();
 await bootDevHelpers();
 
 const { studioReady, sheet } = initTheatre();
-const { renderer, composer, bloom } = createRenderer();
+const { renderer, bloom, postFx, renderFrame, setPostFx } = createRenderer();
 addSceneLights();
 starUniforms.uPixelRatio.value = renderer.getPixelRatio();
 
@@ -130,6 +130,8 @@ initDevHelpers({
   addVortexPoint,
   removeVortexPoint,
   resetVortexPath,
+  getPostFx: () => ({ ...postFx }),
+  setPostFx,
 });
 
 /* ---------- render loop ---------- */
@@ -162,11 +164,12 @@ function tick(): void {
   setVortexGizmoVisible(editable);
 
   updateGrid(gridPulseTime);
+  updateNeonPulse(gridPulseTime);
   updateAlarmLights(time);
 
   if (orbitState.active) orbitState.controls?.update();
   tickScroll(dt, sheet);
-  composer.render();
+  renderFrame();
   statsEnd();
 }
 

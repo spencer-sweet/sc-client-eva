@@ -10,7 +10,7 @@ import { starGroup as starfieldGroup, starfieldMotion } from '../scene/starfield
 import { glow, starGroup, starPos } from '../scene/star-glb';
 
 export const parallax = {
-  enabled: false,
+  enabled: true,
   intensity: 1,
 };
 

@@ -95,6 +95,7 @@ export function makeNeonMat(
     uniforms: {
       uColor: { value: new THREE.Color(colorHex) },
       uOpacityBase: { value: opacityBase },
+      uBright: { value: 1.0 },
       uDissolve: { value: 0.0 },
       uWidth: { value: widthBase },
       ...neonLightU,
@@ -111,12 +112,13 @@ export function makeNeonMat(
         gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);
       }`,
     fragmentShader: /*glsl*/ `precision highp float; varying vec3 vW;
-      uniform vec3 uColor; uniform float uOpacityBase,uDissolve; uniform vec3 uLightPos[2]; uniform vec3 uLightColI[2];
+      uniform vec3 uColor; uniform float uOpacityBase,uBright,uDissolve; uniform vec3 uLightPos[2]; uniform vec3 uLightColI[2];
       ${LIGHT_TINT_GLSL}
       void main(){
         // frame/neon "reflects" the alarm light when nearby
         vec3 col=uColor + alarmTint(vW,uLightPos,uLightColI)*1.4;
-        gl_FragColor=vec4(col, uOpacityBase*(1.0-uDissolve));
+        float a=uOpacityBase*uBright*(1.0-uDissolve);
+        gl_FragColor=vec4(col*uBright, a);
       }`,
   });
 }

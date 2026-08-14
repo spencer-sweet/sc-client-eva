@@ -17,8 +17,8 @@ export const gridState = {
   pulseSpeed: 0.35,
   pulseWidth: 0.22,
   pulseBright: 2.4,
-  /** Node brightness is independent of the line brightness. */
-  nodeBaseOpacity: 0.21,
+  /** Solid node stroke brightness (independent of the line pulse). */
+  nodeBaseOpacity: 0.65,
   nodePulseBright: 2.4,
 };
 
@@ -90,27 +90,34 @@ for (let ci = 0; ci < CIRCLES.length; ci++) {
   const [wx, wy] = applyTf(cir.tf, cir.cx, cir.cy);
   const c: Point2 = toWorld([wx, wy]);
   const r = cir.r * WSCALE;
+  // Device-pixel LineLoop (not a thin Ring mesh) so the stroke stays visible;
+  // additive + solid brightness matches the grid lines without a color pulse.
+  const SEG = 64;
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i <= SEG; i++) {
+    const a = (i / SEG) * Math.PI * 2;
+    pts.push(new THREE.Vector3(c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r, 0));
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uColor: { value: gridState.color },
-      uBright: { value: gridState.baseOpacity + 0.05 },
+      uColor: { value: gridState.color.clone() },
+      uBright: { value: gridState.nodeBaseOpacity },
       ...maskUniforms,
     },
     transparent: true,
     depthWrite: false,
     depthTest: false,
     blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
     vertexShader: /*glsl*/ `varying vec3 vW; void main(){ vW=(modelMatrix*vec4(position,1.0)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: /*glsl*/ `precision highp float; uniform vec3 uColor; uniform float uBright; varying vec3 vW;
       ${MASK_GLSL}
       void main(){ if(insideAnyWindow(vW.xy)) discard; gl_FragColor=vec4(uColor*uBright,uBright); }`,
   });
-  const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.82, r, 40), mat);
-  ring.position.set(c[0], c[1], 0);
+  const ring = new THREE.LineLoop(geo, mat);
   ring.renderOrder = 1.5;
   gridGroup.add(ring);
-  gridNodeObjs.push({ mat, phase0: (ci * 0.37) % 1.0 });
+  gridNodeObjs.push({ mat, phase0: 0 });
 }
 
 export function updateGrid(time: number): void {
@@ -125,12 +132,7 @@ export function updateGrid(time: number): void {
     u.uPhase.value = (g.phase0 + time * spd * 0.15) % 1.0;
   }
   for (const n of gridNodeObjs) {
-    const ph = (n.phase0 + time * spd * 0.2) % 1.0;
-    const b =
-      (gridState.nodeBaseOpacity +
-        gridState.nodePulseBright * 0.5 * Math.exp(-Math.pow((ph - 0.5) / 0.35, 2.0))) *
-      k;
     (n.mat.uniforms.uColor.value as THREE.Color).copy(gridState.color);
-    n.mat.uniforms.uBright.value = b;
+    n.mat.uniforms.uBright.value = gridState.nodeBaseOpacity * k;
   }
 }
