@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,58 +7,39 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <canvas id="scene"></canvas>
-    <div id="bar">
-      <button id="actBtn" class="act">✦ Activar estrella</button>
-      <button id="resetBtn">Reset</button>
-      <button id="navBtn">Navegar: OFF</button>
-      <button id="grabBtn">Capturar cámara → keyframe</button>
-      <button id="resetCamBtn">Reset cámara</button>
-      <button id="loadGlbBtn">Cargar otro GLB…</button>
-      <input type="file" id="glbFileInput" accept=".glb" style="display:none" />
-      <button id="paraxBtn">Parallax: OFF</button>
-      <button id="vortexDrawBtn">✎ Dibujar</button>
-      <button id="vortexAddBtn">+ Punto</button>
-      <button id="vortexRemoveBtn">− Punto (seleccionado)</button>
-      <label style="font-size:11px;color:#8fa0c8;display:inline-flex;align-items:center;gap:4px;background:rgba(8,10,26,.82);border:1px solid rgba(120,150,220,.2);border-radius:9px;padding:6px 10px"
-        >Tensión <input type="range" id="vortexTensionInput" min="0" max="1" step="0.05" value="0.5"
-      /></label>
-      <label style="font-size:11px;color:#8fa0c8;display:inline-flex;align-items:center;gap:4px;background:rgba(8,10,26,.82);border:1px solid rgba(120,150,220,.2);border-radius:9px;padding:6px 10px"
-        >Prof. dibujo <input type="range" id="vortexDepthInput" min="20" max="200" value="110"
-      /></label>
-      <button id="vortexResetPathBtn">Reset recorrido</button>
-      <button id="helpToggleBtn">?</button>
-    </div>
-    <div id="help"></div>
-    <div id="err"><div></div></div>
+    <!-- #star-scene, #bar, #help, #err are mounted by src/dev-helpers/ so the
+         same controls work when only the built main.js is loaded from CDN. -->
 
-    <div id="scrollReadout"></div>
-
-    <!-- Scroll-driven timeline runway. Invisible spacers -- the fixed #scene canvas
+    <!-- Scroll-driven timeline runway. Invisible spacers -- the fixed #star-scene canvas
          renders on top the whole time; scrolling past these just advances the
-         Theatre.js sequence (see measureCards() in main.js). -->
-    <section data-fs-section="1">
+         Theatre.js sequence (see measureCards() in src/timeline-scroll.ts). -->
+    <section data-fs-section="10" data-fs-section-title="who-we-are">
       <div data-fs-card="1010"></div>
       <div data-fs-card="1020"></div>
       <div data-fs-card="1030"></div>
+      <div data-fs-card="1040"></div>
+      <div data-fs-card="1050"></div>
     </section>
-    <section data-fs-section="2">
+    <section data-fs-section="20" data-fs-section-title="how-it-works">
       <div data-fs-card="2010"></div>
       <div data-fs-card="2020"></div>
       <div data-fs-card="2030"></div>
       <div data-fs-card="2040"></div>
       <div data-fs-card="2050"></div>
-      <div data-fs-card="2060"></div>
     </section>
-    <section data-fs-section="3">
+    <section data-fs-section="30" data-fs-section-title="use-cases">
       <div data-fs-card="3010"></div>
-      <div data-fs-card="3020"></div>
-      <div data-fs-card="3030"></div>
     </section>
-    <section data-fs-section="4">
+    <section data-fs-section="40" data-fs-section-title="where-we-fit">
       <div data-fs-card="4010"></div>
     </section>
+    <section data-fs-section="50" data-fs-section-title="next-steps">
+      <div data-fs-card="5010"></div>
+    </section>
+    <section data-fs-section="60" data-fs-section-title="footer">
+      <div data-fs-card="6010"></div>
+    </section>
 
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

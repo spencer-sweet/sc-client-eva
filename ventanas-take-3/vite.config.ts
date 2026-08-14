@@ -8,6 +8,11 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 // port the launcher expects. strictPort makes a conflict fail loudly instead
 // of silently drifting to another port.
 export default defineConfig({
+  // es2022: top-level await in main.ts (bootDevHelpers before touching DOM).
+  // Required for Webflow embeds where the module can run before <body> exists.
+  build: {
+    target: 'es2022',
+  },
   server: {
     port: 5206,
     strictPort: true,

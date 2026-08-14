@@ -1,0 +1,113 @@
+/* Dev UI chrome — inlined into the JS bundle so Webflow/CDN embeds
+   get the same look without a separate stylesheet. */
+:root{
+  --ventanas-ink:#dfe9ff;
+  --ventanas-dim:#8fa0c8;
+  --ventanas-cyan:#66d2ff;
+  --ventanas-mag:#cea7fc;
+  --ventanas-panel:rgba(8,10,26,.82);
+  --ventanas-line:rgba(120,150,220,.2);
+}
+
+#star-scene{
+  position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:0
+}
+
+#bar{
+  position:fixed;left:16px;top:16px;z-index:12;
+  display:flex;flex-direction:column;align-items:flex-start;gap:8px;
+  max-width:min(420px, calc(100vw - 32px));
+  max-height:calc(100vh - 32px);
+  overflow:hidden;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  color:var(--ventanas-ink);
+  box-sizing:border-box
+}
+#bar *,#bar *::before,#bar *::after{box-sizing:border-box}
+#barControls{
+  display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;
+  min-height:0;flex:1 1 auto;
+  overflow-x:hidden;overflow-y:auto;
+  overscroll-behavior:contain;
+  padding-right:4px;
+  scrollbar-gutter:stable
+}
+#bar[data-dev-bar="hidden"]{display:none}
+#bar[data-dev-bar="minified"] #barControls{display:none}
+
+#barTools{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+#bar button,#devBarToggleBtn{
+  background:var(--ventanas-panel);border:1px solid var(--ventanas-line);color:var(--ventanas-cyan);
+  border-radius:9px;padding:8px 12px;font:inherit;font-size:12px;cursor:pointer;backdrop-filter:blur(8px)
+}
+#bar button.on{background:rgba(102,210,255,.25);color:#fff}
+#bar .act{color:var(--ventanas-mag);border-color:rgba(206,167,252,.4)}
+#devBarToggleBtn{flex:0 0 auto}
+
+.barField{
+  font-size:11px;color:var(--ventanas-dim);
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--ventanas-panel);border:1px solid var(--ventanas-line);border-radius:9px;
+  padding:6px 10px;backdrop-filter:blur(8px)
+}
+.barFieldCol{flex-direction:column;align-items:stretch;gap:5px;width:100%}
+.barCheck{cursor:pointer;user-select:none}
+.barField select,.barField input[type="number"],.barField input[type="range"]{accent-color:var(--ventanas-cyan)}
+.barField select,.barField input[type="number"]{
+  background:rgba(4,7,24,.75);border:1px solid var(--ventanas-line);border-radius:6px;
+  color:var(--ventanas-cyan);font:inherit;font-size:11px;padding:4px 6px
+}
+.barField input[type="number"]{width:64px}
+.barField input[type="range"]{width:100%}
+.seekRow{display:flex;align-items:center;gap:8px}
+.seekRow input[type="range"]{flex:1}
+
+#timelinePanel,#postFxPanel{
+  display:flex;flex-direction:column;align-items:stretch;gap:7px;
+  width:min(280px, 100%);
+  background:var(--ventanas-panel);border:1px solid var(--ventanas-line);border-radius:12px;
+  padding:10px;backdrop-filter:blur(8px)
+}
+.timelineTitle{
+  color:var(--ventanas-ink);font-size:12px;font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;padding-bottom:2px;border-bottom:1px solid var(--ventanas-line)
+}
+#timelinePanel .barField,#postFxPanel .barField{background:transparent;border:none;padding:0;backdrop-filter:none}
+
+#scrollReadout{
+  display:flex;flex-direction:column;gap:1px;
+  max-height:300px;overflow-y:auto;
+  color:rgba(223,233,255,.55);font-size:11px;line-height:1.25;
+  text-align:left;padding-top:6px;border-top:1px solid var(--ventanas-line)
+}
+#scrollReadout[hidden]{display:none !important}
+#scrollReadout .readoutRow{
+  display:flex;align-items:baseline;gap:4px
+}
+#scrollReadout .readoutDots{
+  flex:1 1 auto;min-width:12px;height:0;
+  margin:0 2px 0.35em;
+  border-bottom:1px dotted rgba(143,160,200,.45)
+}
+#scrollReadout b{color:var(--ventanas-cyan);font-weight:600;flex:0 0 auto}
+#scrollReadout .readoutMeta{
+  margin-top:4px;padding-top:4px;border-top:1px solid rgba(120,150,220,.15);line-height:1.35
+}
+
+#help{
+  position:fixed;left:16px;bottom:14px;z-index:12;max-width:620px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:11px;line-height:1.6;color:var(--ventanas-dim);
+  background:var(--ventanas-panel);border:1px solid var(--ventanas-line);border-radius:10px;
+  padding:9px 12px;backdrop-filter:blur(8px);display:none;box-sizing:border-box
+}
+#help.on{display:block}
+#help b{color:var(--ventanas-cyan)}
+
+#err{
+  position:fixed;inset:0;z-index:50;display:none;place-items:center;padding:32px;
+  background:#040718;text-align:center;
+  font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--ventanas-ink)
+}
+#err div{max-width:540px;font-size:13px;line-height:1.7}
+#err code{color:var(--ventanas-cyan)}
