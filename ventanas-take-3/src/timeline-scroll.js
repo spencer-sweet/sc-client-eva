@@ -82,6 +82,7 @@ function onScroll() {
   requestAnimationFrame(() => {
     scrollTicking = false;
     const cardsT = measureCards();
+    // external: host owns T via seekTimelineTo — still measure cards for the Dev UI readout
     if (scrollState.source === 'page') window.seekTimelineTo(readPageScroll());
     else if (scrollState.source === 'sections') window.seekTimelineTo(cardsT);
     scrollUi.onMeasure?.(cardProgress, targetGlobalT);
@@ -90,10 +91,10 @@ function onScroll() {
 
 export function syncScrollListener() {
   removeEventListener('scroll', onScroll);
-  if (scrollState.source !== 'external') {
-    addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-  } else {
+  // Always listen so card % readout stays live in 'external' (Lenis / host scroll).
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+  if (scrollState.source === 'external') {
     scrollUi.onSourceChange?.();
     notifyTarget();
   }
@@ -107,6 +108,11 @@ window.seekTimelineTo = function seekTimelineTo(v) {
   const n = Number(v);
   if (Number.isFinite(n)) targetGlobalT = clamp01(n);
   notifyTarget();
+  // Keep card % readout current when Lenis drives T without native scroll events
+  if (scrollState.source === 'external') {
+    measureCards();
+    scrollUi.onMeasure?.(cardProgress, targetGlobalT);
+  }
 };
 
 window.setTimelineTo = function setTimelineTo(v) {

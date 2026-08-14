@@ -215,18 +215,16 @@ function syncSeekControls(t) {
 
 function applyScrollSourceUi() {
   const scrollSourceSelect = byId('scrollSourceSelect');
-  const scrollReadoutEl = byId('scrollReadout');
   if (scrollSourceSelect && scrollSourceSelect.value !== scrollState.source) {
     scrollSourceSelect.value = scrollState.source;
   }
-  if (scrollReadoutEl) scrollReadoutEl.hidden = scrollState.source === 'external';
 }
 
 function updateScrollReadout(cardProgress, t) {
   applyScrollSourceUi();
   syncSeekControls(t ?? getTimelineT().target);
   const scrollReadoutEl = byId('scrollReadout');
-  if (!scrollReadoutEl || scrollReadoutEl.hidden) return;
+  if (!scrollReadoutEl) return;
   const cards = Array.from(document.querySelectorAll('[data-fs-card]'));
   const progress = cardProgress || new Map();
   const rows = cards.map((el) => {
