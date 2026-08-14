@@ -20,7 +20,6 @@ import { gridState, setGridBlackout } from '../scene/grid';
 import { applyHorizontalStroke } from '../scene/horizontal-stroke';
 import {
   applyStarState,
-  glbMat,
   glow,
   onGlbLoaded,
   setShatterProgress,
@@ -115,9 +114,9 @@ const starProps = () => ({
   scale: num(0.7, 0.1, 2),
   emissiveColor: t.rgba({ r: 0.29, g: 0.63, b: 1, a: 1 }),
   emissiveIntensity: num(1.6, 0, 6),
-  opacity: num(0.4, 0.05, 1),
-  glowSize: num(2.6, 0.5, 8),
-  glowIntensity: num(0.85, 0, 2),
+  opacity: num(0.9, 0.05, 1),
+  glowSize: num(3.4, 0.5, 8),
+  glowIntensity: num(1.25, 0, 2),
   transmission: num(0.6, 0, 1),
   roughness: num(0.12, 0, 1),
   ior: num(1.45, 1, 2.4),
@@ -361,10 +360,8 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     starPos.z = v.posZ;
     starGroup.position.set(v.posX, v.posY, v.posZ);
     glow.position.set(v.posX, v.posY, v.posZ - 0.2);
-    glbMat.transmission = v.transmission;
-    glbMat.roughness = v.roughness;
-    glbMat.ior = v.ior;
-    glbMat.thickness = v.thickness;
+    // Crystal-2 matcap glass — Physical-only props (transmission/roughness/ior/thickness)
+    // stay on the Theatre object for authoring continuity but do not drive the material.
     applyStarState();
     setShatterProgress(v.shatterProgress);
   });

@@ -10,5 +10,12 @@
  * bundle's URL (dist/assets/index-*.js → ../ is dist/), but in dev `import.meta.url`
  * is this file's own path, so "../" only lands on the public root from /src.
  */
-export const GLB_URL = new URL(/* @vite-ignore */ '../estrella.glb', import.meta.url).href;
+export const GLB_URL = new URL(
+  /* @vite-ignore */ '../Broken 60 fragments.glb',
+  import.meta.url,
+).href;
+export const MATCAP_URL = new URL(
+  /* @vite-ignore */ '../textures/Crystal-2.png',
+  import.meta.url,
+).href;
 export const LOGO_URL = new URL(/* @vite-ignore */ '../eva-logo.png', import.meta.url).href;

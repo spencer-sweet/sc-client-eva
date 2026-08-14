@@ -1,10 +1,13 @@
 /**
  * The star: a GLB model (with a baked shatter animation) plus its additive glow sprite,
  * sitting in the center window and facing the camera.
+ *
+ * Default look matches timeline-03: jagged 60-fragment shatter + Crystal-2 matcap glass
+ * (see-through via Fresnel alpha on the matcap lookup).
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { GLB_URL } from '../assets';
+import { GLB_URL, MATCAP_URL } from '../assets';
 import { bail } from '../core/bail';
 import { scene } from '../core/stage';
 import { winCentersW } from '../windows/geometry';
@@ -48,40 +51,45 @@ scene.add(starGroup);
 /** z=3 keeps the star away from the wall so no shatter fragment ends up behind it. */
 export const starPos = { x: centerW[0], y: centerW[1], z: 3.0 };
 
+/** Clear head-on, solid at the silhouette — stronger than timeline-03 so Crystal-2 reads on dark. */
+const CLEAR_GLASS_CENTER_ALPHA = 0.28;
+const CLEAR_GLASS_RIM_POWER = 2.0;
+
+function addMatcapGlassAlpha(material: THREE.MeshMatcapMaterial): void {
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      `float glassRim = clamp(length(uv - 0.5) / 0.495, 0.0, 1.0);
+       diffuseColor.a *= mix(${CLEAR_GLASS_CENTER_ALPHA.toFixed(3)}, 1.0, pow(glassRim, ${CLEAR_GLASS_RIM_POWER.toFixed(2)}));
+       #include <opaque_fragment>`,
+    );
+  };
+  material.needsUpdate = true;
+}
+
+const matcapTex = new THREE.TextureLoader().load(MATCAP_URL);
+matcapTex.colorSpace = THREE.SRGBColorSpace;
+
 /**
- * depthWrite:false is load-bearing — without it the glass "reserved" its spot in the
- * depth buffer as if opaque and blocked the vortex behind it from drawing there, so the
- * stars (which already ignore depth) showed but the vortex did not. depthTest stays at
- * its default (true): that is what keeps the ~55 shatter fragments from blending badly
- * into each other (the black-blob bug).
- *
- * transmission=1 + EffectComposer (our Bloom) has documented Three.js bugs — the special
- * pass that "photographs" what's behind breaks with post-processing. So transmission is
- * lowered and real opacity/transparent added: classic alpha blending DOES work with
- * Bloom without relying on that fragile path, keeping stars/vortex visible.
+ * depthWrite:false is load-bearing — without it overlapping shards occlude each other
+ * and the glass "reserved" its spot in the depth buffer as if opaque.
  */
-export const glbMat = new THREE.MeshPhysicalMaterial({
-  color: 0xdff0ff,
-  emissive: new THREE.Color(0x4aa0ff),
-  emissiveIntensity: 1.6,
-  roughness: 0.12,
-  transmission: 0.6,
-  ior: 1.45,
-  thickness: 0.6,
-  metalness: 0.0,
-  depthWrite: false,
+export const glbMat = new THREE.MeshMatcapMaterial({
+  matcap: matcapTex,
   transparent: true,
-  opacity: 0.4,
+  depthWrite: false,
+  opacity: 0.9,
   side: THREE.DoubleSide,
 });
+addMatcapGlassAlpha(glbMat);
 
 export const starState = {
   scale: 0.7,
   emiColor: new THREE.Color(0x4aa0ff),
   emiInt: 1.6,
-  opacity: 0.4,
-  glowSize: 2.6,
-  glowInt: 0.85,
+  opacity: 0.9,
+  glowSize: 3.4,
+  glowInt: 1.25,
 };
 
 let glbRoot: THREE.Object3D | null = null;
@@ -93,8 +101,6 @@ let liveShatter = false;
 
 export function applyStarState(): void {
   glbRoot?.scale.setScalar(starState.scale);
-  glbMat.emissive.copy(starState.emiColor);
-  glbMat.emissiveIntensity = starState.emiInt;
   glbMat.opacity = starState.opacity;
   const gm = glow.material as THREE.SpriteMaterial;
   gm.color.copy(starState.emiColor);
@@ -159,6 +165,8 @@ function parseGlb(buf: ArrayBuffer): void {
       glbRoot.traverse((o) => {
         if (!(o as THREE.Mesh).isMesh) return;
         const mesh = o as THREE.Mesh;
+        // Jagged shards are hard-faceted; smoothed normals read as glass instead of tiles.
+        mesh.geometry.computeVertexNormals();
         mesh.material = glbMat;
         mesh.frustumCulled = false;
         // > wall.renderOrder (1): without this the wall (transparent while fading) drew
@@ -202,6 +210,6 @@ export function loadInitialStarGlb(): void {
     .then(loadGLBFromBuffer)
     .catch((err) => {
       console.error(err);
-      bail('Could not load <code>estrella.glb</code>.');
+      bail('Could not load <code>Broken 60 fragments.glb</code>.');
     });
 }

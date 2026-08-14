@@ -968,6 +968,19 @@
                     "value": 0.05
                   },
                   {
+                    "id": "GFhLLKiW1q",
+                    "position": 4,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0.9386029590013019
+                  },
+                  {
                     "id": "IoINeyebHe",
                     "position": 9.633,
                     "connectedRight": true,
@@ -1308,6 +1321,19 @@
                     "value": 3.3417721518987342
                   },
                   {
+                    "id": "Ji0MkYS_Li",
+                    "position": 4,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 2.1265822784810124
+                  },
+                  {
                     "id": "oB5-iExHDU",
                     "position": 9.8,
                     "connectedRight": true,
@@ -1364,12 +1390,40 @@
               "wePn3Md7QU": {
                 "type": "BasicKeyframedTrack",
                 "__debugName": "Star (GLB):[\"glowSize\"]",
-                "keyframes": []
+                "keyframes": [
+                  {
+                    "id": "DyDB6dbNpR",
+                    "position": 4,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1.0696202531645567
+                  }
+                ]
               },
               "YyB6nBgKT1": {
                 "type": "BasicKeyframedTrack",
                 "__debugName": "Star (GLB):[\"glowIntensity\"]",
-                "keyframes": []
+                "keyframes": [
+                  {
+                    "id": "kcnsxxW3kT",
+                    "position": 4,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0.3417721518987343
+                  }
+                ]
               },
               "chAD4Ya1h9": {
                 "type": "BasicKeyframedTrack",
@@ -2771,6 +2825,7 @@
   },
   "definitionVersion": "0.4.0",
   "revisionHistory": [
+    "qlY5DPhw2b5CbHR1",
     "Htq2rDffYlTnItwD",
     "eKW1nG0ZrfrZzSh6",
     "-TV890TcwUkQ54rW",
