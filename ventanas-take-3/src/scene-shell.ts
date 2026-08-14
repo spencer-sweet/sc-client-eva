@@ -6,39 +6,36 @@
 const SCENE_ID = 'star-scene';
 const SCENE_STYLE_ID = 'ventanas-star-scene-style';
 
-function injectSceneCss() {
+function injectSceneCss(): void {
   if (document.getElementById(SCENE_STYLE_ID)) return;
   const style = document.createElement('style');
   style.id = SCENE_STYLE_ID;
-  style.textContent =
-    '#' +
-    SCENE_ID +
-    '{position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:0}';
+  style.textContent = `#${SCENE_ID}{position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:0}`;
   (document.head || document.documentElement).appendChild(style);
 }
 
-export function ensureStarScene() {
+export function ensureStarScene(): HTMLCanvasElement {
   injectSceneCss();
-  let canvas = document.getElementById(SCENE_ID);
-  if (canvas) return canvas;
+  const existing = document.getElementById(SCENE_ID);
+  if (existing instanceof HTMLCanvasElement) return existing;
   const root = document.body;
   if (!root) {
     throw new Error('ventanas-take-3: document.body missing — cannot create #' + SCENE_ID);
   }
-  canvas = document.createElement('canvas');
+  const canvas = document.createElement('canvas');
   canvas.id = SCENE_ID;
   root.prepend(canvas);
   return canvas;
 }
 
-export async function whenBodyReady() {
+export async function whenBodyReady(): Promise<void> {
   if (document.body) return;
   if (document.readyState === 'loading') {
-    await new Promise((resolve) => {
-      document.addEventListener('DOMContentLoaded', resolve, { once: true });
+    await new Promise<void>((resolve) => {
+      document.addEventListener('DOMContentLoaded', () => resolve(), { once: true });
     });
   }
   if (!document.body) {
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   }
 }
