@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds every top-level site (any directory containing a package.json) into
+# Builds every top-level Vite site (package.json + vite.config.*) into
 # dist/<site-name>/ so each is served at https://<domain>/<site-name>/.
+# Non-frontend packages (e.g. cf-worker) are skipped — they deploy separately.
 # Cloudflare Pages settings: build command = "bash build.sh", output dir = "dist".
 set -euo pipefail
 
@@ -13,13 +14,20 @@ mkdir -p "$DIST"
 sites=()
 for pkg in "$ROOT"/*/package.json; do
   [ -f "$pkg" ] || continue
-  name="$(basename "$(dirname "$pkg")")"
+  dir="$(dirname "$pkg")"
+  name="$(basename "$dir")"
   [ "$name" = "node_modules" ] && continue
+  # Only Vite front-end demos belong in the Pages dist; Workers / other packages
+  # have a package.json but no vite.config and must not be built here.
+  shopt -s nullglob
+  vite_configs=("$dir"/vite.config.*)
+  shopt -u nullglob
+  [ ${#vite_configs[@]} -gt 0 ] || continue
   sites+=("$name")
 done
 
 if [ ${#sites[@]} -eq 0 ]; then
-  echo "No sites found (no */package.json)." >&2
+  echo "No Vite sites found (no */package.json with vite.config.*)." >&2
   exit 1
 fi
 
