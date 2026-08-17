@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Builds every top-level Vite site (package.json + vite.config.*) into
+# Builds every top-level site (any directory containing a package.json) into
 # dist/<site-name>/ so each is served at https://<domain>/<site-name>/.
-# Non-frontend packages (e.g. cf-worker) are skipped — they deploy separately.
+# Packages with a wrangler config (e.g. cf-worker) are skipped — they deploy separately.
 # Cloudflare Pages settings: build command = "bash build.sh", output dir = "dist".
 set -euo pipefail
 
@@ -17,17 +17,16 @@ for pkg in "$ROOT"/*/package.json; do
   dir="$(dirname "$pkg")"
   name="$(basename "$dir")"
   [ "$name" = "node_modules" ] && continue
-  # Only Vite front-end demos belong in the Pages dist; Workers / other packages
-  # have a package.json but no vite.config and must not be built here.
+  # Workers / Wrangler packages are not Vite Pages demos — skip them.
   shopt -s nullglob
-  vite_configs=("$dir"/vite.config.*)
+  wrangler_configs=("$dir"/wrangler.toml "$dir"/wrangler.json "$dir"/wrangler.jsonc)
   shopt -u nullglob
-  [ ${#vite_configs[@]} -gt 0 ] || continue
+  [ ${#wrangler_configs[@]} -gt 0 ] && continue
   sites+=("$name")
 done
 
 if [ ${#sites[@]} -eq 0 ]; then
-  echo "No Vite sites found (no */package.json with vite.config.*)." >&2
+  echo "No sites found (no */package.json without wrangler config)." >&2
   exit 1
 fi
 
