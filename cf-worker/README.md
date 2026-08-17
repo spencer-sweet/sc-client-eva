@@ -15,12 +15,18 @@ pnpm install
 
    ```bash
    WEBFLOW_WEBHOOK_SECRET=your_webhook_secret_here
+   POSTMARK_SERVER_TOKEN=your_postmark_server_token
+   POSTMARK_FROM=notifications@yourdomain.com
+   POSTMARK_TO=you@example.com
    ```
 
-3. For production, set the same secret on the Worker:
+3. For production, set secrets on the Worker:
 
    ```bash
    pnpm exec wrangler secret put WEBFLOW_WEBHOOK_SECRET
+   pnpm exec wrangler secret put POSTMARK_SERVER_TOKEN
+   pnpm exec wrangler secret put POSTMARK_FROM # should this be the customer (+ replyTo also)
+   pnpm exec wrangler secret put POSTMARK_TO
    ```
 
 ## Scripts
@@ -30,6 +36,7 @@ pnpm install
 | `pnpm dev` | Local Worker on [http://127.0.0.1:8787](http://127.0.0.1:8787) |
 | `pnpm tunnel` | Quick Cloudflare Tunnel → local `:8787` (public HTTPS URL) |
 | `pnpm deploy` | Deploy to `*.workers.dev` |
+| `pnpm tail` | Live logs from the **deployed** Worker (`wrangler tail`) |
 | `pnpm build` | Dry-run deploy into `dist/` |
 | `pnpm typecheck` | `tsc --noEmit` |
 
@@ -51,6 +58,7 @@ src/
     01_dev.ts              # POST /wf/01_dev
     02_parse-form.ts       # POST /wf/02_parse-form
     03_validate.ts         # POST /wf/03_validate (signed)
+    04_postmark-write.ts   # POST /wf/04_postmark-write (signed + Postmark)
 ```
 
 ## Routes
@@ -61,6 +69,7 @@ src/
 | `POST` | `/wf/01_dev` | Log + echo the raw webhook body as JSON |
 | `POST` | `/wf/02_parse-form` | Extract typed `ContactFormData` → log + `{ ok, data }` |
 | `POST` | `/wf/03_validate` | Same as `02`, but only after Webflow signature verification |
+| `POST` | `/wf/04_postmark-write` | Same as `03`, then emails `ContactFormData` via Postmark |
 | `OPTIONS` | `*` | CORS preflight (all paths) |
 
 All responses include CORS headers (`Access-Control-Allow-Origin: *`, etc.).
@@ -147,6 +156,7 @@ Webflow **rejects** `http://localhost:…` (“Invalid URL format”). The webho
    https://eva-networks-webflow-site.dan-sheldon.workers.dev/wf/01_dev
    https://eva-networks-webflow-site.dan-sheldon.workers.dev/wf/02_parse-form
    https://eva-networks-webflow-site.dan-sheldon.workers.dev/wf/03_validate
+   https://eva-networks-webflow-site.dan-sheldon.workers.dev/wf/04_postmark-write
    ```
 
 ### Option B — local Worker + Cloudflare Tunnel (dev)
