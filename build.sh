@@ -18,10 +18,11 @@ for pkg in "$ROOT"/*/package.json; do
   name="$(basename "$dir")"
   [ "$name" = "node_modules" ] && continue
   # Workers / Wrangler packages are not Vite Pages demos — skip them.
-  shopt -s nullglob
-  wrangler_configs=("$dir"/wrangler.toml "$dir"/wrangler.json "$dir"/wrangler.jsonc)
-  shopt -u nullglob
-  [ ${#wrangler_configs[@]} -gt 0 ] && continue
+  has_wrangler_config=0
+  for wrangler_config in wrangler.toml wrangler.json wrangler.jsonc; do
+    [ -f "$dir/$wrangler_config" ] && has_wrangler_config=1
+  done
+  [ "$has_wrangler_config" -eq 1 ] && continue
   sites+=("$name")
 done
 
