@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds every top-level site (any directory containing a package.json) into
 # dist/<site-name>/ so each is served at https://<domain>/<site-name>/.
+# Packages with a wrangler config (e.g. cf-worker) are skipped — they deploy separately.
 # Cloudflare Pages settings: build command = "bash build.sh", output dir = "dist".
 set -euo pipefail
 
@@ -13,13 +14,20 @@ mkdir -p "$DIST"
 sites=()
 for pkg in "$ROOT"/*/package.json; do
   [ -f "$pkg" ] || continue
-  name="$(basename "$(dirname "$pkg")")"
+  dir="$(dirname "$pkg")"
+  name="$(basename "$dir")"
   [ "$name" = "node_modules" ] && continue
+  # Workers / Wrangler packages are not Vite Pages demos — skip them.
+  has_wrangler_config=0
+  for wrangler_config in wrangler.toml wrangler.json wrangler.jsonc; do
+    [ -f "$dir/$wrangler_config" ] && has_wrangler_config=1
+  done
+  [ "$has_wrangler_config" -eq 1 ] && continue
   sites+=("$name")
 done
 
 if [ ${#sites[@]} -eq 0 ]; then
-  echo "No sites found (no */package.json)." >&2
+  echo "No sites found (no */package.json without wrangler config)." >&2
   exit 1
 fi
 

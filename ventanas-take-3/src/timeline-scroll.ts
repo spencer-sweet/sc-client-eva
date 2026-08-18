@@ -15,8 +15,13 @@ export type ScrollSource = (typeof SCROLL_SOURCES)[number];
 const isScrollSource = (v: unknown): v is ScrollSource =>
   SCROLL_SOURCES.includes(v as ScrollSource);
 
-/** sheet.sequence has no public .length in this @theatre/core — hardcode like timeline-04. */
-export const SEQUENCE_LENGTH = 14.44;
+/**
+ * sheet.sequence has no public .length in this @theatre/core — hardcode like timeline-04.
+ * Must match `sequence.length` in the imported theatre-state_*.json: scroll T maps onto
+ * 0..SEQUENCE_LENGTH, so a value below the authored length reaches every keyframe early
+ * (this drifted to 14.44 against a 19.14 sequence, shifting the whole timeline later in T).
+ */
+export const SEQUENCE_LENGTH = 19.14;
 
 export const scrollState: { source: ScrollSource; damping: number; syncTheatreToScroll: boolean } = {
   source: 'sections',

@@ -1,0 +1,7 @@
+name = "eva-networks-webflow-site"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+account_id = "48c0766e8d6b6ad860c7ec9f2f52f332"
+
+# Deployed URL: https://eva-networks-webflow-site.dan-sheldon.workers.dev/
+workers_dev = true

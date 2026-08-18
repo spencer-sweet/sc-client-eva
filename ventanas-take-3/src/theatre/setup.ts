@@ -8,7 +8,7 @@
 import { getProject, onChange, types as t } from '@theatre/core';
 import type { ISheet, ISheetObject, UnknownShorthandCompoundProps } from '@theatre/core';
 import studio from '@theatre/studio';
-import theatreState from '../theatre-state/theatre-state_2026-08-14-1316.json';
+import theatreState from '../theatre-state/theatre-state_2026-08-18-1222.json';
 import { bindTheatreStudio } from '../theatre-ui-api';
 
 export const PROJECT_ID = 'Ventanas 3D SVG';
@@ -22,7 +22,7 @@ export const num = (v: number, a: number, b: number) => t.number(v, { range: [a,
  * rename) so the committed theatre-state_*.json keyframes actually win instead of
  * flashing once and then being overwritten by empty defaults.
  */
-const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v7';
+const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v8';
 
 let sheetRef: ISheet | null = null;
 let playing = false;
