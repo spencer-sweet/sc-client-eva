@@ -310,10 +310,15 @@ export interface DevHelpersApi {
   setParallaxEnabled(on: boolean): void;
   isVortexDrawMode(): boolean;
   setVortexDrawMode(on: boolean): void;
+  /** Which vortex (1 or 2) the path-editing controls target. */
+  getActiveVortexId(): 1 | 2;
+  setActiveVortexId(id: 1 | 2): void;
+  getVortexPathTension(): number;
   setVortexPathTension(v: number): void;
   setVortexDrawDepth(v: number): void;
   rebuildVortexTube(): void;
   saveVortexPath(): void;
+  snapshotVortexPaths(): ReturnType<typeof import('../scene/vortex').snapshotAllVortexPaths>;
   addVortexPoint(): void;
   removeVortexPoint(): void;
   resetVortexPath(): void;
@@ -373,7 +378,8 @@ function wireSaveTheatreState(api: DevHelpersApi): void {
       return;
     }
     try {
-      const json = api.studio.createContentOfSaveFile(api.projectId);
+      const json = api.studio.createContentOfSaveFile(api.projectId) as Record<string, unknown>;
+      json.ventanasVortexPaths = api.snapshotVortexPaths();
       const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -441,12 +447,31 @@ function wireGlbPicker(api: DevHelpersApi): void {
 }
 
 function wireVortexButtons(api: DevHelpersApi): void {
+  const tensionInput = byId<HTMLInputElement>('vortexTensionInput');
+  const syncTension = () => {
+    if (tensionInput) tensionInput.value = String(api.getVortexPathTension());
+  };
+
+  const target = byId<HTMLSelectElement>('vortexTargetSelect');
+  if (target) {
+    target.value = String(api.getActiveVortexId());
+    target.addEventListener('change', () => {
+      // Switching targets cancels an in-progress stroke so it can't land on the wrong path.
+      if (api.isVortexDrawMode()) {
+        api.setVortexDrawMode(false);
+        setVortexDrawButton(false);
+      }
+      api.setActiveVortexId(target.value === '2' ? 2 : 1);
+      syncTension();
+    });
+  }
+
   byId('vortexDrawBtn')?.addEventListener('click', () => {
     const on = !api.isVortexDrawMode();
     api.setVortexDrawMode(on);
     setVortexDrawButton(on);
   });
-  byId<HTMLInputElement>('vortexTensionInput')?.addEventListener('input', (ev) => {
+  tensionInput?.addEventListener('input', (ev) => {
     api.setVortexPathTension(parseFloat((ev.target as HTMLInputElement).value));
     api.rebuildVortexTube();
     api.saveVortexPath();
@@ -458,9 +483,9 @@ function wireVortexButtons(api: DevHelpersApi): void {
   byId('vortexRemoveBtn')?.addEventListener('click', api.removeVortexPoint);
   byId('vortexResetPathBtn')?.addEventListener('click', () => {
     api.resetVortexPath();
-    const tension = byId<HTMLInputElement>('vortexTensionInput');
-    if (tension) tension.value = '0.5';
+    syncTension();
   });
+  syncTension();
 }
 
 function wirePostFxPanel(api: DevHelpersApi): void {

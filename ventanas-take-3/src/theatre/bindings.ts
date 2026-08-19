@@ -28,7 +28,7 @@ import {
 } from '../scene/star-glb';
 import { buildStars, starfieldMotion, starUniforms } from '../scene/starfield';
 import { setWallColors } from '../scene/wall';
-import { applyVortexLook, VTX_RADIUS_DEFAULT, vortexUniforms } from '../scene/vortex';
+import { applyVortexLook, getVortex, VORTEX_IDS, VTX_RADIUS_DEFAULT } from '../scene/vortex';
 import { applyLayerOutliner } from '../scene/layer-outliner';
 import { applyNeon, applyWindowTransform, centerGlass, sideGlass } from '../scene/window-frames';
 import { winCentersW } from '../windows/geometry';
@@ -141,6 +141,7 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
       starGlow: layerPair(),
       starBackground: layerPair(),
       vortex: layerPair(),
+      vortex2: layerPair(),
       vortexHelpers: layerPair(),
       logo: layerPair(),
       alarm: layerPair(),
@@ -346,37 +347,41 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
 
   /* ---------- vortex ---------- */
 
-  safeObject(
-    'Vortex 1',
-    {
-      pathTrim: t.compound(
-        { trimStart: num(0.0, 0, 1), trimEnd: num(1.0, 0, 1) },
-        { label: 'Path Trim' },
-      ),
-      enabled: num(1, 0, 1),
-      scale: num(1, 0.2, 4),
-      radius: num(VTX_RADIUS_DEFAULT, 1, 40),
-      taperStart: num(1.0, 0.02, 3),
-      taperEnd: num(1.0, 0.02, 3),
-      colorCore: t.rgba({ r: 0.851, g: 1.0, b: 1.0, a: 1 }),
-      colorMid: t.rgba({ r: 0.12, g: 0.851, b: 0.878, a: 1 }),
-      colorEdge: t.rgba({ r: 0.5, g: 0.278, b: 0.9, a: 1 }),
-      speed: num(0.6, 0, 4),
-      swirl: num(0.8, -12, 12),
-      noiseScale: num(3.0, 0.5, 6),
-      turbulence: num(0.8, 0, 2),
-      glow: num(1.6, 0.3, 4),
-      detail: num(1.0, 0.5, 6),
-      fill: num(0.15, 0, 1.5),
-      exitGlow: num(0.25, 0, 2),
-    },
-    (o) =>
+  // Vortex 1 and Vortex 2 are identical authoring surfaces over two independent tunnels;
+  // which one the Dev UI draws/edits is picked with its "Editing" dropdown.
+  const vortexProps = () => ({
+    pathTrim: t.compound(
+      { trimStart: num(0.0, 0, 1), trimEnd: num(1.0, 0, 1) },
+      { label: 'Path Trim' },
+    ),
+    enabled: num(1, 0, 1),
+    scale: num(1, 0.2, 4),
+    radius: num(VTX_RADIUS_DEFAULT, 1, 40),
+    taperStart: num(1.0, 0.02, 3),
+    taperEnd: num(1.0, 0.02, 3),
+    colorCore: t.rgba({ r: 0.851, g: 1.0, b: 1.0, a: 1 }),
+    colorMid: t.rgba({ r: 0.12, g: 0.851, b: 0.878, a: 1 }),
+    colorEdge: t.rgba({ r: 0.5, g: 0.278, b: 0.9, a: 1 }),
+    speed: num(0.6, 0, 4),
+    swirl: num(0.8, -12, 12),
+    noiseScale: num(3.0, 0.5, 6),
+    turbulence: num(0.8, 0, 2),
+    glow: num(1.6, 0.3, 4),
+    detail: num(1.0, 0.5, 6),
+    fill: num(0.15, 0, 1.5),
+    exitGlow: num(0.25, 0, 2),
+  });
+
+  for (const id of VORTEX_IDS) {
+    const uniforms = getVortex(id).uniforms;
+    safeObject('Vortex ' + id, vortexProps(), (o) =>
       o.onValuesChange((v) => {
-        vortexUniforms.uTrimStart.value = Math.min(v.pathTrim.trimStart, v.pathTrim.trimEnd);
-        vortexUniforms.uTrimEnd.value = Math.max(v.pathTrim.trimStart, v.pathTrim.trimEnd);
-        applyVortexLook(v);
+        uniforms.uTrimStart.value = Math.min(v.pathTrim.trimStart, v.pathTrim.trimEnd);
+        uniforms.uTrimEnd.value = Math.max(v.pathTrim.trimStart, v.pathTrim.trimEnd);
+        applyVortexLook(id, v);
       }),
-  );
+    );
+  }
 
   /* ---------- logo ---------- */
 

@@ -1,217 +1,184 @@
 /**
- * Vortex / background tunnel: the tube mesh built along the persisted path, the "light
- * at the far end" sprite, and the path-editing helpers the Dev UI drives.
+ * The two vortex tunnels (Vortex 1 / Vortex 2) and the editing façade the Dev UI drives.
  *
- * Tube + markers + path line share one group, so scaling moves them all together
- * (it used to scale the tube only, which desynced it from the path).
+ * Each instance owns its own path, uniforms, tube, markers and exit glow (see
+ * ./instance.ts). Path editing — draw mode, the transform gizmo, add/remove point —
+ * is single-target: it always applies to the *active* vortex, chosen by the Dev UI
+ * dropdown.
  */
 import * as THREE from 'three';
-import { scene } from '../../core/stage';
-import { buildCurve, deletePoint, insertPoint, loadPath, path, resetPath, savePath } from './path';
-import { VTX_RADIUS_DEFAULT, vortexMat, vortexUniforms } from './material';
+import { createVortexInstance, type VortexInstance, type VortexLook } from './instance';
+import type { VortexPathSnapshot } from './path';
 
-export { VTX_RADIUS_DEFAULT, vortexUniforms } from './material';
-export { path as vortexPath, savePath as saveVortexPath } from './path';
+export { VTX_RADIUS_DEFAULT } from './material';
+export type { VortexLook } from './instance';
 
-const TSEG = 240;
-const RSEG = 48;
-const PATH_LINE_SEGMENTS = 140;
+/** 1-based, matching the "Vortex 1" / "Vortex 2" Theatre objects and the Dev UI dropdown. */
+export type VortexId = 1 | 2;
+export const VORTEX_IDS: VortexId[] = [1, 2];
 
-loadPath();
+const instances: Record<VortexId, VortexInstance> = {
+  // Geometric fallbacks only. Live spines are applied from theatre-state
+  // `ventanasVortexPaths` in hydrateVortexPathsFromTheatre().
+  1: createVortexInstance(1, 'vortexPath_ventanas_v2', () => [
+    new THREE.Vector3(0, 0, 15),
+    new THREE.Vector3(0, 0, -17),
+    new THREE.Vector3(0, 0, -49),
+    new THREE.Vector3(0, 0, -81),
+  ]),
+  // Offset sideways so a fresh Vortex 2 is visible instead of hiding inside Vortex 1.
+  2: createVortexInstance(2, 'vortexPath2_ventanas_v2', () => [
+    new THREE.Vector3(-0.744818839856193, 0.9811897501610632, 12.127818840501075),
+    new THREE.Vector3(11.174668262262495, 12.029273041252445, -37.627541553868625),
+    new THREE.Vector3(29.649460168119887, 9.561093553712366, -87.49642174877891),
+  ]),
+};
 
-/* ---------- glow at the end of the tunnel ("light at the far end") ---------- */
-
-function glowTex(): THREE.CanvasTexture {
-  const s = 256;
-  const c = document.createElement('canvas');
-  c.width = c.height = s;
-  const x = c.getContext('2d')!;
-  const g = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.4, 'rgba(255,255,255,.35)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  x.fillStyle = g;
-  x.fillRect(0, 0, s, s);
-  return new THREE.CanvasTexture(c);
+export function getVortex(id: VortexId): VortexInstance {
+  return instances[id];
 }
 
-const exitGlowMat = new THREE.SpriteMaterial({
-  map: glowTex(),
-  color: 0x88aaff,
-  transparent: true,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false,
-  opacity: 0.25,
-});
-const exitGlowSprite = new THREE.Sprite(exitGlowMat);
-exitGlowSprite.scale.set(6, 6, 1);
-exitGlowSprite.renderOrder = 0.05;
-scene.add(exitGlowSprite);
+/* ---------- active target for path editing ---------- */
 
-/* ---------- tube + path line ---------- */
-
-const vortexGroup = new THREE.Group();
-scene.add(vortexGroup);
-
-let radius = VTX_RADIUS_DEFAULT;
-
-const vortexMesh = new THREE.Mesh(
-  new THREE.TubeGeometry(buildCurve(), TSEG, radius, RSEG, false),
-  vortexMat,
-);
-vortexMesh.renderOrder = 0.1;
-vortexGroup.add(vortexMesh);
-
-const pathLine = new THREE.Line(
-  new THREE.BufferGeometry().setFromPoints(buildCurve().getPoints(PATH_LINE_SEGMENTS)),
-  new THREE.LineBasicMaterial({ color: 0x2a4a7a, transparent: true, opacity: 1 }),
-);
-pathLine.visible = false;
-vortexGroup.add(pathLine);
-
-export function rebuildVortexTube(): void {
-  const curve = buildCurve();
-  vortexMesh.geometry.dispose();
-  vortexMesh.geometry = new THREE.TubeGeometry(curve, TSEG, radius, RSEG, false);
-  pathLine.geometry.dispose();
-  pathLine.geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(PATH_LINE_SEGMENTS));
-  exitGlowSprite.position.copy(path.ctrl[path.ctrl.length - 1]);
-}
-rebuildVortexTube();
-
-let enabled = true;
-let layerFade = 0;
-let layerRender = true;
-let lastExitGlow = 0.25;
-
-export function isVortexEnabled(): boolean {
-  return enabled && layerRender;
-}
-
-export function setVortexLayer(fade: number, render: number): void {
-  layerFade = fade;
-  layerRender = render >= 0.5;
-  vortexUniforms.uLayerFade.value = 1 - layerFade;
-  vortexMesh.visible = enabled && layerRender;
-  exitGlowSprite.visible = enabled && layerRender;
-  exitGlowMat.opacity = lastExitGlow * (1 - layerFade);
-}
-
-/** Apply a Theatre "Vortex Look" payload. */
-export function applyVortexLook(v: {
-  enabled: number;
-  scale: number;
-  radius: number;
-  taperStart: number;
-  taperEnd: number;
-  colorCore: { r: number; g: number; b: number };
-  colorMid: { r: number; g: number; b: number };
-  colorEdge: { r: number; g: number; b: number };
-  speed: number;
-  swirl: number;
-  noiseScale: number;
-  turbulence: number;
-  glow: number;
-  detail: number;
-  fill: number;
-  exitGlow: number;
-}): void {
-  enabled = v.enabled >= 0.5;
-  lastExitGlow = v.exitGlow;
-  vortexMesh.visible = enabled && layerRender;
-  vortexGroup.scale.setScalar(v.scale);
-  if (v.radius !== radius) {
-    radius = v.radius;
-    rebuildVortexTube();
-  }
-  // taper rescales relative to this geometry "base" radius
-  vortexUniforms.uRadiusBase.value = radius;
-  vortexUniforms.uTaperStart.value = v.taperStart;
-  vortexUniforms.uTaperEnd.value = v.taperEnd;
-  vortexUniforms.uColorCore.value.setRGB(v.colorCore.r, v.colorCore.g, v.colorCore.b);
-  vortexUniforms.uColorMid.value.setRGB(v.colorMid.r, v.colorMid.g, v.colorMid.b);
-  vortexUniforms.uColorEdge.value.setRGB(v.colorEdge.r, v.colorEdge.g, v.colorEdge.b);
-  vortexUniforms.uSpeed.value = v.speed;
-  vortexUniforms.uSwirl.value = v.swirl * 0.04;
-  vortexUniforms.uNoiseScale.value = v.noiseScale;
-  vortexUniforms.uTurbulence.value = v.turbulence;
-  vortexUniforms.uGlow.value = v.glow;
-  vortexUniforms.uDetail.value = v.detail;
-  vortexUniforms.uFill.value = v.fill;
-  exitGlowMat.opacity = v.exitGlow * (1 - layerFade);
-  exitGlowSprite.scale.setScalar(6 * Math.max(0.001, v.exitGlow));
-  exitGlowSprite.visible = enabled && layerRender;
-}
-
-/* ---------- editor: markers, selection, add/remove, draw mode ---------- */
-
-const markerGroup = new THREE.Group();
-vortexGroup.add(markerGroup);
-
-export const vortexMarkers: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>[] = [];
-
-let selected = -1;
+let activeId: VortexId = 1;
 let drawMode = false;
 let gizmo: { attach(o: THREE.Object3D): void; detach(): void } | null = null;
-let editorWanted = false;
-let helpersRender = true;
-let helpersFade = 0;
 
-export function setVortexGizmo(g: typeof gizmo): void {
-  gizmo = g;
+export function getActiveVortexId(): VortexId {
+  return activeId;
 }
+
+export function setActiveVortexId(id: VortexId): void {
+  if (id === activeId) return;
+  active().select(-1);
+  activeId = id;
+  syncGizmo();
+}
+
+const active = (): VortexInstance => instances[activeId];
 
 function syncGizmo(): void {
   if (!gizmo) return;
-  if (selected >= 0 && selected < vortexMarkers.length) gizmo.attach(vortexMarkers[selected]);
+  const inst = active();
+  const i = inst.getSelected();
+  if (i >= 0 && i < inst.markers.length) gizmo.attach(inst.markers[i]);
   else gizmo.detach();
 }
 
-export function rebuildVortexMarkers(): void {
-  for (const m of vortexMarkers) {
-    markerGroup.remove(m);
-    m.geometry.dispose();
-    m.material.dispose();
-  }
-  vortexMarkers.length = 0;
-  for (let i = 0; i < path.ctrl.length; i++) {
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry(0.6, 18, 14),
-      new THREE.MeshBasicMaterial({
-        color: i === selected ? 0xffffff : 0x66d2ff,
-        depthTest: false,
-        transparent: true,
-        opacity: 1 - helpersFade,
-      }),
-    );
-    m.position.copy(path.ctrl[i]);
-    m.userData = { i };
-    m.renderOrder = 10;
-    markerGroup.add(m);
-    vortexMarkers.push(m);
-  }
+export function setVortexGizmo(g: typeof gizmo): void {
+  gizmo = g;
   syncGizmo();
 }
-rebuildVortexMarkers();
+
+for (const id of VORTEX_IDS) {
+  instances[id].onSelectionChange = () => {
+    if (id === activeId) syncGizmo();
+  };
+}
+
+/* ---------- per-frame + layer ---------- */
+
+/** Advance the shader clock of every vortex that is actually drawing. */
+export function updateVortexTime(time: number): void {
+  for (const id of VORTEX_IDS) {
+    if (instances[id].isEnabled()) instances[id].uniforms.uTime.value = time;
+  }
+}
+
+export function isVortexEnabled(id: VortexId): boolean {
+  return instances[id].isEnabled();
+}
+
+export function setVortexLayer(id: VortexId, fade: number, render: number): void {
+  instances[id].setLayer(fade, render);
+}
+
+/** Apply a Theatre "Vortex Look" payload to one vortex. */
+export function applyVortexLook(id: VortexId, v: VortexLook): void {
+  instances[id].applyLook(v);
+}
+
+/** Helpers (markers + path line) are shared dev chrome — one setting drives both. */
+export function setVortexHelpersLayer(fade: number, render: number): void {
+  for (const id of VORTEX_IDS) instances[id].setHelpersLayer(fade, render);
+}
+
+/** Show the editor for the active vortex only; the other one's helpers stay hidden. */
+export function setVortexEditorVisible(visible: boolean): void {
+  for (const id of VORTEX_IDS) instances[id].setEditorVisible(visible && id === activeId);
+}
+
+/* ---------- editing (always targets the active vortex) ---------- */
+
+export const activeVortexMarkers = (): THREE.Object3D[] => active().markers;
 
 export function selectVortexPoint(i: number): void {
-  selected = i;
-  for (let k = 0; k < vortexMarkers.length; k++) {
-    vortexMarkers[k].material.color.set(k === i ? 0xffffff : 0x66d2ff);
-  }
-  syncGizmo();
+  active().select(i);
 }
 
 export function getSelectedVortexPoint(): number {
-  return selected;
+  return active().getSelected();
 }
 
-/** Commit a gizmo drag of the selected marker back into the path. */
 export function commitSelectedMarker(): void {
-  if (selected < 0) return;
-  path.ctrl[selected].copy(vortexMarkers[selected].position);
-  rebuildVortexTube();
-  savePath();
+  active().commitSelectedMarker();
+}
+
+export function setVortexPathPoints(pts: THREE.Vector3[]): void {
+  active().setPathPoints(pts);
+}
+
+export function addVortexPoint(): void {
+  active().addPoint();
+}
+
+export function removeVortexPoint(): void {
+  active().removePoint();
+}
+
+export function resetVortexPath(): void {
+  active().resetPath();
+}
+
+export function setVortexPathTension(v: number): void {
+  active().setTension(v);
+}
+
+export function getVortexPathTension(): number {
+  return active().path.tension;
+}
+
+export function rebuildVortexTube(): void {
+  active().rebuildTube();
+}
+
+export function saveVortexPath(): void {
+  active().savePath();
+}
+
+/** Live spines for both tunnels — attached to Theatre JSON on save. */
+export function snapshotAllVortexPaths(): Record<VortexId, VortexPathSnapshot> {
+  return {
+    1: instances[1].snapshotPath(),
+    2: instances[2].snapshotPath(),
+  };
+}
+
+/**
+ * Apply spines from the committed theatre-state file. That JSON is the source of
+ * truth (the points in this module are only fallbacks). localStorage is used when
+ * the file has no entry for a vortex yet.
+ */
+export function hydrateVortexPathsFromTheatre(state: unknown): void {
+  const extra = (state as { ventanasVortexPaths?: Partial<Record<string, VortexPathSnapshot>> })
+    .ventanasVortexPaths;
+  for (const id of VORTEX_IDS) {
+    const snap = extra?.[String(id)];
+    if (snap) {
+      instances[id].applyPathSnapshot(snap);
+      instances[id].savePath();
+    }
+  }
 }
 
 export function isVortexDrawMode(): boolean {
@@ -220,68 +187,5 @@ export function isVortexDrawMode(): boolean {
 
 export function setVortexDrawMode(on: boolean): void {
   drawMode = on;
-  if (on) selectVortexPoint(-1);
-}
-
-/** Replace the whole path (used when a freehand stroke is finished). */
-export function setVortexPathPoints(pts: THREE.Vector3[]): void {
-  path.ctrl = pts;
-  selectVortexPoint(-1);
-  rebuildVortexTube();
-  rebuildVortexMarkers();
-  savePath();
-}
-
-export function addVortexPoint(): void {
-  const next = insertPoint(selected);
-  if (next === null) return;
-  selected = next;
-  rebuildVortexTube();
-  rebuildVortexMarkers();
-  savePath();
-}
-
-export function removeVortexPoint(): void {
-  if (!deletePoint(selected)) return;
-  selected = -1;
-  rebuildVortexTube();
-  rebuildVortexMarkers();
-  savePath();
-}
-
-export function resetVortexPath(): void {
-  resetPath();
-  selected = -1;
-  rebuildVortexTube();
-  rebuildVortexMarkers();
-  savePath();
-}
-
-export function setVortexPathTension(v: number): void {
-  path.tension = v;
-}
-
-export function setVortexHelpersLayer(fade: number, render: number): void {
-  helpersFade = fade;
-  helpersRender = render >= 0.5;
-  applyVortexHelpers();
-}
-
-function applyVortexHelpers(): void {
-  const on = editorWanted && helpersRender;
-  markerGroup.visible = on;
-  pathLine.visible = on;
-  const vis = 1 - helpersFade;
-  const lineMat = pathLine.material as THREE.LineBasicMaterial;
-  lineMat.opacity = vis;
-  for (const m of vortexMarkers) {
-    m.material.transparent = vis < 0.999;
-    m.material.opacity = vis;
-  }
-}
-
-/** Show markers / path line only while not drawing, not playing, and the outliner allows it. */
-export function setVortexEditorVisible(visible: boolean): void {
-  editorWanted = visible;
-  applyVortexHelpers();
+  if (on) active().select(-1);
 }

@@ -29,22 +29,26 @@ import {
 import { starGroup, starfieldMotion, starUniforms } from './scene/starfield';
 import {
   addVortexPoint,
+  getActiveVortexId,
+  getVortexPathTension,
+  hydrateVortexPathsFromTheatre,
   isVortexDrawMode,
-  isVortexEnabled,
   rebuildVortexTube,
   removeVortexPoint,
   resetVortexPath,
   saveVortexPath,
+  setActiveVortexId,
   setVortexDrawMode,
   setVortexEditorVisible,
   setVortexPathTension,
-  vortexUniforms,
+  snapshotAllVortexPaths,
+  updateVortexTime,
 } from './scene/vortex';
 import { isLayerRendered } from './scene/layer-outliner';
 import { applyWindowTransform, updateNeonPulse } from './scene/window-frames';
 import { WINDOW_INDICES } from './windows/geometry';
 import { bindTheatre } from './theatre/bindings';
-import { initTheatre, isSequencePlaying, PROJECT_ID } from './theatre/setup';
+import { initTheatre, isSequencePlaying, PROJECT_ID, theatreState } from './theatre/setup';
 import studio from '@theatre/studio';
 
 useThreeClamp(THREE);
@@ -58,6 +62,7 @@ startTimelineScroll();
 await bootDevHelpers();
 
 const { studioReady, sheet } = initTheatre();
+hydrateVortexPathsFromTheatre(theatreState);
 const { renderer, bloom, postFx, renderFrame, setPostFx } = createRenderer();
 addSceneLights();
 starUniforms.uPixelRatio.value = renderer.getPixelRatio();
@@ -123,12 +128,16 @@ initDevHelpers({
   },
   isVortexDrawMode,
   setVortexDrawMode,
+  getActiveVortexId,
+  setActiveVortexId,
+  getVortexPathTension,
   setVortexPathTension,
   setVortexDrawDepth: (v) => {
     drawDepth.value = v;
   },
   rebuildVortexTube,
   saveVortexPath,
+  snapshotVortexPaths: snapshotAllVortexPaths,
   addVortexPoint,
   removeVortexPoint,
   resetVortexPath,
@@ -163,7 +172,7 @@ function tick(): void {
     starUniforms.uTime.value = time;
     starGroup.rotation.y = Math.sin(time * starfieldMotion.drift * 0.5) * starfieldMotion.swingRange;
   }
-  if (isLayerRendered('vortex') && isVortexEnabled()) vortexUniforms.uTime.value = time;
+  updateVortexTime(time);
 
   // Path editor stays visible/clickable except while drawing or playing the sequence.
   const editable =

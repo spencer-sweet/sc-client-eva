@@ -7,6 +7,7 @@ export const HELP_HTML =
   '<b>Masks</b>: <b>Center Window</b> = its own offset/scale; <b>Side Windows</b> = glass + one offset/scale for both sides. ' +
   '<b>Star background → swingRange</b>: limits how far the stars rotate (they used to spin without a cap). ' +
   '<b>Layer Outliner</b>: fade (0 = full, 1 = gone) or set <b>render</b> to 0 to skip drawing/updating that group. Wall/grid fade keyframes live on wall.fade and grid.fade. The grid already clips itself around whatever window positions you set. ' +
+  '<b>Vortex 1 / 2</b>: two independent tunnels. Spines are recalled from <b>ventanasVortexPaths</b> in the Theatre JSON (the points in code are only fallbacks). <b>Save Theatre JSON</b> writes both live spines into that field. The <b>Vortex</b> dropdown picks which one ✎ Draw, ± Point, Tension and Reset path apply to — only that one shows its markers. ' +
   '<b>Orbit</b> = free-look; <b>Capture</b> = camera keyframe; <b>Reset camera</b> if it drifted too far/near.';
 
 export const BAR_HTML = /*html*/ `
@@ -16,7 +17,7 @@ export const BAR_HTML = /*html*/ `
     <div id="barTools">
       <button id="actBtn" class="act">✦ Activate star</button>
       <button id="theatreUiBtn">Theatre UI: ON</button>
-      <button id="saveTheatreBtn" type="button" title="Download current Theatre project state as JSON">Save Theatre JSON</button>
+      <button id="saveTheatreBtn" type="button" title="Download Theatre project state plus both vortex paths">Save Theatre JSON</button>
       <button id="statsToggleBtn" type="button" title="Show / hide FPS stats">Stats: ON</button>
       <button id="resetBtn">Reset</button>
       <button id="navBtn">Orbit: OFF</button>
@@ -25,6 +26,13 @@ export const BAR_HTML = /*html*/ `
       <button id="loadGlbBtn">Load another GLB…</button>
       <input type="file" id="glbFileInput" accept=".glb" style="display:none" />
       <button id="paraxBtn">Parallax: ON</button>
+      <label class="barField" title="Which vortex path the draw / point / tension controls edit"
+        >Vortex
+        <select id="vortexTargetSelect">
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+        </select>
+      </label>
       <button id="vortexDrawBtn">✎ Draw</button>
       <button id="vortexAddBtn">+ Point</button>
       <button id="vortexRemoveBtn">− Point (selected)</button>

@@ -21,6 +21,7 @@ export type LayerId =
   | 'starGlow'
   | 'starBackground'
   | 'vortex'
+  | 'vortex2'
   | 'vortexHelpers'
   | 'logo'
   | 'alarm';
@@ -39,6 +40,7 @@ const rendered: Record<LayerId, boolean> = {
   starGlow: true,
   starBackground: true,
   vortex: true,
+  vortex2: true,
   vortexHelpers: true,
   logo: true,
   alarm: true,
@@ -61,6 +63,7 @@ export function applyLayerOutliner(v: {
   starGlow: LayerPair;
   starBackground: LayerPair;
   vortex: LayerPair;
+  vortex2: LayerPair;
   vortexHelpers: LayerPair;
   logo: LayerPair;
   alarm: LayerPair;
@@ -88,7 +91,10 @@ export function applyLayerOutliner(v: {
   setStarfieldLayer(v.starBackground.fade, v.starBackground.render);
 
   remember('vortex', v.vortex.render);
-  setVortexLayer(v.vortex.fade, v.vortex.render);
+  setVortexLayer(1, v.vortex.fade, v.vortex.render);
+
+  remember('vortex2', v.vortex2.render);
+  setVortexLayer(2, v.vortex2.fade, v.vortex2.render);
 
   remember('vortexHelpers', v.vortexHelpers.render);
   setVortexHelpersLayer(v.vortexHelpers.fade, v.vortexHelpers.render);

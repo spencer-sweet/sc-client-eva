@@ -7,6 +7,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { camera, scene } from '../core/stage';
 import { setVortexDrawButton } from '../dev-helpers';
 import {
+  activeVortexMarkers,
   commitSelectedMarker,
   getSelectedVortexPoint,
   isVortexDrawMode,
@@ -14,7 +15,6 @@ import {
   setVortexDrawMode,
   setVortexGizmo,
   setVortexPathPoints,
-  vortexMarkers,
 } from '../scene/vortex';
 import { orbitState } from './camera-orbit';
 
@@ -64,7 +64,8 @@ export function installVortexInput(domElement: HTMLElement): void {
     }
     if (orbitState.active || gizmo?.dragging) return;
     ray.setFromCamera(ndc(ev), camera);
-    const hit = ray.intersectObjects(vortexMarkers, false)[0];
+    // Only the active vortex's markers are pickable — see setActiveVortexId.
+    const hit = ray.intersectObjects(activeVortexMarkers(), false)[0];
     // Click a path point to select it; click empty space to deselect.
     selectVortexPoint(hit ? (hit.object.userData.i as number) : -1);
   });

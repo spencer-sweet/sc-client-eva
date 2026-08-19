@@ -8,10 +8,12 @@
 import { getProject, onChange, types as t } from '@theatre/core';
 import type { ISheet, ISheetObject, UnknownShorthandCompoundProps } from '@theatre/core';
 import studio from '@theatre/studio';
-import theatreState from '../theatre-state/theatre-state_2026-08-18-1821.json';
+import theatreState from '../theatre-state/theatre-state_2026-08-19-0319.json';
 import { bindTheatreStudio } from '../theatre-ui-api';
 
 export const PROJECT_ID = 'Ventanas 3D SVG';
+/** Imported project JSON (keyframes + `ventanasVortexPaths` extras). */
+export { theatreState };
 
 /** Shorthand for a ranged number prop. */
 export const num = (v: number, a: number, b: number) => t.number(v, { range: [a, b] });
@@ -22,7 +24,7 @@ export const num = (v: number, a: number, b: number) => t.number(v, { range: [a,
  * then appear to do nothing. Bump this on every theatre-state_*.json swap; that retires
  * the old entry and lets the imported keyframes actually take effect.
  */
-const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v23';
+const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v25';
 
 let sheetRef: ISheet | null = null;
 let playing = false;
@@ -49,7 +51,10 @@ export function initTheatre(): TheatreRuntime {
   }
   bindTheatreStudio(studio, studioReady);
 
-  const project = getProject(PROJECT_ID, { state: theatreState as never });
+  const { ventanasVortexPaths: _paths, ...projectState } = theatreState as {
+    ventanasVortexPaths?: unknown;
+  } & Record<string, unknown>;
+  const project = getProject(PROJECT_ID, { state: projectState as never });
   // One sheet for everything, so there is a single timeline.
   const sheet = project.sheet('Scene');
   sheetRef = sheet;

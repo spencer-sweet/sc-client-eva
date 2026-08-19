@@ -10,28 +10,34 @@ import * as THREE from 'three';
 
 export const VTX_RADIUS_DEFAULT = 8;
 
-export const vortexUniforms = {
-  uTime: { value: 0 },
-  uColorCore: { value: new THREE.Color(0xd9ffff) },
-  uColorMid: { value: new THREE.Color(0x1fd9e0) },
-  uColorEdge: { value: new THREE.Color(0x7f47e6) },
-  uSpeed: { value: 0.6 },
-  uNoiseScale: { value: 3.0 },
-  uTurbulence: { value: 0.8 },
-  uGlow: { value: 1.6 },
-  uDetail: { value: 1.0 },
-  uFill: { value: 0.15 },
-  uSwirl: { value: 0.032 },
-  uTrimStart: { value: 0.0 },
-  uTrimEnd: { value: 1.0 },
-  uRadiusBase: { value: VTX_RADIUS_DEFAULT },
-  uTaperStart: { value: 1.0 },
-  uTaperEnd: { value: 1.0 },
-  uLayerFade: { value: 1.0 },
-};
+/** Per-instance uniforms — every vortex owns its own set so their looks stay independent. */
+export function createVortexUniforms() {
+  return {
+    uTime: { value: 0 },
+    uColorCore: { value: new THREE.Color(0xd9ffff) },
+    uColorMid: { value: new THREE.Color(0x1fd9e0) },
+    uColorEdge: { value: new THREE.Color(0x7f47e6) },
+    uSpeed: { value: 0.6 },
+    uNoiseScale: { value: 3.0 },
+    uTurbulence: { value: 0.8 },
+    uGlow: { value: 1.6 },
+    uDetail: { value: 1.0 },
+    uFill: { value: 0.15 },
+    uSwirl: { value: 0.032 },
+    uTrimStart: { value: 0.0 },
+    uTrimEnd: { value: 1.0 },
+    uRadiusBase: { value: VTX_RADIUS_DEFAULT },
+    uTaperStart: { value: 1.0 },
+    uTaperEnd: { value: 1.0 },
+    uLayerFade: { value: 1.0 },
+  };
+}
 
-export const vortexMat = new THREE.ShaderMaterial({
-  uniforms: vortexUniforms,
+export type VortexUniforms = ReturnType<typeof createVortexUniforms>;
+
+export function createVortexMaterial(uniforms: VortexUniforms): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+  uniforms,
   side: THREE.DoubleSide,
   transparent: true,
   depthWrite: false,
@@ -100,4 +106,5 @@ export const vortexMat = new THREE.ShaderMaterial({
       color=mix(color,uColorCore,tip); color*=1.0+tip*1.5;
       gl_FragColor=vec4(color,alpha*uLayerFade);
     }`,
-});
+  });
+}
