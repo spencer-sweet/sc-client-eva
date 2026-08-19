@@ -24,7 +24,7 @@ export async function loadValidatedContactForm(
   const signature = request.headers.get('x-webflow-signature');
   const check = await verifyWebflowSignature(
     env.WEBFLOW_WEBHOOK_SECRET,
-    // '7750134c74ac3a3ec48f6203cc291e20330a068e6d3c3b890ff9ed524ca916d3', // tmp dev tunnel secret
+    // '318ed29b9ba9b7f2e2b8de9e55abb247cb7b4fdfa55a3d3de6c4dc5866752159', // tmp dev tunnel secret
     timestamp,
     rawBody,
     signature,

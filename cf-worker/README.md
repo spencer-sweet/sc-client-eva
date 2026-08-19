@@ -16,7 +16,6 @@ pnpm install
    ```bash
    WEBFLOW_WEBHOOK_SECRET=your_webhook_secret_here
    POSTMARK_SERVER_TOKEN=your_postmark_server_token
-   POSTMARK_FROM=notifications@yourdomain.com
    POSTMARK_TO=you@example.com
    ```
 
@@ -25,7 +24,6 @@ pnpm install
    ```bash
    pnpm exec wrangler secret put WEBFLOW_WEBHOOK_SECRET
    pnpm exec wrangler secret put POSTMARK_SERVER_TOKEN
-   pnpm exec wrangler secret put POSTMARK_FROM # should this be the customer (+ replyTo also)
    pnpm exec wrangler secret put POSTMARK_TO
    ```
 

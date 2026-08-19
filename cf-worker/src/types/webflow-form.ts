@@ -8,16 +8,19 @@ export interface ContactFormData {
   nameFirst: string;
   nameLast: string;
   nameOrg: string;
-  title: string;
+  jobTitle: string;
   email: string;
+  /** Optional free-text from the form. */
+  message: string;
 }
 
 export const CONTACT_FORM_KEYS = [
   'nameFirst',
   'nameLast',
   'nameOrg',
-  'title',
+  'jobTitle',
   'email',
+  'message',
 ] as const satisfies readonly (keyof ContactFormData)[];
 
 export interface WebflowFormSubmission {
@@ -50,8 +53,9 @@ export function parseContactFormData(raw: Record<string, unknown>): ContactFormD
     nameFirst: str(raw.nameFirst),
     nameLast: str(raw.nameLast),
     nameOrg: str(raw.nameOrg),
-    title: str(raw.title),
+    jobTitle: str(raw.jobTitle),
     email: str(raw.email),
+    message: str(raw.message),
   };
 }
 

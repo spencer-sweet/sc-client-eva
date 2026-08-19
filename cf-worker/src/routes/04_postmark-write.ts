@@ -16,10 +16,7 @@ export async function handle04PostmarkWrite(request: Request, env: Env): Promise
   try {
     const { messageId } = await sendContactFormNotification(result.data, {
       serverToken: env.POSTMARK_SERVER_TOKEN,
-      // from: env.POSTMARK_FROM,
-      from: 'dev@finsweet.com', // TODO postmark acct needs approval + to add this signing sig
-      // to: env.POSTMARK_TO,
-      to: 'spencer.cappiello@finsweet.com',
+      to: env.POSTMARK_TO,
     });
     return jsonResponse({ ok: true, data: result.data, messageId });
   } catch (err) {
