@@ -27,6 +27,11 @@ pnpm install
    pnpm exec wrangler secret put POSTMARK_TO
    ```
 
+   *via api key instead of login
+   ```bash
+   pnpm exec dotenv -e .env -- wrangler secret put POSTMARK_TO
+   ```
+
 ## Scripts
 
 | Script | What it does |
