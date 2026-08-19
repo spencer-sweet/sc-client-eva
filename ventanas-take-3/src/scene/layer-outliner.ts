@@ -1,8 +1,7 @@
 /**
  * Theatre "Layer Outliner": fade (look) + render (draw/update) per visual group.
  *
- * fade=0 is full strength (same convention as Wall & Grid Fade blackout).
- * render=0 skips the GPU draw and the matching per-frame update in main.ts.
+ * fade=0 is full strength; render=0 skips the GPU draw and matching per-frame work.
  */
 import { setAlarmLayer } from './alarm-lights';
 import { setLogoLayer } from './eva-logo';

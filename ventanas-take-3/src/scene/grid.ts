@@ -22,13 +22,8 @@ export const gridState = {
   nodePulseBright: 2.4,
 };
 
-/** 0 = normal, 1 = fully faded. Sequence (Wall & Grid Fade) and outliner multiply. */
-let sequenceBlackout = 0;
+/** 0 = normal, 1 = fully faded (Layer Outliner → grid.fade). */
 let outlinerFade = 0;
-
-export function setGridBlackout(v: number): void {
-  sequenceBlackout = v;
-}
 
 export const gridGroup = new THREE.Group();
 gridGroup.position.z = 0.06;
@@ -128,7 +123,7 @@ for (let ci = 0; ci < CIRCLES.length; ci++) {
 
 export function updateGrid(time: number): void {
   const spd = gridState.pulseSpeed;
-  const k = (1 - sequenceBlackout) * (1 - outlinerFade);
+  const k = 1 - outlinerFade;
   for (const g of gridLineObjs) {
     const u = g.mat.uniforms;
     (u.uColor.value as THREE.Color).copy(gridState.color);

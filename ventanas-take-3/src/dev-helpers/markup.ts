@@ -6,8 +6,7 @@ export const HELP_HTML =
   '<b>Parallax</b>: button or the timeline boolean; moves wall+glass+neon, star, and background at different depths with the mouse. ' +
   '<b>Masks</b>: <b>Center Window</b> = its own offset/scale; <b>Windows</b> = glass + one offset/scale for both sides. ' +
   '<b>Star background → swingRange</b>: limits how far the stars rotate (they used to spin without a cap). ' +
-  '<b>Layer Outliner</b>: fade (0 = full, 1 = gone) or set <b>render</b> to 0 to skip drawing/updating that group. ' +
-  '<b>Wall & Grid Fade → blackout</b>: sequence fade for wall+grid; stacks with the outliner. The grid already clips itself around whatever window positions you set. ' +
+  '<b>Layer Outliner</b>: fade (0 = full, 1 = gone) or set <b>render</b> to 0 to skip drawing/updating that group. Wall/grid fade keyframes live on wall.fade and grid.fade. The grid already clips itself around whatever window positions you set. ' +
   '<b>Orbit</b> = free-look; <b>Capture</b> = camera keyframe; <b>Reset camera</b> if it drifted too far/near.';
 
 export const BAR_HTML = /*html*/ `

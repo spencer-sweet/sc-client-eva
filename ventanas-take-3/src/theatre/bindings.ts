@@ -16,7 +16,7 @@ import { parallax } from '../interaction/parallax';
 import { orbitState } from '../interaction/camera-orbit';
 import { alarmLights, wallSpill } from '../scene/alarm-lights';
 import { applyEvaLogo } from '../scene/eva-logo';
-import { gridState, setGridBlackout } from '../scene/grid';
+import { gridState } from '../scene/grid';
 import {
   applyStarState,
   glow,
@@ -27,7 +27,7 @@ import {
   starState,
 } from '../scene/star-glb';
 import { buildStars, starfieldMotion, starUniforms } from '../scene/starfield';
-import { setWallBlackout, setWallColors } from '../scene/wall';
+import { setWallColors } from '../scene/wall';
 import { applyVortexLook, VTX_RADIUS_DEFAULT, vortexUniforms } from '../scene/vortex';
 import { applyLayerOutliner } from '../scene/layer-outliner';
 import { applyNeon, applyWindowTransform, centerGlass, sideGlass } from '../scene/window-frames';
@@ -241,14 +241,6 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
 
   /* ---------- wall + grid ---------- */
 
-  // Fades ONLY the wall and grid, leaving the windows (glass, neon, GLB) intact.
-  safeObject('Wall & Grid Fade', { blackout: num(0, 0, 1) }, (o) =>
-    o.onValuesChange((v) => {
-      setGridBlackout(v.blackout);
-      setWallBlackout(v.blackout);
-    }),
-  );
-
   const wallObj = sheet.object('Wall', {
     colorCenter: t.rgba({ r: 0.275, g: 0.227, b: 0.525, a: 1 }),
     colorMid: t.rgba({ r: 0.055, g: 0.075, b: 0.19, a: 1 }),
@@ -315,7 +307,7 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
   /* ---------- background + logo ---------- */
 
   const bgObj = sheet.object('Star Background', {
-    count: num(1400, 0, 6000),
+    count: num(1400, 0, 14000),
     brightness: num(1, 0, 3),
     drift: num(0.02, 0, 0.4),
     swingRange: num(0.12, 0, 1),
