@@ -25,10 +25,10 @@ export interface WallColors {
 }
 
 /**
- * Defaults nearly match the scene background (#020410) — with a darker edge the wall
- * "vanished" at its borders and read as a circle instead of a wall.
+ * Center matches the muted indigo from the still; mid/edge stay in the same family
+ * so the wall does not vignette to black.
  */
-let wallColors: WallColors = { center: '#463a86', mid: '#0e1330', edge: '#0a0d1c' };
+let wallColors: WallColors = { center: '#202454', mid: '#1c1f48', edge: '#191c40' };
 
 function buildWallTexture(): THREE.CanvasTexture {
   const SS = 2; // supersample

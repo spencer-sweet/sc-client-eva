@@ -51,3 +51,42 @@ export function buildRibbonGeometry(loopPts: readonly Point2[]): THREE.BufferGeo
   geo.setIndex(indices);
   return geo;
 }
+
+/**
+ * Same ribbon idea as {@link buildRibbonGeometry}, but for an open polyline (grid
+ * strokes). Callers pack extra vertex attrs after this returns, or use the arrays
+ * below to merge many strokes into one draw.
+ */
+export function appendOpenRibbon(
+  pts: readonly Point2[],
+  positions: number[],
+  offsets: number[],
+  indices: number[],
+  onVertex?: (k: number, n: number) => void,
+): void {
+  const n = pts.length;
+  if (n < 2) return;
+  const vbase = positions.length / 3;
+  for (let k = 0; k < n; k++) {
+    const curr = pts[k];
+    const prev = pts[k === 0 ? 0 : k - 1];
+    const next = pts[k === n - 1 ? n - 1 : k + 1];
+    let tx = next[0] - prev[0];
+    let ty = next[1] - prev[1];
+    const tl = Math.hypot(tx, ty) || 1;
+    tx /= tl;
+    ty /= tl;
+    const nx = -ty;
+    const ny = tx;
+    positions.push(curr[0], curr[1], 0, curr[0], curr[1], 0);
+    offsets.push(nx, ny, 0, -nx, -ny, 0);
+    onVertex?.(k, n);
+  }
+  for (let k = 0; k < n - 1; k++) {
+    const a = vbase + k * 2;
+    const b = a + 1;
+    const c = vbase + (k + 1) * 2;
+    const d = c + 1;
+    indices.push(a, b, c, b, d, c);
+  }
+}

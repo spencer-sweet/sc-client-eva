@@ -22,7 +22,7 @@ export interface AlarmLight {
 }
 
 export const alarmLights: AlarmLight[] = [
-  { color: new THREE.Color(0xff2a2a), intensity: 1.4, flicker: 0.7, speed: 2.2, x: -8, y: 0, z: -8 },
+  { color: new THREE.Color(0xff2a2a), intensity: 1.4, flicker: 0.7, speed: 1.5, x: -8, y: 0, z: -8 },
   { color: new THREE.Color(0xff2a2a), intensity: 1.4, flicker: 0.7, speed: 1.5, x: 8, y: 0, z: -8 },
 ];
 

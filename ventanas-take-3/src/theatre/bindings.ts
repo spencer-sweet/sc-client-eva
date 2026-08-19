@@ -63,7 +63,7 @@ const glassProps = () => ({
   neonColor: t.rgba({ r: 1, g: 1, b: 1, a: 1 }),
   neonWidth: num(1.0, 0.1, 6),
   neonPulseBright: num(4.5, 0, 12),
-  neonPulseSpeed: num(1.1, 0, 3),
+  neonPulseSpeed: num(0.25, 0, 8),
 });
 
 type GlassValues = {
@@ -219,9 +219,9 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
   /* ---------- wall + grid ---------- */
 
   const wallObj = sheet.object('Wall', {
-    colorCenter: t.rgba({ r: 0.275, g: 0.227, b: 0.525, a: 1 }),
-    colorMid: t.rgba({ r: 0.055, g: 0.075, b: 0.19, a: 1 }),
-    colorEdge: t.rgba({ r: 0.04, g: 0.05, b: 0.11, a: 1 }),
+    colorCenter: t.rgba({ r: 0.125, g: 0.141, b: 0.329, a: 1 }),
+    colorMid: t.rgba({ r: 0.11, g: 0.122, b: 0.282, a: 1 }),
+    colorEdge: t.rgba({ r: 0.098, g: 0.11, b: 0.251, a: 1 }),
     lightSpill: t.compound(
       {
         enabled: t.number(1, { range: [0, 1], label: 'Enabled' }),
@@ -247,6 +247,7 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     pulseBright: num(2.4, 0, 8),
     nodeBaseOpacity: num(0.65, 0, 1),
     nodePulseBright: num(2.4, 0, 8),
+    lineWidth: num(0.01, 0.005, 0.4),
   });
   gridObj.onValuesChange((v) => {
     gridState.color.setRGB(v.color.r, v.color.g, v.color.b);
@@ -256,6 +257,7 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     gridState.pulseBright = v.pulseBright;
     gridState.nodeBaseOpacity = v.nodeBaseOpacity;
     gridState.nodePulseBright = v.nodePulseBright;
+    gridState.lineWidth = v.lineWidth;
   });
 
   /* ---------- windows ---------- */
@@ -340,7 +342,7 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
       color: t.rgba({ r: 1, g: 0.16, b: 0.16, a: 1 }),
       intensity: num(1.4, 0, 5),
       flicker: num(0.7, 0, 1),
-      speed: num(idx ? 1.5 : 2.2, 0, 8),
+      speed: num(1.5, 0, 8),
       posX: num(dx, -25, 25),
       posY: num(0, -20, 20),
     });

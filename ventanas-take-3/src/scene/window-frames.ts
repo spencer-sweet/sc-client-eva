@@ -76,7 +76,7 @@ for (const i of WINDOW_INDICES) {
     coreWidthBase,
     phase0: 0,
     pulseBright: 4.5,
-    pulseSpeed: 1.1,
+    pulseSpeed: 0.25,
   });
 
   nearLayer.add(grp);
@@ -171,7 +171,7 @@ export function applyNeon(
  */
 export function updateNeonPulse(time: number): void {
   for (const nm of neonMats) {
-    const ph = (nm.phase0 + time * nm.pulseSpeed * 0.2) % 1.0;
+    const ph = (nm.phase0 + time * nm.pulseSpeed) % 1.0;
     const bright =
       1.0 + nm.pulseBright * Math.exp(-Math.pow((ph - 0.5) / 0.28, 2.0));
     nm.halo.uniforms.uBright.value = bright;
