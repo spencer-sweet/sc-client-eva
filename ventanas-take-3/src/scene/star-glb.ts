@@ -288,6 +288,6 @@ export function loadInitialStarGlb(): void {
     .then(loadGLBFromBuffer)
     .catch((err) => {
       console.error(err);
-      bail('Could not load <code>Broken 60 fragments NEW.glb</code>.');
+      bail('Could not load <code>Broken-Jagged-60f_2026-08-18.glb</code>.');
     });
 }
