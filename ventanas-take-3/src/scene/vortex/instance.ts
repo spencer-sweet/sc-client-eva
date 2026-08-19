@@ -8,6 +8,7 @@
  * The scene owns two of these (Vortex 1 / Vortex 2) — see ./index.ts.
  */
 import * as THREE from 'three';
+import { quality } from '../../core/quality';
 import { scene } from '../../core/stage';
 import { createVortexPath, type VortexPath, type VortexPathSnapshot } from './path';
 import {
@@ -17,8 +18,9 @@ import {
   type VortexUniforms,
 } from './material';
 
-const TSEG = 240;
-const RSEG = 48;
+/** Tube tessellation — halved on the low tier; the noise shader hides the difference. */
+const TSEG = quality.vortex.tubeSegments;
+const RSEG = quality.vortex.radialSegments;
 const PATH_LINE_SEGMENTS = 140;
 
 /* ---------- glow at the end of the tunnel ("light at the far end") ---------- */

@@ -10,9 +10,9 @@ import * as THREE from 'three';
 
 import { whenBodyReady, ensureStarScene } from './scene-shell';
 import { startTimelineScroll, tickScroll, useThreeClamp } from './timeline-scroll';
-import { addSceneLights, camera, clock, createRenderer } from './core/stage';
-// Optional Dev UI — remove this import (and the calls below) to tree-shake bar/stats/help.
-import { bootDevHelpers, initDevHelpers, statsBegin, statsEnd } from './dev-helpers';
+import { camera, clock, createRenderer } from './core/stage';
+// Type-only: erased at build time, so it does not pull the Dev UI back into the bundle.
+import type { DevHelpersApi } from './dev-helpers';
 import { createOrbit, orbitState, setOrbiting } from './interaction/camera-orbit';
 import { installParallaxPointer, parallax, updateParallax } from './interaction/parallax';
 import { drawDepth, installVortexInput, setVortexGizmoVisible } from './interaction/vortex-input';
@@ -23,6 +23,7 @@ import {
   loadGLBFromBuffer,
   loadInitialStarGlb,
   resetStar,
+  setMatcapAnisotropy,
   updateMatcapZoom,
   updateStarAnimation,
 } from './scene/star-glb';
@@ -49,7 +50,6 @@ import { applyWindowTransform, updateNeonPulse } from './scene/window-frames';
 import { WINDOW_INDICES } from './windows/geometry';
 import { bindTheatre } from './theatre/bindings';
 import { initTheatre, isSequencePlaying, PROJECT_ID, theatreState } from './theatre/setup';
-import studio from '@theatre/studio';
 
 useThreeClamp(THREE);
 
@@ -58,23 +58,32 @@ await whenBodyReady();
 ensureStarScene();
 startTimelineScroll();
 
-// Dev UI mount (bar / help / err / stats). Safe to delete with the import above.
-await bootDevHelpers();
+/**
+ * Dev UI (bar / help / err / stats) and Theatre Studio are both editor-only, and both
+ * are loaded DYNAMICALLY behind the same `?minify` check a Webflow embed uses — so a
+ * production visitor never downloads or parses either chunk.
+ */
+const devUiWanted = !new URLSearchParams(location.search).has('minify');
+const dev = devUiWanted ? await import('./dev-helpers') : null;
+await dev?.bootDevHelpers();
+const statsBegin = dev?.statsBegin ?? (() => {});
+const statsEnd = dev?.statsEnd ?? (() => {});
 
-const { studioReady, sheet } = initTheatre();
+const { studioReady, sheet, studio } = await initTheatre();
 hydrateVortexPathsFromTheatre(theatreState);
-const { renderer, bloom, postFx, renderFrame, setPostFx } = createRenderer();
-addSceneLights();
+const { renderer, bloom, postFx, renderFrame, setPostFx, reportFrameTime } = createRenderer();
 starUniforms.uPixelRatio.value = renderer.getPixelRatio();
+setMatcapAnisotropy(renderer);
 
-// Position the 3 windows once (and cut the wall's holes) before Theatre can move them.
+// Position the 3 windows once (which also places their stencil cutouts) before
+// Theatre can move them.
 for (const i of WINDOW_INDICES) applyWindowTransform(i);
 
 const { camObj, starObj } = bindTheatre(sheet, bloom);
 loadInitialStarGlb();
 
 try {
-  if (studioReady) studio.setSelection([starObj]);
+  if (studioReady && studio) studio.setSelection([starObj]);
 } catch (err) {
   console.error('studio.setSelection', err);
 }
@@ -91,7 +100,7 @@ const CAMERA_DEFAULT_POSE = {
   fov: 42,
 };
 
-initDevHelpers({
+const devApi: DevHelpersApi | null = studio && {
   studio,
   studioReady,
   projectId: PROJECT_ID,
@@ -143,7 +152,8 @@ initDevHelpers({
   resetVortexPath,
   getPostFx: () => ({ ...postFx }),
   setPostFx,
-});
+};
+if (dev && devApi) dev.initDevHelpers(devApi);
 
 /* ---------- render loop ---------- */
 
@@ -151,8 +161,32 @@ initDevHelpers({
 const GRID_REF_DIST = 18;
 let gridPulseTime = 0;
 
+/**
+ * Frame governance: never render into a hidden tab or an off-screen canvas, and feed
+ * every frame's cost back to the renderer so it can drop resolution when the device
+ * throttles. The clock is still advanced while paused so resuming does not hand the
+ * animations one enormous delta.
+ */
+let canvasOnScreen = true;
+new IntersectionObserver(
+  ([entry]) => {
+    canvasOnScreen = entry.isIntersecting;
+  },
+  { threshold: 0 },
+).observe(renderer.domElement);
+
+document.addEventListener('visibilitychange', () => {
+  // Skipped frames leave getDelta() holding the whole pause; drop it on resume.
+  if (!document.hidden) clock.getDelta();
+});
+
 function tick(): void {
   requestAnimationFrame(tick);
+  if (document.hidden || !canvasOnScreen) {
+    clock.getDelta();
+    return;
+  }
+  const frameStart = performance.now();
   statsBegin();
   const dt = clock.getDelta();
   const time = clock.elapsedTime;
@@ -188,6 +222,7 @@ function tick(): void {
   tickScroll(dt, sheet);
   renderFrame();
   statsEnd();
+  reportFrameTime(performance.now() - frameStart);
 }
 
 tick();

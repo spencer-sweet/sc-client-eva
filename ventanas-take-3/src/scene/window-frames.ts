@@ -3,15 +3,16 @@
  * light spill painted on the wall around each opening.
  *
  * Each window owns a Group, so moving/scaling it can never misalign the neon from the
- * hole. `applyWindowTransform` is the single place that pushes a mask change into the
- * group, the shared grid uniforms and the wall geometry.
+ * hole. Each group also carries the stencil stamp that cuts the wall and the grid open,
+ * which is why `applyWindowTransform` now only has to move the group: the opening
+ * follows the same transform as the glass and the neon, by construction.
  */
 import * as THREE from 'three';
 import { nearLayer } from '../core/stage';
 import { buildRibbonGeometry } from '../geometry/ribbon';
 import { crispLocal, winCentersW, winRadii, WINDOW_INDICES, type WindowIndex } from '../windows/geometry';
-import { syncMaskUniforms, winTransform } from '../windows/mask';
-import { rebuildWall } from './wall';
+import { winTransform } from '../windows/mask';
+import { makeWindowStencilWriter, STENCIL_WRITER_ORDER } from '../windows/stencil';
 import { makeGlass, makeNeonMat } from './window-materials';
 
 /** Sides (1, 2): normal glass. */
@@ -39,7 +40,16 @@ for (const i of WINDOW_INDICES) {
   const grp = new THREE.Group();
 
   const shp = new THREE.Shape(crispLocal[i].map((p) => new THREE.Vector2(p[0], p[1])));
-  const fill = new THREE.Mesh(new THREE.ShapeGeometry(shp), i === 0 ? centerGlass.mat : sideGlass.mat);
+  const shapeGeo = new THREE.ShapeGeometry(shp);
+
+  // Stamps this window into the stencil buffer so the wall and the grid can test
+  // against it. Drawn first, writes no color and no depth — see windows/stencil.ts.
+  const stencilStamp = new THREE.Mesh(shapeGeo, makeWindowStencilWriter());
+  stencilStamp.renderOrder = STENCIL_WRITER_ORDER;
+  stencilStamp.frustumCulled = false;
+  grp.add(stencilStamp);
+
+  const fill = new THREE.Mesh(shapeGeo, i === 0 ? centerGlass.mat : sideGlass.mat);
   fill.position.z = -0.02;
   fill.renderOrder = 2;
   fill.frustumCulled = false;
@@ -119,14 +129,18 @@ export function setWindowLayer(i: WindowIndex, fade: number, render: number): vo
   winGroups[i].visible = render >= 0.5;
 }
 
-/** Apply a window's current mask to its group, the grid uniforms and the wall holes. */
+/**
+ * Apply a window's current mask to its group.
+ *
+ * This is now a pure transform write — the stencil stamp lives in the same group, so
+ * the wall opening and the grid cutout follow with it. It used to re-triangulate the
+ * whole wall on every call, three times per timeline update.
+ */
 export function applyWindowTransform(i: WindowIndex): void {
   const t = winTransform(i);
   const c = winCentersW[i];
   winGroups[i].position.set(c[0] + t.ox, c[1] + t.oy, 0);
   winGroups[i].scale.set(t.sx, t.sy, 1);
-  syncMaskUniforms(i);
-  rebuildWall();
 }
 
 /** Push a Theatre "Side Windows"/"Center Window (glass)" payload onto one window's neon. */

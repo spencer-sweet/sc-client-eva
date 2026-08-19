@@ -14,8 +14,13 @@ export const GLB_URL = new URL(
   /* @vite-ignore */ '../Broken 60 fragments NEW.glb',
   import.meta.url,
 ).href;
+/**
+ * 2048px WebP — sharper than the 1024px source, which was reading as blocky once the
+ * matcap zoom (see updateMatcapZoom in scene/star-glb.ts) magnified it up to ~2.8x on
+ * a shard viewed head-on. Still under half the original PNG's size.
+ */
 export const MATCAP_URL = new URL(
-  /* @vite-ignore */ '../textures/Crystal-2.png',
+  /* @vite-ignore */ '../textures/Crystal-2a.webp',
   import.meta.url,
 ).href;
 export const LOGO_URL = new URL(/* @vite-ignore */ '../eva-logo.png', import.meta.url).href;

@@ -1,15 +1,21 @@
 /**
  * Live grid (lines + nodes) in 3D — the color travels along each line every so often.
  *
- * Fragments are discarded wherever they fall inside any of the 3 windows. The grid
- * shares the SAME mask data (center/offset/scale) the windows use, so moving or
- * scaling a window from the timeline makes the cutout follow automatically.
+ * Everything is merged into TWO draw calls (one for the lines, one for the nodes)
+ * rather than one per SVG path: the per-line pulse offset rides along as a vertex
+ * attribute, so a single material can drive all of them. Polylines become
+ * LineSegments to make that merge possible.
+ *
+ * Fragments falling inside a window are cut by the stencil buffer (windows/stencil.ts),
+ * which replaced a 312-iteration point-in-polygon loop over dynamically indexed
+ * uniform arrays — the single most expensive thing this shader used to do, and a
+ * genuine compile hazard on GLES2 hardware.
  */
 import * as THREE from 'three';
 import { CIRCLES, LINES } from '../data/svg-window-set';
 import { applyTf, flattenPath, toWorld, WSCALE, type Point2 } from '../geometry/svg-path';
 import { nearLayer } from '../core/stage';
-import { MASK_GLSL, maskUniforms } from '../windows/mask';
+import { cutOutWindows } from '../windows/stencil';
 
 export const gridState = {
   color: new THREE.Color(0.81, 0.65, 0.99),
@@ -34,106 +40,117 @@ export function setGridLayer(fade: number, render: number): void {
   gridGroup.visible = render >= 0.5;
 }
 
-interface PulsingMat {
-  mat: THREE.ShaderMaterial;
-  phase0: number;
-}
+/* ---------- lines: one merged LineSegments ---------- */
 
-const gridLineObjs: PulsingMat[] = [];
-const gridNodeObjs: PulsingMat[] = [];
+const linePos: number[] = [];
+const lineProg: number[] = [];
+const linePhase: number[] = [];
 
 for (let li = 0; li < LINES.length; li++) {
   const flat = flattenPath(LINES[li], 1).map(toWorld);
   if (flat.length < 2) continue;
   const N = flat.length;
-  const pos = new Float32Array(N * 3);
-  const prog = new Float32Array(N);
-  for (let k = 0; k < N; k++) {
-    pos[k * 3] = flat[k][0];
-    pos[k * 3 + 1] = flat[k][1];
-    pos[k * 3 + 2] = 0;
-    prog[k] = k / (N - 1);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('aProg', new THREE.BufferAttribute(prog, 1));
   const phase0 = (li * 0.61) % 1.0;
-  const mat = new THREE.ShaderMaterial({
+  for (let k = 0; k < N - 1; k++) {
+    for (const [idx, p] of [
+      [k, flat[k]],
+      [k + 1, flat[k + 1]],
+    ] as [number, Point2][]) {
+      linePos.push(p[0], p[1], 0);
+      lineProg.push(idx / (N - 1));
+      linePhase.push(phase0);
+    }
+  }
+}
+
+const lineGeo = new THREE.BufferGeometry();
+lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePos, 3));
+lineGeo.setAttribute('aProg', new THREE.Float32BufferAttribute(lineProg, 1));
+lineGeo.setAttribute('aPhase0', new THREE.Float32BufferAttribute(linePhase, 1));
+
+const lineMat = cutOutWindows(
+  new THREE.ShaderMaterial({
     uniforms: {
-      uColor: { value: gridState.color },
+      uColor: { value: gridState.color.clone() },
       uBase: { value: gridState.baseOpacity },
-      uPhase: { value: phase0 },
+      uTime: { value: 0 },
+      uSpeed: { value: gridState.pulseSpeed },
       uPulseW: { value: gridState.pulseWidth },
       uPulseB: { value: gridState.pulseBright },
-      ...maskUniforms,
     },
     transparent: true,
     depthWrite: false,
     depthTest: false,
     blending: THREE.AdditiveBlending,
-    vertexShader: /*glsl*/ `attribute float aProg; varying float vProg; varying vec3 vW;
-      void main(){ vProg=aProg; vW=(modelMatrix*vec4(position,1.0)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-    fragmentShader: /*glsl*/ `precision highp float; uniform vec3 uColor; uniform float uBase,uPhase,uPulseW,uPulseB; varying float vProg; varying vec3 vW;
-      ${MASK_GLSL}
+    vertexShader: /*glsl*/ `attribute float aProg, aPhase0; varying float vProg, vPhase;
+      void main(){ vProg=aProg; vPhase=aPhase0; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader: /*glsl*/ `precision mediump float; uniform vec3 uColor; uniform float uBase,uTime,uSpeed,uPulseW,uPulseB; varying float vProg, vPhase;
       void main(){
-        if(insideAnyWindow(vW.xy)) discard;
-        float d=abs(vProg-uPhase); d=min(d,1.0-d); float pulse=exp(-pow(d/uPulseW,2.0))*uPulseB;
+        float phase = fract(vPhase + uTime*uSpeed*0.15);
+        float d=abs(vProg-phase); d=min(d,1.0-d); float pulse=exp(-pow(d/uPulseW,2.0))*uPulseB;
         gl_FragColor=vec4(uColor*(uBase+pulse), uBase+pulse); }`,
-  });
-  const line = new THREE.Line(geo, mat);
-  line.renderOrder = 1.5;
-  gridGroup.add(line);
-  gridLineObjs.push({ mat, phase0 });
-}
+  }),
+);
+
+const gridLines = new THREE.LineSegments(lineGeo, lineMat);
+gridLines.renderOrder = 1.5;
+gridLines.frustumCulled = false;
+gridGroup.add(gridLines);
+
+/* ---------- nodes: one merged LineSegments ---------- */
+
+// Device-pixel LineSegments (not thin Ring meshes) so the stroke stays visible;
+// additive + solid brightness matches the grid lines without a color pulse.
+const NODE_SEG = 64;
+const nodePos: number[] = [];
 
 for (let ci = 0; ci < CIRCLES.length; ci++) {
   const cir = CIRCLES[ci];
   const [wx, wy] = applyTf(cir.tf, cir.cx, cir.cy);
   const c: Point2 = toWorld([wx, wy]);
   const r = cir.r * WSCALE;
-  // Device-pixel LineLoop (not a thin Ring mesh) so the stroke stays visible;
-  // additive + solid brightness matches the grid lines without a color pulse.
-  const SEG = 64;
-  const pts: THREE.Vector3[] = [];
-  for (let i = 0; i <= SEG; i++) {
-    const a = (i / SEG) * Math.PI * 2;
-    pts.push(new THREE.Vector3(c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r, 0));
+  for (let i = 0; i < NODE_SEG; i++) {
+    const a0 = (i / NODE_SEG) * Math.PI * 2;
+    const a1 = ((i + 1) / NODE_SEG) * Math.PI * 2;
+    nodePos.push(c[0] + Math.cos(a0) * r, c[1] + Math.sin(a0) * r, 0);
+    nodePos.push(c[0] + Math.cos(a1) * r, c[1] + Math.sin(a1) * r, 0);
   }
-  const geo = new THREE.BufferGeometry().setFromPoints(pts);
-  const mat = new THREE.ShaderMaterial({
+}
+
+const nodeGeo = new THREE.BufferGeometry();
+nodeGeo.setAttribute('position', new THREE.Float32BufferAttribute(nodePos, 3));
+
+const nodeMat = cutOutWindows(
+  new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: gridState.color.clone() },
       uBright: { value: gridState.nodeBaseOpacity },
-      ...maskUniforms,
     },
     transparent: true,
     depthWrite: false,
     depthTest: false,
     blending: THREE.AdditiveBlending,
-    vertexShader: /*glsl*/ `varying vec3 vW; void main(){ vW=(modelMatrix*vec4(position,1.0)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-    fragmentShader: /*glsl*/ `precision highp float; uniform vec3 uColor; uniform float uBright; varying vec3 vW;
-      ${MASK_GLSL}
-      void main(){ if(insideAnyWindow(vW.xy)) discard; gl_FragColor=vec4(uColor*uBright,uBright); }`,
-  });
-  const ring = new THREE.LineLoop(geo, mat);
-  ring.renderOrder = 1.5;
-  gridGroup.add(ring);
-  gridNodeObjs.push({ mat, phase0: 0 });
-}
+    vertexShader: /*glsl*/ `void main(){ gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader: /*glsl*/ `precision mediump float; uniform vec3 uColor; uniform float uBright;
+      void main(){ gl_FragColor=vec4(uColor*uBright,uBright); }`,
+  }),
+);
+
+const gridNodes = new THREE.LineSegments(nodeGeo, nodeMat);
+gridNodes.renderOrder = 1.5;
+gridNodes.frustumCulled = false;
+gridGroup.add(gridNodes);
 
 export function updateGrid(time: number): void {
-  const spd = gridState.pulseSpeed;
   const k = 1 - outlinerFade;
-  for (const g of gridLineObjs) {
-    const u = g.mat.uniforms;
-    (u.uColor.value as THREE.Color).copy(gridState.color);
-    u.uBase.value = gridState.baseOpacity * k;
-    u.uPulseW.value = gridState.pulseWidth;
-    u.uPulseB.value = gridState.pulseBright * k;
-    u.uPhase.value = (g.phase0 + time * spd * 0.15) % 1.0;
-  }
-  for (const n of gridNodeObjs) {
-    (n.mat.uniforms.uColor.value as THREE.Color).copy(gridState.color);
-    n.mat.uniforms.uBright.value = gridState.nodeBaseOpacity * k;
-  }
+  const u = lineMat.uniforms;
+  (u.uColor.value as THREE.Color).copy(gridState.color);
+  u.uBase.value = gridState.baseOpacity * k;
+  u.uPulseW.value = gridState.pulseWidth;
+  u.uPulseB.value = gridState.pulseBright * k;
+  u.uSpeed.value = gridState.pulseSpeed;
+  u.uTime.value = time;
+
+  (nodeMat.uniforms.uColor.value as THREE.Color).copy(gridState.color);
+  nodeMat.uniforms.uBright.value = gridState.nodeBaseOpacity * k;
 }

@@ -4,10 +4,13 @@
  * Order matters, so nothing here happens at import time — `initTheatre()` is called
  * from main.ts once <body> exists (Studio mounts its UI there) and before any sheet
  * object is created.
+ *
+ * Studio is imported DYNAMICALLY. It is the editor, roughly the size of the rest of the
+ * bundle put together, and a `?minify` embed never runs it — but a static import still
+ * shipped, parsed and executed all of it on every phone that loaded the page.
  */
 import { getProject, onChange, types as t } from '@theatre/core';
 import type { ISheet, ISheetObject, UnknownShorthandCompoundProps } from '@theatre/core';
-import studio from '@theatre/studio';
 import theatreState from '../theatre-state/theatre-state_2026-08-19-0319.json';
 import { bindTheatreStudio } from '../theatre-ui-api';
 
@@ -29,20 +32,26 @@ const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v25';
 let sheetRef: ISheet | null = null;
 let playing = false;
 
+export type Studio = typeof import('@theatre/studio').default;
+
 export interface TheatreRuntime {
   /** False when Studio was skipped (?minify) or failed to initialize. */
   studioReady: boolean;
   sheet: ISheet;
+  /** null when Studio was skipped — the chunk is then never fetched at all. */
+  studio: Studio | null;
 }
 
 /**
  * Studio loads by default (same authoring workflow as the single-file HTML).
  * Pass ?minify to skip it (e.g. a Webflow embed).
  */
-export function initTheatre(): TheatreRuntime {
+export async function initTheatre(): Promise<TheatreRuntime> {
   let studioReady = false;
+  let studio: Studio | null = null;
   if (!new URLSearchParams(window.location.search).has('minify')) {
     try {
+      studio = (await import('@theatre/studio')).default;
       studio.initialize({ usePersistentStorage: true, persistenceKey: PERSISTENCE_KEY });
       studioReady = true;
     } catch (err) {
@@ -67,7 +76,7 @@ export function initTheatre(): TheatreRuntime {
     console.error('sequence.playing', err);
   }
 
-  return { studioReady, sheet };
+  return { studioReady, sheet, studio };
 }
 
 /** Markers/gizmo hide while the timeline is playing. */

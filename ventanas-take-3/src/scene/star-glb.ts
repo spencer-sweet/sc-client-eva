@@ -104,6 +104,20 @@ matcapTex.wrapS = THREE.ClampToEdgeWrapping;
 matcapTex.wrapT = THREE.ClampToEdgeWrapping;
 
 /**
+ * anisotropy defaults to 1 (off). The matcap UV comes from the per-fragment normal on
+ * hard-faceted (non-smoothed) shards, so at the shallow angles those facets are often
+ * seen from, the texture-space derivative is large in one direction — exactly the case
+ * anisotropic filtering exists for. At aniso=1 that minification just falls back to the
+ * mip level for the WORST axis, which looks blocky/pixelated well before the shard is
+ * small on screen. main.ts calls setMatcapAnisotropy() once the renderer exists so this
+ * can be clamped to what the GPU actually supports.
+ */
+export function setMatcapAnisotropy(renderer: THREE.WebGLRenderer): void {
+  matcapTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  matcapTex.needsUpdate = true;
+}
+
+/**
  * depthWrite:false is load-bearing — without it overlapping shards occlude each other
  * and the glass "reserved" its spot in the depth buffer as if opaque.
  */

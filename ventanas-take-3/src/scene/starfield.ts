@@ -1,5 +1,6 @@
 /** Twinkling point-sprite starfield behind everything. */
 import * as THREE from 'three';
+import { quality } from '../core/quality';
 import { scene } from '../core/stage';
 
 export const starUniforms = {
@@ -76,7 +77,13 @@ function ensureStarfield(): void {
 
 export function buildStars(count: number): void {
   ensureStarfield();
-  const n = THREE.MathUtils.clamp(count, 0, STAR_CAPACITY);
+  // The count is authored on the timeline; the tier scales it, so a phone draws far
+  // fewer additive sprites while the fade-in/out keyframes still read the same.
+  const n = THREE.MathUtils.clamp(
+    Math.round(count * quality.starCountScale),
+    0,
+    STAR_CAPACITY,
+  );
   if (n === lastStarCount) return;
   lastStarCount = n;
   starUniforms.uCount.value = n;

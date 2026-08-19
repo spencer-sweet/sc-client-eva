@@ -5,8 +5,18 @@
  *
  * Faithful port of vortex-interior-theatre_4.html — it reuses THIS scene's camera and
  * starfield rather than bringing its own.
+ *
+ * This is the most expensive shader in the scene by a wide margin: it is viewed from
+ * INSIDE the tube, so it covers the whole screen. Its cost is therefore tiered
+ * (core/quality.ts) and compiled in rather than branched on:
+ *  - fbm octaves: 4 authored / 2 on the low tier,
+ *  - the domain warp costs 3 of the 5 fbm calls and is dropped on the low tier,
+ *  - DoubleSide shades every pixel twice (both tube walls, additively); the low tier
+ *    draws back faces only — the ones you actually look at from inside — and scales
+ *    the color back up to keep a comparable density.
  */
 import * as THREE from 'three';
+import { quality } from '../../core/quality';
 
 export const VTX_RADIUS_DEFAULT = 8;
 
@@ -36,9 +46,10 @@ export function createVortexUniforms() {
 export type VortexUniforms = ReturnType<typeof createVortexUniforms>;
 
 export function createVortexMaterial(uniforms: VortexUniforms): THREE.ShaderMaterial {
+  const q = quality.vortex;
   return new THREE.ShaderMaterial({
   uniforms,
-  side: THREE.DoubleSide,
+  side: q.singleSided ? THREE.BackSide : THREE.DoubleSide,
   transparent: true,
   depthWrite: false,
   blending: THREE.AdditiveBlending,
@@ -52,6 +63,9 @@ export function createVortexMaterial(uniforms: VortexUniforms): THREE.ShaderMate
       gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);
     }`,
   fragmentShader: /*glsl*/ `
+    #define FBM_OCTAVES ${q.fbmOctaves}
+    #define GLOW_COMP ${q.glowCompensation.toFixed(2)}
+    ${q.domainWarp ? '#define DOMAIN_WARP' : ''}
     precision highp float; varying vec2 vUv;
     uniform float uTime; uniform vec3 uColorCore; uniform vec3 uColorMid; uniform vec3 uColorEdge;
     uniform float uSpeed; uniform float uNoiseScale; uniform float uTurbulence; uniform float uGlow; uniform float uDetail; uniform float uFill; uniform float uSwirl;
@@ -78,15 +92,22 @@ export function createVortexMaterial(uniforms: VortexUniforms): THREE.ShaderMate
       vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;
       return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
     }
-    float fbm(vec3 p){ float total=0.0; float amp=0.5; for(int i=0;i<4;i++){ total+=amp*snoise(p); p*=2.0; amp*=0.5; } return total; }
+    float fbm(vec3 p){ float total=0.0; float amp=0.5; for(int i=0;i<FBM_OCTAVES;i++){ total+=amp*snoise(p); p*=2.0; amp*=0.5; } return total; }
     void main(){
       float ang=vUv.x + uSwirl*uTime;
       float len=vUv.y;
       vec2 circ=vec2(cos(ang*6.2831853), sin(ang*6.2831853));
       float flow = len*0.9 + uTime*uSpeed*0.4;
       vec3 Pp = vec3(circ*uNoiseScale, flow);
-      vec3 w = vec3(fbm(Pp+vec3(0.0,0.0,uTime*0.05)), fbm(Pp+vec3(3.1,1.7,0.0)), fbm(Pp+vec3(8.2,4.4,0.0)));
-      float f = fbm(Pp + uTurbulence*3.0*w);
+      #ifdef DOMAIN_WARP
+        vec3 w = vec3(fbm(Pp+vec3(0.0,0.0,uTime*0.05)), fbm(Pp+vec3(3.1,1.7,0.0)), fbm(Pp+vec3(8.2,4.4,0.0)));
+        float f = fbm(Pp + uTurbulence*3.0*w);
+      #else
+        // One warp sample reused on all three axes: the beams still swim and braid,
+        // for 2 fbm calls instead of 5.
+        float wn = fbm(Pp+vec3(0.0,0.0,uTime*0.05));
+        float f = fbm(Pp + uTurbulence*3.0*vec3(wn, wn*0.7+0.3, wn*-0.5));
+      #endif
       float v = clamp(f*0.5+0.5, 0.0, 1.0);
       float beam = smoothstep(0.42, 0.90, v);
       beam = pow(beam, mix(2.6, 1.0, clamp(uDetail/3.0,0.0,1.0)));
@@ -96,7 +117,7 @@ export function createVortexMaterial(uniforms: VortexUniforms): THREE.ShaderMate
       vec3 tint = mix(uColorMid, uColorEdge, smoothstep(0.35,0.65,hue));
       vec3 color = tint*beam;
       color += uColorCore*pow(beam,3.0)*0.6;
-      color *= uGlow;
+      color *= uGlow * GLOW_COMP;
       float alpha = clamp(beam*env*1.5, 0.0, 1.0);
       float inRange=step(uTrimStart,vUv.y)*step(vUv.y,uTrimEnd);
       float tipE=1.0-smoothstep(0.0,0.03,abs(vUv.y-uTrimEnd));

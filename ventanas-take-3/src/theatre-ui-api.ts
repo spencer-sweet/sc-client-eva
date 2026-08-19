@@ -34,8 +34,8 @@ window.setTheatreJSUI = function setTheatreJSUI(mode: TheatreUiMode): void {
   applyTheatreUi();
 };
 
-/** Wire Studio once it has been initialized (or skipped). */
-export function bindTheatreStudio(studioInstance: Studio, ready: boolean): void {
+/** Wire Studio once it has been initialized (or skipped — then `studioInstance` is null). */
+export function bindTheatreStudio(studioInstance: Studio | null, ready: boolean): void {
   studioRef = studioInstance;
   studioReady = !!ready;
   applyTheatreUi();

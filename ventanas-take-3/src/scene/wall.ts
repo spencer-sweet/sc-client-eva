@@ -1,20 +1,22 @@
 /**
- * The wall: an SVG-faithful painted texture on a ShapeGeometry with REAL holes.
+ * The wall: an SVG-faithful painted texture on a plain quad, with the window openings
+ * cut out by the stencil buffer (see windows/stencil.ts).
  *
- * Rebuilding a ShapeGeometry with 3 holes of a few hundred vertices is cheap
- * (sub-millisecond), so the whole wall is rebuilt whenever a window offset/scale
- * changes. That avoids mask shaders and the truncated-uniform-array bugs they bring.
+ * This used to be a ShapeGeometry carrying 3 real holes, re-triangulated from scratch
+ * whenever a window offset/scale changed — which, with those props on the timeline,
+ * meant three earcut passes plus three geometry uploads on every scrolled frame. The
+ * stencil cutout gives the same hard-edged opening for two static triangles and zero
+ * per-frame CPU, so a window can now be moved or scaled purely by transforming its own
+ * group.
  *
- * Note the neon/glow/flares for the windows are NOT baked into the texture (they used
- * to be drawn with Path2D at fixed positions). Now that windows can move and scale,
- * they live as real 3D objects — see scene/window-frames.ts.
+ * Note the neon/glow/flares for the windows are NOT baked into the texture — they live
+ * as real 3D objects, see scene/window-frames.ts.
  */
 import * as THREE from 'three';
 import { SVG_H, SVG_W } from '../data/svg-window-set';
 import { WSCALE } from '../geometry/svg-path';
 import { nearLayer } from '../core/stage';
-import { currentHolePoints } from '../windows/mask';
-import { WINDOW_INDICES } from '../windows/geometry';
+import { cutOutWindows } from '../windows/stencil';
 
 export interface WallColors {
   center: string;
@@ -57,44 +59,33 @@ let wallTex = buildWallTexture();
  * while blackout > 0 — an always-transparent wall joins the ambiguous draw queue next
  * to the GLB's glass and can erase it.
  */
-export const wallMat = new THREE.MeshBasicMaterial({ map: wallTex, transparent: false, opacity: 1 });
+export const wallMat = cutOutWindows(
+  new THREE.MeshBasicMaterial({ map: wallTex, transparent: false, opacity: 1 }),
+);
 
-export const wall = new THREE.Mesh(new THREE.BufferGeometry(), wallMat);
-wall.position.z = 0;
-wall.renderOrder = 1;
-nearLayer.add(wall);
+const WALL_W = 52;
+const WALL_H = 44;
 
-let wallGeo: THREE.BufferGeometry | null = null;
-
-export function rebuildWall(): void {
-  const wallShape = new THREE.Shape();
-  wallShape.moveTo(-26, -22);
-  wallShape.lineTo(26, -22);
-  wallShape.lineTo(26, 22);
-  wallShape.lineTo(-26, 22);
-  wallShape.lineTo(-26, -22);
-  for (const i of WINDOW_INDICES) {
-    const flat = currentHolePoints(i);
-    const hp = new THREE.Path();
-    hp.moveTo(flat[0][0], flat[0][1]);
-    for (let k = 1; k < flat.length; k++) hp.lineTo(flat[k][0], flat[k][1]);
-    wallShape.holes.push(hp);
-  }
-  const newGeo = new THREE.ShapeGeometry(wallShape, 4);
-  // Re-derive UVs from world position so the painted SVG stays pinned to the wall.
-  const uv = newGeo.attributes.uv;
-  const pos = newGeo.attributes.position;
+/** UVs come from world position so the painted SVG stays pinned to the wall. */
+function buildWallGeometry(): THREE.BufferGeometry {
+  const geo = new THREE.PlaneGeometry(WALL_W, WALL_H);
+  const uv = geo.attributes.uv;
+  const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const sx = pos.getX(i) / WSCALE + SVG_W / 2;
     const sy = SVG_H / 2 - pos.getY(i) / WSCALE;
     uv.setXY(i, sx / SVG_W, 1 - sy / SVG_H);
   }
   uv.needsUpdate = true;
-  const old = wallGeo;
-  wall.geometry = newGeo;
-  wallGeo = newGeo;
-  old?.dispose();
+  return geo;
 }
+
+export const wall = new THREE.Mesh(buildWallGeometry(), wallMat);
+wall.position.z = 0;
+wall.renderOrder = 1;
+// One quad that always covers the view; culling it per frame buys nothing.
+wall.frustumCulled = false;
+nearLayer.add(wall);
 
 export function setWallColors(next: WallColors): void {
   wallColors = next;
