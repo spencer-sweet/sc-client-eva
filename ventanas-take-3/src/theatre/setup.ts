@@ -8,7 +8,7 @@
 import { getProject, onChange, types as t } from '@theatre/core';
 import type { ISheet, ISheetObject, UnknownShorthandCompoundProps } from '@theatre/core';
 import studio from '@theatre/studio';
-import theatreState from '../theatre-state/theatre-state_2026-08-18-1222.json';
+import theatreState from '../theatre-state/theatre-state_2026-08-18-1821.json';
 import { bindTheatreStudio } from '../theatre-ui-api';
 
 export const PROJECT_ID = 'Ventanas 3D SVG';
@@ -17,12 +17,12 @@ export const PROJECT_ID = 'Ventanas 3D SVG';
 export const num = (v: number, a: number, b: number) => t.number(v, { range: [a, b] });
 
 /**
- * persistenceKey is versioned: bumping it discards Studio's old localStorage (which
- * still held Spanish object names like Escena / Estrella (GLB) after the English
- * rename) so the committed theatre-state_*.json keyframes actually win instead of
- * flashing once and then being overwritten by empty defaults.
+ * persistenceKey is versioned: Studio's localStorage state WINS over the `state` passed
+ * to getProject, so a stale entry silently masks the committed JSON — edits to the file
+ * then appear to do nothing. Bump this on every theatre-state_*.json swap; that retires
+ * the old entry and lets the imported keyframes actually take effect.
  */
-const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v15';
+const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v16';
 
 let sheetRef: ISheet | null = null;
 let playing = false;
