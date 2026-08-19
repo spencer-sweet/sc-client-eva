@@ -109,6 +109,16 @@ export const wallSpillSprites: THREE.Sprite[] = WINDOW_INDICES.map((i) => {
   return sp;
 });
 
+export function setWindowLayer(i: WindowIndex, fade: number, render: number): void {
+  const vis = 1 - fade;
+  const glass = i === 0 ? centerGlass : sideGlass;
+  glass.uniforms.uLayerFade.value = vis;
+  const nm = neonMats[i];
+  nm.halo.uniforms.uLayerFade.value = vis;
+  nm.core.uniforms.uLayerFade.value = vis;
+  winGroups[i].visible = render >= 0.5;
+}
+
 /** Apply a window's current mask to its group, the grid uniforms and the wall holes. */
 export function applyWindowTransform(i: WindowIndex): void {
   const t = winTransform(i);

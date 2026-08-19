@@ -29,6 +29,30 @@ export const alarmLights: AlarmLight[] = [
 /** 0 disables the wall spill entirely; otherwise a multiplier on its opacity. */
 export const wallSpill = { intensity: 1.0 };
 
+let alarmLayerFade = 0;
+let alarmLayerRender = true;
+
+export function setAlarmLayer(fade: number, render: number): void {
+  alarmLayerFade = fade;
+  alarmLayerRender = render >= 0.5;
+  for (const sp of wallSpillSprites) sp.visible = alarmLayerRender;
+  if (!alarmLayerRender) muteAlarmContribution();
+}
+
+function muteAlarmContribution(): void {
+  tmp0.set(0, 0, 0);
+  tmp1.set(0, 0, 0);
+  for (const u of lightTargets) {
+    for (let i = 0; i < 2; i++) {
+      u.uLightColI.value[i].set(0, 0, 0);
+    }
+  }
+  starUniforms.uAlarm.value.set(0, 0, 0);
+  for (const sp of wallSpillSprites) {
+    (sp.material as THREE.SpriteMaterial).opacity = 0;
+  }
+}
+
 function flick(time: number, speed: number, amt: number): number {
   let b = 0.5 + 0.5 * Math.sin(time * speed * Math.PI * 2);
   b = b * b;
@@ -43,9 +67,11 @@ const lit = [tmp0, tmp1];
 const lightTargets = [sideGlass.uniforms, centerGlass.uniforms, neonLightU];
 
 export function updateAlarmLights(time: number): void {
+  if (!alarmLayerRender) return;
+  const vis = 1 - alarmLayerFade;
   for (let i = 0; i < 2; i++) {
     const l = alarmLights[i];
-    lit[i].copy(l.color).multiplyScalar(l.intensity * flick(time, l.speed, l.flicker));
+    lit[i].copy(l.color).multiplyScalar(l.intensity * vis * flick(time, l.speed, l.flicker));
   }
 
   for (const u of lightTargets) {
@@ -72,7 +98,7 @@ export function updateAlarmLights(time: number): void {
     }
     const mat = wallSpillSprites[wi].material as THREE.SpriteMaterial;
     mat.color.setRGB(sr, sg, sb);
-    mat.opacity = Math.min(1, (sr + sg + sb) * 0.5 * wallSpill.intensity);
+    mat.opacity = Math.min(1, (sr + sg + sb) * 0.5 * wallSpill.intensity * vis);
   }
 
   starUniforms.uAlarm.value.copy(tmpSum.copy(tmp0).add(tmp1).multiplyScalar(0.14));

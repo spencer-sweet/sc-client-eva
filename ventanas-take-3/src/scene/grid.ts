@@ -22,16 +22,22 @@ export const gridState = {
   nodePulseBright: 2.4,
 };
 
-/** 0 = normal, 1 = wall + grid fully black (only the windows remain). */
-let blackout = 0;
+/** 0 = normal, 1 = fully faded. Sequence (Wall & Grid Fade) and outliner multiply. */
+let sequenceBlackout = 0;
+let outlinerFade = 0;
 
 export function setGridBlackout(v: number): void {
-  blackout = v;
+  sequenceBlackout = v;
 }
 
-const gridGroup = new THREE.Group();
+export const gridGroup = new THREE.Group();
 gridGroup.position.z = 0.06;
 nearLayer.add(gridGroup);
+
+export function setGridLayer(fade: number, render: number): void {
+  outlinerFade = fade;
+  gridGroup.visible = render >= 0.5;
+}
 
 interface PulsingMat {
   mat: THREE.ShaderMaterial;
@@ -122,7 +128,7 @@ for (let ci = 0; ci < CIRCLES.length; ci++) {
 
 export function updateGrid(time: number): void {
   const spd = gridState.pulseSpeed;
-  const k = 1 - blackout;
+  const k = (1 - sequenceBlackout) * (1 - outlinerFade);
   for (const g of gridLineObjs) {
     const u = g.mat.uniforms;
     (u.uColor.value as THREE.Color).copy(gridState.color);

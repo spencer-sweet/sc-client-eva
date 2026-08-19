@@ -11,7 +11,7 @@
  * is this file's own path, so "../" only lands on the public root from /src.
  */
 export const GLB_URL = new URL(
-  /* @vite-ignore */ '../Broken 60 fragments.glb',
+  /* @vite-ignore */ '../Broken 60 fragments NEW.glb',
   import.meta.url,
 ).href;
 export const MATCAP_URL = new URL(

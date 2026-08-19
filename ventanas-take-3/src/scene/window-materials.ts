@@ -32,6 +32,7 @@ export interface GlassMaterial {
     uGlassTint: THREE.IUniform<THREE.Color>;
     uGlassEdge: THREE.IUniform<THREE.Color>;
     uGlassOpacity: THREE.IUniform<number>;
+    uLayerFade: THREE.IUniform<number>;
     uDissolve: THREE.IUniform<number>;
     uEdgeWidth: THREE.IUniform<number>;
     uEdgeIntensity: THREE.IUniform<number>;
@@ -50,6 +51,7 @@ export function makeGlass(tint: number, opacity: number): GlassMaterial {
     uGlassTint: { value: new THREE.Color(tint) },
     uGlassEdge: { value: new THREE.Color(0.81, 0.65, 0.99) },
     uGlassOpacity: { value: opacity },
+    uLayerFade: { value: 1.0 },
     uDissolve: { value: 0.0 },
     uEdgeWidth: { value: 3.0 },
     uEdgeIntensity: { value: 2.2 },
@@ -62,7 +64,7 @@ export function makeGlass(tint: number, opacity: number): GlassMaterial {
     side: THREE.DoubleSide,
     vertexShader: /*glsl*/ `varying vec3 vW; void main(){ vW=(modelMatrix*vec4(position,1.0)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: /*glsl*/ `precision highp float; varying vec3 vW;
-      uniform vec3 uGlassTint,uGlassEdge; uniform float uGlassOpacity,uDissolve,uEdgeWidth,uEdgeIntensity; uniform vec3 uLightPos[2]; uniform vec3 uLightColI[2];
+      uniform vec3 uGlassTint,uGlassEdge; uniform float uGlassOpacity,uLayerFade,uDissolve,uEdgeWidth,uEdgeIntensity; uniform vec3 uLightPos[2]; uniform vec3 uLightColI[2];
       ${LIGHT_TINT_GLSL}
       void main(){
         vec3 N=vec3(0.0,0.0,1.0); vec3 V=normalize(cameraPosition-vW);
@@ -73,7 +75,7 @@ export function makeGlass(tint: number, opacity: number): GlassMaterial {
         vec3 col=uGlassTint + tint + uGlassEdge*fres*uEdgeIntensity;
         // uDissolve kills COMPLETE alpha (including the rim/fresnel glow) — unlike
         // lowering only uGlassOpacity, this leaves no visible outline at all.
-        float alpha=clamp(uGlassOpacity + fres*0.55 + (tint.r+tint.g+tint.b)*0.15, 0.0, 0.95) * (1.0-uDissolve);
+        float alpha=clamp(uGlassOpacity + fres*0.55 + (tint.r+tint.g+tint.b)*0.15, 0.0, 0.95) * (1.0-uDissolve) * uLayerFade;
         gl_FragColor=vec4(col,alpha);
       }`,
   });
@@ -96,6 +98,7 @@ export function makeNeonMat(
       uColor: { value: new THREE.Color(colorHex) },
       uOpacityBase: { value: opacityBase },
       uBright: { value: 1.0 },
+      uLayerFade: { value: 1.0 },
       uDissolve: { value: 0.0 },
       uWidth: { value: widthBase },
       ...neonLightU,
@@ -112,12 +115,12 @@ export function makeNeonMat(
         gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);
       }`,
     fragmentShader: /*glsl*/ `precision highp float; varying vec3 vW;
-      uniform vec3 uColor; uniform float uOpacityBase,uBright,uDissolve; uniform vec3 uLightPos[2]; uniform vec3 uLightColI[2];
+      uniform vec3 uColor; uniform float uOpacityBase,uBright,uLayerFade,uDissolve; uniform vec3 uLightPos[2]; uniform vec3 uLightColI[2];
       ${LIGHT_TINT_GLSL}
       void main(){
         // frame/neon "reflects" the alarm light when nearby
         vec3 col=uColor + alarmTint(vW,uLightPos,uLightColI)*1.4;
-        float a=uOpacityBase*uBright*(1.0-uDissolve);
+        float a=uOpacityBase*uBright*(1.0-uDissolve)*uLayerFade;
         gl_FragColor=vec4(col*uBright, a);
       }`,
   });

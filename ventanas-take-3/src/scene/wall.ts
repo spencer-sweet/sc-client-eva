@@ -112,7 +112,22 @@ export function setWallColors(next: WallColors): void {
  * make the GLB's glass disappear. While fading it also stops writing depth, so it
  * cannot compete for order with the GLB glass in the intermediate range either.
  */
+let sequenceBlackout = 0;
+let outlinerFade = 0;
+
 export function setWallBlackout(blackout: number): void {
+  sequenceBlackout = blackout;
+  applyWallFade();
+}
+
+export function setWallLayer(fade: number, render: number): void {
+  outlinerFade = fade;
+  wall.visible = render >= 0.5;
+  applyWallFade();
+}
+
+function applyWallFade(): void {
+  const blackout = 1 - (1 - sequenceBlackout) * (1 - outlinerFade);
   wallMat.opacity = 1 - blackout;
   const shouldBeTransparent = blackout > 0.001;
   if (wallMat.transparent !== shouldBeTransparent) {

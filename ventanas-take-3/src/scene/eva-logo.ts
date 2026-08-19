@@ -32,6 +32,20 @@ mesh.position.set(0, 0, 5);
 mesh.renderOrder = 7;
 scene.add(mesh);
 
+let layerFade = 0;
+let layerRender = true;
+let lastLook: Parameters<typeof applyEvaLogo>[0] | null = null;
+
+export function setLogoLayer(fade: number, render: number): void {
+  layerFade = fade;
+  layerRender = render >= 0.5;
+  if (lastLook) applyEvaLogo(lastLook);
+  else {
+    mesh.visible = layerRender;
+    uniforms.uOpacity.value = 1 - layerFade;
+  }
+}
+
 /** Apply a Theatre "Logo EVA" payload. */
 export function applyEvaLogo(v: {
   enabled: number;
@@ -42,9 +56,10 @@ export function applyEvaLogo(v: {
   posY: number;
   posZ: number;
 }): void {
-  mesh.visible = v.enabled >= 0.5;
+  lastLook = v;
+  mesh.visible = v.enabled >= 0.5 && layerRender;
   uniforms.uColor.value.setRGB(v.color.r, v.color.g, v.color.b);
-  uniforms.uOpacity.value = v.opacity;
+  uniforms.uOpacity.value = v.opacity * (1 - layerFade);
   mesh.scale.setScalar(v.scale);
   mesh.position.set(v.posX, v.posY, v.posZ);
 }

@@ -30,6 +30,7 @@ export const vortexUniforms = {
   uRadiusBase: { value: VTX_RADIUS_DEFAULT },
   uTaperStart: { value: 1.0 },
   uTaperEnd: { value: 1.0 },
+  uLayerFade: { value: 1.0 },
 };
 
 export const vortexMat = new THREE.ShaderMaterial({
@@ -67,7 +68,7 @@ export const vortexMat = new THREE.ShaderMaterial({
     precision highp float; varying vec2 vUv;
     uniform float uTime; uniform vec3 uColorCore; uniform vec3 uColorMid; uniform vec3 uColorEdge;
     uniform float uSpeed; uniform float uNoiseScale; uniform float uTurbulence; uniform float uGlow; uniform float uDetail; uniform float uFill; uniform float uSwirl;
-    uniform float uTrimStart; uniform float uTrimEnd;
+    uniform float uTrimStart; uniform float uTrimEnd; uniform float uLayerFade;
     vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
     vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
     vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
@@ -116,6 +117,6 @@ export const vortexMat = new THREE.ShaderMaterial({
       float tip=max(tipE,tipS);
       alpha*=inRange; alpha=max(alpha,tip*0.95);
       color=mix(color,uColorCore,tip); color*=1.0+tip*1.5;
-      gl_FragColor=vec4(color,alpha);
+      gl_FragColor=vec4(color,alpha*uLayerFade);
     }`,
 });

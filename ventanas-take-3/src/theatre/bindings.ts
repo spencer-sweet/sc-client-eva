@@ -17,7 +17,6 @@ import { orbitState } from '../interaction/camera-orbit';
 import { alarmLights, wallSpill } from '../scene/alarm-lights';
 import { applyEvaLogo } from '../scene/eva-logo';
 import { gridState, setGridBlackout } from '../scene/grid';
-import { applyHorizontalStroke } from '../scene/horizontal-stroke';
 import {
   applyStarState,
   glow,
@@ -30,6 +29,7 @@ import {
 import { buildStars, starfieldMotion, starUniforms } from '../scene/starfield';
 import { setWallBlackout, setWallColors } from '../scene/wall';
 import { applyVortexLook, VTX_RADIUS_DEFAULT, vortexUniforms } from '../scene/vortex';
+import { applyLayerOutliner } from '../scene/layer-outliner';
 import { applyNeon, applyWindowTransform, centerGlass, sideGlass } from '../scene/window-frames';
 import { winCentersW } from '../windows/geometry';
 import { centerMask, sideMask } from '../windows/mask';
@@ -125,6 +125,27 @@ const starProps = () => ({
 });
 
 export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindings {
+  /* ---------- layer outliner ---------- */
+
+  const layerPair = () => ({ fade: num(0, 0, 1), render: num(1, 0, 1) });
+  safeObject(
+    'Layer Outliner',
+    {
+      wall: layerPair(),
+      grid: layerPair(),
+      sideWindows: layerPair(),
+      centerWindow: layerPair(),
+      starGlb: layerPair(),
+      starGlow: layerPair(),
+      starBackground: layerPair(),
+      vortex: layerPair(),
+      vortexHelpers: layerPair(),
+      logo: layerPair(),
+      alarm: layerPair(),
+    },
+    (o) => o.onValuesChange(applyLayerOutliner),
+  );
+
   /* ---------- vortex ---------- */
 
   safeObject('Path Trim', { trimStart: num(0.0, 0, 1), trimEnd: num(1.0, 0, 1) }, (o) =>
@@ -183,13 +204,23 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
 
   /* ---------- windows ---------- */
 
-  const winObj = sheet.object('Windows', glassProps());
+  const winObj = sheet.object('Windows', {
+    ...glassProps(),
+    offsetX: num(0, -4, 4),
+    offsetY: num(0, -4, 4),
+    scale: num(1, 0.3, 2),
+  });
   winObj.onValuesChange((v) => {
     applyGlass(sideGlass, v);
     // dissolve=1 must also kill the neon on the 2 side windows, otherwise their
     // outlines stayed visible after the glass was gone.
     applyNeon(1, v);
     applyNeon(2, v);
+    sideMask.offsetX = v.offsetX;
+    sideMask.offsetY = v.offsetY;
+    sideMask.scale = v.scale;
+    applyWindowTransform(1);
+    applyWindowTransform(2);
   });
 
   // The center glass used to have a fixed, nearly invisible color; now it takes its own
@@ -214,19 +245,6 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
         centerMask.scX = v.scaleX;
         centerMask.scY = v.scaleY;
         applyWindowTransform(0);
-      }),
-  );
-
-  safeObject(
-    'Side Windows',
-    { offsetX: num(0, -4, 4), offsetY: num(0, -4, 4), scale: num(1, 0.3, 2) },
-    (o) =>
-      o.onValuesChange((v) => {
-        sideMask.offsetX = v.offsetX;
-        sideMask.offsetY = v.offsetY;
-        sideMask.scale = v.scale;
-        applyWindowTransform(1);
-        applyWindowTransform(2);
       }),
   );
 
@@ -303,7 +321,7 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     });
   }
 
-  /* ---------- background + logo + stroke ---------- */
+  /* ---------- background + logo ---------- */
 
   const bgObj = sheet.object('Star Background', {
     count: num(1400, 0, 6000),
@@ -330,19 +348,6 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
       posZ: num(5, -60, 30),
     },
     (o) => o.onValuesChange(applyEvaLogo),
-  );
-
-  safeObject(
-    'Horizontal Stroke',
-    {
-      enabled: num(1, 0, 1),
-      color: t.rgba({ r: 0.094, g: 0.753, b: 0.847, a: 1 }),
-      opacity: num(1.0, 0, 1),
-      growStart: num(0.0, 0, 1),
-      // growEnd 0->1 animates the growth left to right
-      growEnd: num(1.0, 0, 1),
-    },
-    (o) => o.onValuesChange(applyHorizontalStroke),
   );
 
   /* ---------- star (GLB) ---------- */

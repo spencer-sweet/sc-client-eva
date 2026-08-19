@@ -64,7 +64,7 @@ vortexGroup.add(vortexMesh);
 
 const pathLine = new THREE.Line(
   new THREE.BufferGeometry().setFromPoints(buildCurve().getPoints(PATH_LINE_SEGMENTS)),
-  new THREE.LineBasicMaterial({ color: 0x2a4a7a }),
+  new THREE.LineBasicMaterial({ color: 0x2a4a7a, transparent: true, opacity: 1 }),
 );
 pathLine.visible = false;
 vortexGroup.add(pathLine);
@@ -80,9 +80,21 @@ export function rebuildVortexTube(): void {
 rebuildVortexTube();
 
 let enabled = true;
+let layerFade = 0;
+let layerRender = true;
+let lastExitGlow = 0.25;
 
 export function isVortexEnabled(): boolean {
-  return enabled;
+  return enabled && layerRender;
+}
+
+export function setVortexLayer(fade: number, render: number): void {
+  layerFade = fade;
+  layerRender = render >= 0.5;
+  vortexUniforms.uLayerFade.value = 1 - layerFade;
+  vortexMesh.visible = enabled && layerRender;
+  exitGlowSprite.visible = enabled && layerRender;
+  exitGlowMat.opacity = lastExitGlow * (1 - layerFade);
 }
 
 /** Apply a Theatre "Vortex Look" payload. */
@@ -105,7 +117,8 @@ export function applyVortexLook(v: {
   exitGlow: number;
 }): void {
   enabled = v.enabled >= 0.5;
-  vortexMesh.visible = enabled;
+  lastExitGlow = v.exitGlow;
+  vortexMesh.visible = enabled && layerRender;
   vortexGroup.scale.setScalar(v.scale);
   if (v.radius !== radius) {
     radius = v.radius;
@@ -125,8 +138,9 @@ export function applyVortexLook(v: {
   vortexUniforms.uGlow.value = v.glow;
   vortexUniforms.uDetail.value = v.detail;
   vortexUniforms.uFill.value = v.fill;
-  exitGlowMat.opacity = v.exitGlow;
+  exitGlowMat.opacity = v.exitGlow * (1 - layerFade);
   exitGlowSprite.scale.setScalar(6 * Math.max(0.001, v.exitGlow));
+  exitGlowSprite.visible = enabled && layerRender;
 }
 
 /* ---------- editor: markers, selection, add/remove, draw mode ---------- */
@@ -139,6 +153,9 @@ export const vortexMarkers: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMate
 let selected = -1;
 let drawMode = false;
 let gizmo: { attach(o: THREE.Object3D): void; detach(): void } | null = null;
+let editorWanted = false;
+let helpersRender = true;
+let helpersFade = 0;
 
 export function setVortexGizmo(g: typeof gizmo): void {
   gizmo = g;
@@ -160,7 +177,12 @@ export function rebuildVortexMarkers(): void {
   for (let i = 0; i < path.ctrl.length; i++) {
     const m = new THREE.Mesh(
       new THREE.SphereGeometry(0.6, 18, 14),
-      new THREE.MeshBasicMaterial({ color: i === selected ? 0xffffff : 0x66d2ff, depthTest: false }),
+      new THREE.MeshBasicMaterial({
+        color: i === selected ? 0xffffff : 0x66d2ff,
+        depthTest: false,
+        transparent: true,
+        opacity: 1 - helpersFade,
+      }),
     );
     m.position.copy(path.ctrl[i]);
     m.userData = { i };
@@ -239,8 +261,27 @@ export function setVortexPathTension(v: number): void {
   path.tension = v;
 }
 
-/** Show markers / path line only while not drawing and not playing the sequence. */
+export function setVortexHelpersLayer(fade: number, render: number): void {
+  helpersFade = fade;
+  helpersRender = render >= 0.5;
+  applyVortexHelpers();
+}
+
+function applyVortexHelpers(): void {
+  const on = editorWanted && helpersRender;
+  markerGroup.visible = on;
+  pathLine.visible = on;
+  const vis = 1 - helpersFade;
+  const lineMat = pathLine.material as THREE.LineBasicMaterial;
+  lineMat.opacity = vis;
+  for (const m of vortexMarkers) {
+    m.material.transparent = vis < 0.999;
+    m.material.opacity = vis;
+  }
+}
+
+/** Show markers / path line only while not drawing, not playing, and the outliner allows it. */
 export function setVortexEditorVisible(visible: boolean): void {
-  markerGroup.visible = visible;
-  pathLine.visible = visible;
+  editorWanted = visible;
+  applyVortexHelpers();
 }

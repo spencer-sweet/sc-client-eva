@@ -39,6 +39,7 @@ import {
   setVortexPathTension,
   vortexUniforms,
 } from './scene/vortex';
+import { isLayerRendered } from './scene/layer-outliner';
 import { applyWindowTransform, updateNeonPulse } from './scene/window-frames';
 import { WINDOW_INDICES } from './windows/geometry';
 import { bindTheatre } from './theatre/bindings';
@@ -151,21 +152,24 @@ function tick(): void {
   // fills more of the screen); farther away, it grows faster.
   gridPulseTime += dt * (GRID_REF_DIST / Math.max(1, camera.position.length()));
 
-  updateStarAnimation(dt);
+  if (isLayerRendered('starGlb')) updateStarAnimation(dt);
   updateParallax(time);
 
-  starUniforms.uTime.value = time;
-  starGroup.rotation.y = Math.sin(time * starfieldMotion.drift * 0.5) * starfieldMotion.swingRange;
-  if (isVortexEnabled()) vortexUniforms.uTime.value = time;
+  if (isLayerRendered('starBackground')) {
+    starUniforms.uTime.value = time;
+    starGroup.rotation.y = Math.sin(time * starfieldMotion.drift * 0.5) * starfieldMotion.swingRange;
+  }
+  if (isLayerRendered('vortex') && isVortexEnabled()) vortexUniforms.uTime.value = time;
 
   // Path editor stays visible/clickable except while drawing or playing the sequence.
-  const editable = !isVortexDrawMode() && !isSequencePlaying();
+  const editable =
+    !isVortexDrawMode() && !isSequencePlaying() && isLayerRendered('vortexHelpers');
   setVortexEditorVisible(editable);
   setVortexGizmoVisible(editable);
 
-  updateGrid(gridPulseTime);
-  updateNeonPulse(gridPulseTime);
-  updateAlarmLights(time);
+  if (isLayerRendered('grid')) updateGrid(gridPulseTime);
+  if (isLayerRendered('sideWindows') || isLayerRendered('centerWindow')) updateNeonPulse(gridPulseTime);
+  if (isLayerRendered('alarm')) updateAlarmLights(time);
 
   if (orbitState.active) orbitState.controls?.update();
   tickScroll(dt, sheet);

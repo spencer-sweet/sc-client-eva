@@ -99,13 +99,28 @@ let clipDuration = 1;
 /** True while the shatter is playing live (a button press), not being scrubbed. */
 let liveShatter = false;
 
+let glbLayerFade = 0;
+let glowLayerFade = 0;
+
 export function applyStarState(): void {
   glbRoot?.scale.setScalar(starState.scale);
-  glbMat.opacity = starState.opacity;
+  glbMat.opacity = starState.opacity * (1 - glbLayerFade);
   const gm = glow.material as THREE.SpriteMaterial;
   gm.color.copy(starState.emiColor);
-  gm.opacity = starState.glowInt;
+  gm.opacity = starState.glowInt * (1 - glowLayerFade);
   glow.scale.setScalar(starState.glowSize);
+}
+
+export function setStarGlbLayer(fade: number, render: number): void {
+  glbLayerFade = fade;
+  starGroup.visible = render >= 0.5;
+  applyStarState();
+}
+
+export function setStarGlowLayer(fade: number, render: number): void {
+  glowLayerFade = fade;
+  glow.visible = render >= 0.5;
+  applyStarState();
 }
 
 /** Scrub the exact explosion frame (ignored while a live shatter is playing). */
@@ -210,6 +225,6 @@ export function loadInitialStarGlb(): void {
     .then(loadGLBFromBuffer)
     .catch((err) => {
       console.error(err);
-      bail('Could not load <code>Broken 60 fragments.glb</code>.');
+      bail('Could not load <code>Broken 60 fragments NEW.glb</code>.');
     });
 }
