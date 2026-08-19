@@ -52,7 +52,7 @@ const rgbToHex = (c: Rgba): string => {
   return '#' + h(c.r) + h(c.g) + h(c.b);
 };
 
-/** Props shared by the "Windows" and "Center Window (glass)" objects. */
+/** Props shared by the "Side Windows" and "Center Window (glass)" objects. */
 const glassProps = () => ({
   glassTint: t.rgba({ r: 0.1, g: 0.12, b: 0.22, a: 1 }),
   glassEdge: t.rgba({ r: 0.81, g: 0.65, b: 0.99, a: 1 }),
@@ -148,37 +148,36 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     (o) => o.onValuesChange(applyLayerOutliner),
   );
 
-  /* ---------- vortex ---------- */
+  /* ---------- scene general (bloom + parallax) ---------- */
 
-  safeObject('Path Trim', { trimStart: num(0.0, 0, 1), trimEnd: num(1.0, 0, 1) }, (o) =>
-    o.onValuesChange((v) => {
-      vortexUniforms.uTrimStart.value = Math.min(v.trimStart, v.trimEnd);
-      vortexUniforms.uTrimEnd.value = Math.max(v.trimStart, v.trimEnd);
-    }),
-  );
-
-  safeObject(
-    'Vortex Look',
-    {
-      enabled: num(1, 0, 1),
-      scale: num(1, 0.2, 4),
-      radius: num(VTX_RADIUS_DEFAULT, 1, 40),
-      taperStart: num(1.0, 0.02, 3),
-      taperEnd: num(1.0, 0.02, 3),
-      colorCore: t.rgba({ r: 0.851, g: 1.0, b: 1.0, a: 1 }),
-      colorMid: t.rgba({ r: 0.12, g: 0.851, b: 0.878, a: 1 }),
-      colorEdge: t.rgba({ r: 0.5, g: 0.278, b: 0.9, a: 1 }),
-      speed: num(0.6, 0, 4),
-      swirl: num(0.8, -12, 12),
-      noiseScale: num(3.0, 0.5, 6),
-      turbulence: num(0.8, 0, 2),
-      glow: num(1.6, 0.3, 4),
-      detail: num(1.0, 0.5, 6),
-      fill: num(0.15, 0, 1.5),
-      exitGlow: num(0.25, 0, 2),
-    },
-    (o) => o.onValuesChange(applyVortexLook),
-  );
+  // num(0/1) instead of t.boolean: this avoids depending on a types API that may not
+  // exist as-is in every bundle version. If t.boolean threw here the whole script would
+  // stop BEFORE reaching the render loop — the real cause of an old black-screen bug.
+  const sceneGeneralObj = sheet.object('Scene General', {
+    bloom: t.compound(
+      {
+        strength: t.number(0.4, { range: [0, 3], label: 'Strength' }),
+        radius: t.number(0.5, { range: [0, 2], label: 'Radius' }),
+        threshold: t.number(0.4, { range: [0, 1], label: 'Threshold' }),
+      },
+      { label: 'Bloom' },
+    ),
+    parallax: t.compound(
+      {
+        enabled: t.number(1, { range: [0, 1], label: 'Enabled' }),
+        intensity: t.number(1, { range: [0, 3], label: 'Intensity' }),
+      },
+      { label: 'Parallax' },
+    ),
+  });
+  sceneGeneralObj.onValuesChange((v) => {
+    bloom.strength = v.bloom.strength;
+    bloom.radius = v.bloom.radius;
+    bloom.threshold = v.bloom.threshold;
+    parallax.enabled = v.parallax.enabled >= 0.5;
+    parallax.intensity = v.parallax.intensity;
+    setParallaxButton(parallax.enabled);
+  });
 
   /* ---------- camera ---------- */
 
@@ -193,26 +192,64 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     }
   });
 
-  /* ---------- windows ---------- */
+  /* ---------- star background ---------- */
 
-  const winObj = sheet.object('Windows', {
-    ...glassProps(),
-    offsetX: num(0, -4, 4),
-    offsetY: num(0, -4, 4),
-    scale: num(1, 0.3, 2),
+  const bgObj = sheet.object('Star Background', {
+    count: num(1400, 0, 14000),
+    brightness: num(1, 0, 3),
+    drift: num(0.02, 0, 0.4),
+    swingRange: num(0.12, 0, 1),
   });
-  winObj.onValuesChange((v) => {
-    applyGlass(sideGlass, v);
-    // dissolve=1 must also kill the neon on the 2 side windows, otherwise their
-    // outlines stayed visible after the glass was gone.
-    applyNeon(1, v);
-    applyNeon(2, v);
-    sideMask.offsetX = v.offsetX;
-    sideMask.offsetY = v.offsetY;
-    sideMask.scale = v.scale;
-    applyWindowTransform(1);
-    applyWindowTransform(2);
+  bgObj.onValuesChange((v) => {
+    buildStars(v.count);
+    starUniforms.uBright.value = v.brightness;
+    starfieldMotion.drift = v.drift;
+    starfieldMotion.swingRange = v.swingRange;
   });
+
+  /* ---------- wall + grid ---------- */
+
+  const wallObj = sheet.object('Wall', {
+    colorCenter: t.rgba({ r: 0.275, g: 0.227, b: 0.525, a: 1 }),
+    colorMid: t.rgba({ r: 0.055, g: 0.075, b: 0.19, a: 1 }),
+    colorEdge: t.rgba({ r: 0.04, g: 0.05, b: 0.11, a: 1 }),
+    lightSpill: t.compound(
+      {
+        enabled: t.number(1, { range: [0, 1], label: 'Enabled' }),
+        intensity: t.number(1.0, { range: [0, 3], label: 'Intensity' }),
+      },
+      { label: 'Light Spill' },
+    ),
+  });
+  wallObj.onValuesChange((v) => {
+    setWallColors({
+      center: rgbToHex(v.colorCenter),
+      mid: rgbToHex(v.colorMid),
+      edge: rgbToHex(v.colorEdge),
+    });
+    wallSpill.intensity = v.lightSpill.enabled >= 0.5 ? v.lightSpill.intensity : 0;
+  });
+
+  const gridObj = sheet.object('Grid', {
+    color: t.rgba({ r: 0.81, g: 0.65, b: 0.99, a: 1 }),
+    baseOpacity: num(0.16, 0, 1),
+    pulseSpeed: num(0.35, 0, 3),
+    pulseWidth: num(0.22, 0.02, 1),
+    pulseBright: num(2.4, 0, 8),
+    nodeBaseOpacity: num(0.65, 0, 1),
+    nodePulseBright: num(2.4, 0, 8),
+  });
+  gridObj.onValuesChange((v) => {
+    gridState.color.setRGB(v.color.r, v.color.g, v.color.b);
+    gridState.baseOpacity = v.baseOpacity;
+    gridState.pulseSpeed = v.pulseSpeed;
+    gridState.pulseWidth = v.pulseWidth;
+    gridState.pulseBright = v.pulseBright;
+    gridState.nodeBaseOpacity = v.nodeBaseOpacity;
+    gridState.nodePulseBright = v.nodePulseBright;
+  });
+
+  /* ---------- windows ---------- */
 
   // The center glass used to have a fixed, nearly invisible color; now it takes its own
   // so it can be pushed toward the EVA logo turquoise.
@@ -239,45 +276,48 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
       }),
   );
 
-  /* ---------- wall + grid ---------- */
-
-  const wallObj = sheet.object('Wall', {
-    colorCenter: t.rgba({ r: 0.275, g: 0.227, b: 0.525, a: 1 }),
-    colorMid: t.rgba({ r: 0.055, g: 0.075, b: 0.19, a: 1 }),
-    colorEdge: t.rgba({ r: 0.04, g: 0.05, b: 0.11, a: 1 }),
+  const winObj = sheet.object('Side Windows', {
+    ...glassProps(),
+    offsetX: num(0, -4, 4),
+    offsetY: num(0, -4, 4),
+    scale: num(1, 0.3, 2),
   });
-  wallObj.onValuesChange((v) =>
-    setWallColors({
-      center: rgbToHex(v.colorCenter),
-      mid: rgbToHex(v.colorMid),
-      edge: rgbToHex(v.colorEdge),
-    }),
-  );
-
-  safeObject('Wall Light Spill', { enabled: num(1, 0, 1), intensity: num(1.0, 0, 3) }, (o) =>
-    o.onValuesChange((v) => {
-      wallSpill.intensity = v.enabled >= 0.5 ? v.intensity : 0;
-    }),
-  );
-
-  const gridObj = sheet.object('Grid', {
-    color: t.rgba({ r: 0.81, g: 0.65, b: 0.99, a: 1 }),
-    baseOpacity: num(0.16, 0, 1),
-    pulseSpeed: num(0.35, 0, 3),
-    pulseWidth: num(0.22, 0.02, 1),
-    pulseBright: num(2.4, 0, 8),
-    nodeBaseOpacity: num(0.65, 0, 1),
-    nodePulseBright: num(2.4, 0, 8),
+  winObj.onValuesChange((v) => {
+    applyGlass(sideGlass, v);
+    // dissolve=1 must also kill the neon on the 2 side windows, otherwise their
+    // outlines stayed visible after the glass was gone.
+    applyNeon(1, v);
+    applyNeon(2, v);
+    sideMask.offsetX = v.offsetX;
+    sideMask.offsetY = v.offsetY;
+    sideMask.scale = v.scale;
+    applyWindowTransform(1);
+    applyWindowTransform(2);
   });
-  gridObj.onValuesChange((v) => {
-    gridState.color.setRGB(v.color.r, v.color.g, v.color.b);
-    gridState.baseOpacity = v.baseOpacity;
-    gridState.pulseSpeed = v.pulseSpeed;
-    gridState.pulseWidth = v.pulseWidth;
-    gridState.pulseBright = v.pulseBright;
-    gridState.nodeBaseOpacity = v.nodeBaseOpacity;
-    gridState.nodePulseBright = v.nodePulseBright;
+
+  /* ---------- star (GLB) ---------- */
+
+  const starObj = sheet.object('Star (GLB)', starProps());
+  starObj.onValuesChange((v) => {
+    starState.scale = v.scale;
+    starState.emiColor.setRGB(v.emissiveColor.r, v.emissiveColor.g, v.emissiveColor.b);
+    starState.emiInt = v.emissiveIntensity;
+    starState.opacity = v.opacity;
+    starState.glowSize = v.glowSize;
+    starState.glowInt = v.glowIntensity;
+    starPos.x = v.posX;
+    starPos.y = v.posY;
+    starPos.z = v.posZ;
+    starGroup.position.set(v.posX, v.posY, v.posZ);
+    glow.position.set(v.posX, v.posY, v.posZ - 0.2);
+    starState.matcapZoomMin = v.matcapZoom.min;
+    starState.matcapZoomMax = v.matcapZoom.max;
+    starState.matcapRot.set(v.matcapRot.x, v.matcapRot.y, v.matcapRot.z);
+    applyStarState();
+    setShatterProgress(v.shatterProgress);
   });
+  // A hot GLB reload must honor whatever shatterProgress the timeline currently holds.
+  onGlbLoaded(() => setShatterProgress(starObj.value.shatterProgress));
 
   /* ---------- alarm lights ---------- */
 
@@ -304,20 +344,41 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     });
   }
 
-  /* ---------- background + logo ---------- */
+  /* ---------- vortex ---------- */
 
-  const bgObj = sheet.object('Star Background', {
-    count: num(1400, 0, 14000),
-    brightness: num(1, 0, 3),
-    drift: num(0.02, 0, 0.4),
-    swingRange: num(0.12, 0, 1),
-  });
-  bgObj.onValuesChange((v) => {
-    buildStars(v.count);
-    starUniforms.uBright.value = v.brightness;
-    starfieldMotion.drift = v.drift;
-    starfieldMotion.swingRange = v.swingRange;
-  });
+  safeObject(
+    'Vortex 1',
+    {
+      pathTrim: t.compound(
+        { trimStart: num(0.0, 0, 1), trimEnd: num(1.0, 0, 1) },
+        { label: 'Path Trim' },
+      ),
+      enabled: num(1, 0, 1),
+      scale: num(1, 0.2, 4),
+      radius: num(VTX_RADIUS_DEFAULT, 1, 40),
+      taperStart: num(1.0, 0.02, 3),
+      taperEnd: num(1.0, 0.02, 3),
+      colorCore: t.rgba({ r: 0.851, g: 1.0, b: 1.0, a: 1 }),
+      colorMid: t.rgba({ r: 0.12, g: 0.851, b: 0.878, a: 1 }),
+      colorEdge: t.rgba({ r: 0.5, g: 0.278, b: 0.9, a: 1 }),
+      speed: num(0.6, 0, 4),
+      swirl: num(0.8, -12, 12),
+      noiseScale: num(3.0, 0.5, 6),
+      turbulence: num(0.8, 0, 2),
+      glow: num(1.6, 0.3, 4),
+      detail: num(1.0, 0.5, 6),
+      fill: num(0.15, 0, 1.5),
+      exitGlow: num(0.25, 0, 2),
+    },
+    (o) =>
+      o.onValuesChange((v) => {
+        vortexUniforms.uTrimStart.value = Math.min(v.pathTrim.trimStart, v.pathTrim.trimEnd);
+        vortexUniforms.uTrimEnd.value = Math.max(v.pathTrim.trimStart, v.pathTrim.trimEnd);
+        applyVortexLook(v);
+      }),
+  );
+
+  /* ---------- logo ---------- */
 
   safeObject(
     'Logo EVA',
@@ -332,55 +393,6 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     },
     (o) => o.onValuesChange(applyEvaLogo),
   );
-
-  /* ---------- star (GLB) ---------- */
-
-  const starObj = sheet.object('Star (GLB)', starProps());
-  starObj.onValuesChange((v) => {
-    starState.scale = v.scale;
-    starState.emiColor.setRGB(v.emissiveColor.r, v.emissiveColor.g, v.emissiveColor.b);
-    starState.emiInt = v.emissiveIntensity;
-    starState.opacity = v.opacity;
-    starState.glowSize = v.glowSize;
-    starState.glowInt = v.glowIntensity;
-    starPos.x = v.posX;
-    starPos.y = v.posY;
-    starPos.z = v.posZ;
-    starGroup.position.set(v.posX, v.posY, v.posZ);
-    glow.position.set(v.posX, v.posY, v.posZ - 0.2);
-    starState.matcapZoomMin = v.matcapZoom.min;
-    starState.matcapZoomMax = v.matcapZoom.max;
-    starState.matcapRot.set(v.matcapRot.x, v.matcapRot.y, v.matcapRot.z);
-    applyStarState();
-    setShatterProgress(v.shatterProgress);
-  });
-  // A hot GLB reload must honor whatever shatterProgress the timeline currently holds.
-  onGlbLoaded(() => setShatterProgress(starObj.value.shatterProgress));
-
-  /* ---------- post + parallax ---------- */
-
-  const bloomObj = sheet.object('Bloom', {
-    strength: num(0.4, 0, 3),
-    radius: num(0.5, 0, 2),
-    threshold: num(0.4, 0, 1),
-  });
-
-  // num(0/1) instead of t.boolean: this avoids depending on a types API that may not
-  // exist as-is in every bundle version. If t.boolean threw here the whole script would
-  // stop BEFORE reaching the render loop — the real cause of an old black-screen bug.
-  safeObject('Parallax', { enabled: num(1, 0, 1), intensity: num(1, 0, 3) }, (o) =>
-    o.onValuesChange((v) => {
-      parallax.enabled = v.enabled >= 0.5;
-      parallax.intensity = v.intensity;
-      setParallaxButton(parallax.enabled);
-    }),
-  );
-
-  bloomObj.onValuesChange((v) => {
-    bloom.strength = v.strength;
-    bloom.radius = v.radius;
-    bloom.threshold = v.threshold;
-  });
 
   return { camObj, starObj };
 }

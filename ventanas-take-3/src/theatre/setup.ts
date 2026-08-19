@@ -22,7 +22,7 @@ export const num = (v: number, a: number, b: number) => t.number(v, { range: [a,
  * then appear to do nothing. Bump this on every theatre-state_*.json swap; that retires
  * the old entry and lets the imported keyframes actually take effect.
  */
-const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v17';
+const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v23';
 
 let sheetRef: ISheet | null = null;
 let playing = false;

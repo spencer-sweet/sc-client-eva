@@ -129,7 +129,7 @@ export function applyWindowTransform(i: WindowIndex): void {
   rebuildWall();
 }
 
-/** Push a Theatre "Windows"/"Center Window (glass)" payload onto one window's neon. */
+/** Push a Theatre "Side Windows"/"Center Window (glass)" payload onto one window's neon. */
 export function applyNeon(
   i: WindowIndex,
   v: {
