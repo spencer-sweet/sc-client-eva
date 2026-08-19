@@ -26,6 +26,7 @@ import {
   setMatcapAnisotropy,
   updateMatcapZoom,
   updateStarAnimation,
+  updateStarHover,
 } from './scene/star-glb';
 import { starGroup, starfieldMotion, starUniforms } from './scene/starfield';
 import {
@@ -220,6 +221,11 @@ function tick(): void {
 
   if (orbitState.active) orbitState.controls?.update();
   tickScroll(dt, sheet);
+  // After tickScroll: a sequence move fires the Theatre bindings, and those rewrite
+  // every shard transform via setShatterProgress. The hover has to be the last word.
+  // Unconditional: the shards run with matrixAutoUpdate off, so skipping a frame would
+  // leave their matrices stale rather than merely un-hovered.
+  updateStarHover(time);
   renderFrame();
   statsEnd();
   reportFrameTime(performance.now() - frameStart);

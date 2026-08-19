@@ -140,6 +140,10 @@ export const starState = {
   matcapZoomMin: 0.85,
   matcapZoomMax: 2.8,
   matcapRot: new THREE.Vector3(0, 0, 0),
+  /** Idle-hover drift amplitude, in the model's local units (its radius is ~2.6). */
+  hoverAmount: 0.06,
+  /** Idle-hover cycles per second-ish. Low values read as floating, high as jitter. */
+  hoverSpeed: 0.24,
 };
 
 let glbRoot: THREE.Object3D | null = null;
@@ -191,6 +195,108 @@ export function onGlbLoaded(fn: () => void): void {
 
 export function updateStarAnimation(dt: number): void {
   mixer?.update(dt);
+}
+
+/* ---------- idle hover: drift + rotate, layered ON TOP of the shatter clip ---------- */
+
+/**
+ * Radians of wobble per unit of drift. Tuned so the default `hoverAmount` (0.08 local
+ * units, ~3% of the model radius) pairs with roughly 5° of rotation — enough to catch
+ * the matcap and read as "alive" without looking like the shard is tumbling.
+ */
+const HOVER_SPIN_PER_UNIT = 1.2;
+
+interface Shard {
+  mesh: THREE.Object3D;
+  /** Per-shard phase + frequency, so 56 fragments never bob in unison. */
+  phase: THREE.Vector3;
+  freq: THREE.Vector3;
+  axis: THREE.Vector3;
+  spinPhase: number;
+  spinFreq: number;
+}
+
+const shards: Shard[] = [];
+const hoverPos = new THREE.Vector3();
+const hoverQuat = new THREE.Quaternion();
+const spinQuat = new THREE.Quaternion();
+
+/** Stable seeded random: a reload always gives every shard the same wobble. */
+function hoverRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x1_0000_0000;
+  };
+}
+
+function collectShards(root: THREE.Object3D): void {
+  shards.length = 0;
+  const rand = hoverRandom(0x51a2d3e7);
+  root.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh) return;
+    // The hover composes this matrix by hand every frame (see updateStarHover), so
+    // three must not recompose it from position/quaternion/scale and wipe the offset.
+    o.matrixAutoUpdate = false;
+    const axis = new THREE.Vector3(rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1);
+    if (axis.lengthSq() < 1e-6) axis.set(0, 1, 0);
+    shards.push({
+      mesh: o,
+      phase: new THREE.Vector3(rand(), rand(), rand()).multiplyScalar(Math.PI * 2),
+      // Irrational-ish spread keeps the three axes from re-syncing into a straight line.
+      freq: new THREE.Vector3(0.7 + rand() * 0.6, 0.9 + rand() * 0.7, 0.6 + rand() * 0.5),
+      axis: axis.normalize(),
+      spinPhase: rand() * Math.PI * 2,
+      spinFreq: 0.5 + rand() * 0.6,
+    });
+  });
+}
+
+/**
+ * Add a second level of displacement on top of wherever the shatter clip has each
+ * shard at the current timeline position.
+ *
+ * The offset is applied when COMPOSING the shard's matrix — `position`/`quaternion`/
+ * `scale` are left untouched and stay owned entirely by the AnimationMixer. That
+ * separation is the whole design:
+ *
+ * An earlier version wrote the offset into `mesh.position` and tried to rewind it each
+ * frame by restoring a cached rest pose and re-running `mixer.update(0)`. It does not
+ * work, because `PropertyMixer.apply()` compares its own frame-interleaved accumulators
+ * — what the mixer last COMPUTED — and skips `binding.setValue()` when they match. It
+ * has no idea the object was clobbered behind its back, so on a paused timeline (values
+ * unchanged frame to frame) it never re-wrote the clip pose, and the shards ended up
+ * hovering around their REST pose rather than their shattered one.
+ *
+ * Driven by the render clock rather than the timeline, so the shards keep breathing
+ * while the sequence sits paused. `hoverAmount` is the only gate: how far into the clip
+ * the shards separate is content, not something this code should guess at.
+ *
+ * Must run AFTER anything that can rewrite shard transforms — the mixer, and
+ * `setShatterProgress` via a Theatre value change during the scroll tick. It also must
+ * run EVERY frame, since matrixAutoUpdate is off: see the call site in main.ts.
+ */
+export function updateStarHover(time: number): void {
+  const drift = starState.hoverAmount;
+  const t = time * starState.hoverSpeed;
+  const spin = drift * HOVER_SPIN_PER_UNIT;
+  for (const s of shards) {
+    const mesh = s.mesh;
+    if (drift <= 0) {
+      // Still hand three a correctly composed matrix — matrixAutoUpdate is off.
+      mesh.matrix.compose(mesh.position, mesh.quaternion, mesh.scale);
+    } else {
+      hoverPos.set(
+        mesh.position.x + Math.sin(t * s.freq.x + s.phase.x) * drift,
+        mesh.position.y + Math.sin(t * s.freq.y + s.phase.y) * drift,
+        mesh.position.z + Math.sin(t * s.freq.z + s.phase.z) * drift,
+      );
+      spinQuat.setFromAxisAngle(s.axis, Math.sin(t * s.spinFreq + s.spinPhase) * spin);
+      hoverQuat.copy(mesh.quaternion).multiply(spinQuat);
+      mesh.matrix.compose(hoverPos, hoverQuat, mesh.scale);
+    }
+    mesh.matrixWorldNeedsUpdate = true;
+  }
 }
 
 /** Magnify Crystal-2 with camera dolly so the lighting doesn't look glued in view space. */
@@ -253,6 +359,7 @@ function parseGlb(buf: ArrayBuffer): void {
       });
       starGroup.add(glbRoot);
       applyStarState();
+      collectShards(glbRoot);
 
       mixer = null;
       action = null;

@@ -124,6 +124,14 @@ const starProps = () => ({
     z: num(0, -Math.PI, Math.PI),
   },
   shatterProgress: num(0, 0, 1),
+  /**
+   * Idle hover: once the shatter has played out, every shard keeps drifting and
+   * turning slightly. Driven by the render clock, not the sequence, so the motion
+   * continues while the timeline sits paused. Amount fades in with shatterProgress,
+   * so an intact star never jitters.
+   */
+  hoverAmount: num(0.06, 0, 0.5),
+  hoverSpeed: num(0.24, 0, 3),
 });
 
 export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindings {
@@ -314,6 +322,8 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     starState.matcapZoomMin = v.matcapZoom.min;
     starState.matcapZoomMax = v.matcapZoom.max;
     starState.matcapRot.set(v.matcapRot.x, v.matcapRot.y, v.matcapRot.z);
+    starState.hoverAmount = v.hoverAmount;
+    starState.hoverSpeed = v.hoverSpeed;
     applyStarState();
     setShatterProgress(v.shatterProgress);
   });
