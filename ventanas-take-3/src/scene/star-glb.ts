@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GLB_URL, MATCAP_URL } from '../assets';
 import { bail } from '../core/bail';
-import { scene } from '../core/stage';
+import { camera, scene } from '../core/stage';
 import { winCentersW } from '../windows/geometry';
 
 const centerW = winCentersW[0];
@@ -55,8 +55,38 @@ export const starPos = { x: centerW[0], y: centerW[1], z: 3.0 };
 const CLEAR_GLASS_CENTER_ALPHA = 0.28;
 const CLEAR_GLASS_RIM_POWER = 2.0;
 
+/** Wide-shot distance camera→star; matcap zoom is 1 here and grows as we dolly in. */
+const MATCAP_REF_DIST = 12;
+const matcapZoom = { value: 1 };
+const matcapRot = { value: new THREE.Vector3(0, 0, 0) };
+
 function addMatcapGlassAlpha(material: THREE.MeshMatcapMaterial): void {
   material.onBeforeCompile = (shader) => {
+    shader.uniforms.uMatcapZoom = matcapZoom;
+    shader.uniforms.uMatcapRot = matcapRot;
+    shader.fragmentShader =
+      'uniform float uMatcapZoom;\nuniform vec3 uMatcapRot;\n' + shader.fragmentShader;
+
+    const uvLine =
+      'vec2 uv = vec2( dot( x, normal ), dot( y, normal ) ) * 0.495 + 0.5;';
+    if (shader.fragmentShader.includes(uvLine)) {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        uvLine,
+        `vec3 matN = normal;
+         float cx = cos(uMatcapRot.x), sx = sin(uMatcapRot.x);
+         matN = vec3(matN.x, cx * matN.y - sx * matN.z, sx * matN.y + cx * matN.z);
+         float cy = cos(uMatcapRot.y), sy = sin(uMatcapRot.y);
+         matN = vec3(cy * matN.x + sy * matN.z, matN.y, -sy * matN.x + cy * matN.z);
+         float cz = cos(uMatcapRot.z), sz = sin(uMatcapRot.z);
+         matN = vec3(cz * matN.x - sz * matN.y, sz * matN.x + cz * matN.y, matN.z);
+         vec2 uv = vec2( dot( x, matN ), dot( y, matN ) ) * 0.495 + 0.5;
+         vec2 matcapUv = 0.5 + (uv - 0.5) / max(uMatcapZoom, 0.08);`,
+      );
+      shader.fragmentShader = shader.fragmentShader
+        .replace('texture2D( matcap, uv )', 'texture2D( matcap, matcapUv )')
+        .replace('texture( matcap, uv )', 'texture( matcap, matcapUv )');
+    }
+
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <opaque_fragment>',
       `float glassRim = clamp(length(uv - 0.5) / 0.495, 0.0, 1.0);
@@ -64,11 +94,14 @@ function addMatcapGlassAlpha(material: THREE.MeshMatcapMaterial): void {
        #include <opaque_fragment>`,
     );
   };
+  material.customProgramCacheKey = () => 'matcap-zoom-rot-v1';
   material.needsUpdate = true;
 }
 
 const matcapTex = new THREE.TextureLoader().load(MATCAP_URL);
 matcapTex.colorSpace = THREE.SRGBColorSpace;
+matcapTex.wrapS = THREE.ClampToEdgeWrapping;
+matcapTex.wrapT = THREE.ClampToEdgeWrapping;
 
 /**
  * depthWrite:false is load-bearing — without it overlapping shards occlude each other
@@ -90,6 +123,9 @@ export const starState = {
   opacity: 0.9,
   glowSize: 3.4,
   glowInt: 1.25,
+  matcapZoomMin: 0.85,
+  matcapZoomMax: 2.8,
+  matcapRot: new THREE.Vector3(0, 0, 0),
 };
 
 let glbRoot: THREE.Object3D | null = null;
@@ -109,6 +145,7 @@ export function applyStarState(): void {
   gm.color.copy(starState.emiColor);
   gm.opacity = starState.glowInt * (1 - glowLayerFade);
   glow.scale.setScalar(starState.glowSize);
+  matcapRot.value.copy(starState.matcapRot);
 }
 
 export function setStarGlbLayer(fade: number, render: number): void {
@@ -140,6 +177,18 @@ export function onGlbLoaded(fn: () => void): void {
 
 export function updateStarAnimation(dt: number): void {
   mixer?.update(dt);
+}
+
+/** Magnify Crystal-2 with camera dolly so the lighting doesn't look glued in view space. */
+export function updateMatcapZoom(): void {
+  const dist = camera.position.distanceTo(starGroup.position);
+  const lo = starState.matcapZoomMin;
+  const hi = Math.max(lo, starState.matcapZoomMax);
+  matcapZoom.value = THREE.MathUtils.clamp(
+    Math.pow(MATCAP_REF_DIST / Math.max(dist, 1.5), 0.45),
+    lo,
+    hi,
+  );
 }
 
 /** Start the shatter animation from the beginning. */

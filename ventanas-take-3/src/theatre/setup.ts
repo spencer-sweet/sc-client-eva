@@ -22,7 +22,7 @@ export const num = (v: number, a: number, b: number) => t.number(v, { range: [a,
  * rename) so the committed theatre-state_*.json keyframes actually win instead of
  * flashing once and then being overwritten by empty defaults.
  */
-const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v13';
+const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v15';
 
 let sheetRef: ISheet | null = null;
 let playing = false;

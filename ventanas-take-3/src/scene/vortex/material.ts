@@ -24,9 +24,6 @@ export const vortexUniforms = {
   uSwirl: { value: 0.032 },
   uTrimStart: { value: 0.0 },
   uTrimEnd: { value: 1.0 },
-  uDispAmount: { value: 0.0 },
-  uDispScale: { value: 0.3 },
-  uDispSpeed: { value: 0.15 },
   uRadiusBase: { value: VTX_RADIUS_DEFAULT },
   uTaperStart: { value: 1.0 },
   uTaperEnd: { value: 1.0 },
@@ -40,28 +37,12 @@ export const vortexMat = new THREE.ShaderMaterial({
   depthWrite: false,
   blending: THREE.AdditiveBlending,
   vertexShader: /*glsl*/ `varying vec2 vUv;
-    uniform float uTime, uDispAmount, uDispScale, uDispSpeed, uRadiusBase, uTaperStart, uTaperEnd;
-    float dhash(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,45.164)))*43758.5453123); }
-    float dnoise(vec3 p){
-      vec3 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
-      float n000=dhash(i+vec3(0.0,0.0,0.0)), n100=dhash(i+vec3(1.0,0.0,0.0)), n010=dhash(i+vec3(0.0,1.0,0.0)), n110=dhash(i+vec3(1.0,1.0,0.0));
-      float n001=dhash(i+vec3(0.0,0.0,1.0)), n101=dhash(i+vec3(1.0,0.0,1.0)), n011=dhash(i+vec3(0.0,1.0,1.0)), n111=dhash(i+vec3(1.0,1.0,1.0));
-      return mix(mix(mix(n000,n100,f.x),mix(n010,n110,f.x),f.y), mix(mix(n001,n101,f.x),mix(n011,n111,f.x),f.y), f.z);
-    }
+    uniform float uRadiusBase, uTaperStart, uTaperEnd;
     void main(){
       vUv=uv.yx;
       vec3 pos=position;
-      // taper: different radius at the start (uv.x=0) vs end (uv.x=1) of the path.
-      // TubeGeometry "normal" points radially outward from the axis, so we rebuild the
-      // spine point and re-apply the radius already scaled by the taper.
       float taperMul = mix(uTaperStart, uTaperEnd, uv.x);
       pos += normal * uRadiusBase * (taperMul - 1.0);
-      // "displace": push each vertex along its normal by noise — deforms the tube's real
-      // EXTERIOR shape (true geometry, not a flat shader effect), Spline-style.
-      if(uDispAmount>0.0001){
-        float n=dnoise(pos*uDispScale + vec3(0.0,0.0,uTime*uDispSpeed));
-        pos += normal * ((n-0.5)*2.0*uDispAmount);
-      }
       gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);
     }`,
   fragmentShader: /*glsl*/ `

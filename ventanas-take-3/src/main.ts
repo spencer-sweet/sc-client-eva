@@ -23,6 +23,7 @@ import {
   loadGLBFromBuffer,
   loadInitialStarGlb,
   resetStar,
+  updateMatcapZoom,
   updateStarAnimation,
 } from './scene/star-glb';
 import { starGroup, starfieldMotion, starUniforms } from './scene/starfield';
@@ -152,7 +153,10 @@ function tick(): void {
   // fills more of the screen); farther away, it grows faster.
   gridPulseTime += dt * (GRID_REF_DIST / Math.max(1, camera.position.length()));
 
-  if (isLayerRendered('starGlb')) updateStarAnimation(dt);
+  if (isLayerRendered('starGlb')) {
+    updateStarAnimation(dt);
+    updateMatcapZoom();
+  }
   updateParallax(time);
 
   if (isLayerRendered('starBackground')) {

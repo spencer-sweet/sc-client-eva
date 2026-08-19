@@ -117,10 +117,12 @@ const starProps = () => ({
   opacity: num(0.9, 0.05, 1),
   glowSize: num(3.4, 0.5, 8),
   glowIntensity: num(1.25, 0, 2),
-  transmission: num(0.6, 0, 1),
-  roughness: num(0.12, 0, 1),
-  ior: num(1.45, 1, 2.4),
-  thickness: num(0.6, 0, 3),
+  matcapZoom: { min: num(0.85, 0.2, 4), max: num(2.8, 0.5, 8) },
+  matcapRot: {
+    x: num(0, -Math.PI, Math.PI),
+    y: num(0, -Math.PI, Math.PI),
+    z: num(0, -Math.PI, Math.PI),
+  },
   shatterProgress: num(0, 0, 1),
 });
 
@@ -176,17 +178,6 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
       exitGlow: num(0.25, 0, 2),
     },
     (o) => o.onValuesChange(applyVortexLook),
-  );
-
-  safeObject(
-    'Distortion (Displace)',
-    { amount: num(0, 0, 4), scale: num(0.3, 0.02, 2), speed: num(0.15, -2, 2) },
-    (o) =>
-      o.onValuesChange((v) => {
-        vortexUniforms.uDispAmount.value = v.amount;
-        vortexUniforms.uDispScale.value = v.scale;
-        vortexUniforms.uDispSpeed.value = v.speed;
-      }),
   );
 
   /* ---------- camera ---------- */
@@ -365,8 +356,9 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     starPos.z = v.posZ;
     starGroup.position.set(v.posX, v.posY, v.posZ);
     glow.position.set(v.posX, v.posY, v.posZ - 0.2);
-    // Crystal-2 matcap glass — Physical-only props (transmission/roughness/ior/thickness)
-    // stay on the Theatre object for authoring continuity but do not drive the material.
+    starState.matcapZoomMin = v.matcapZoom.min;
+    starState.matcapZoomMax = v.matcapZoom.max;
+    starState.matcapRot.set(v.matcapRot.x, v.matcapRot.y, v.matcapRot.z);
     applyStarState();
     setShatterProgress(v.shatterProgress);
   });

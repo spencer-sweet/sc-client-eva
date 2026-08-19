@@ -16,12 +16,8 @@
             "glowSize": 3.4,
             "scale": 1.048101265822785,
             "posX": 0.03,
-            "transmission": 0.7531645569620256,
-            "ior": 1.3613924050632906,
             "glowIntensity": 1.25,
-            "emissiveIntensity": 1.6,
-            "thickness": 0,
-            "roughness": 0
+            "emissiveIntensity": 1.6
           },
           "Parallax": {
             "intensity": 1,
@@ -827,11 +823,6 @@
                   }
                 ]
               },
-              "ScE66zt0HN": {
-                "type": "BasicKeyframedTrack",
-                "__debugName": "Star (GLB):[\"transmission\"]",
-                "keyframes": []
-              },
               "JeOJHVt8Ks": {
                 "type": "BasicKeyframedTrack",
                 "__debugName": "Star (GLB):[\"scale\"]",
@@ -1149,27 +1140,11 @@
                     "value": 0.3417721518987343
                   }
                 ]
-              },
-              "chAD4Ya1h9": {
-                "type": "BasicKeyframedTrack",
-                "__debugName": "Star (GLB):[\"roughness\"]",
-                "keyframes": []
-              },
-              "1k6p6YEXct": {
-                "type": "BasicKeyframedTrack",
-                "__debugName": "Star (GLB):[\"ior\"]",
-                "keyframes": []
-              },
-              "NPY8SurIcK": {
-                "type": "BasicKeyframedTrack",
-                "__debugName": "Star (GLB):[\"thickness\"]",
-                "keyframes": []
               }
             },
             "trackIdByPropPath": {
               "[\"shatterProgress\"]": "bqdYkmth7U",
               "[\"opacity\"]": "bL0IlN1oQ9",
-              "[\"transmission\"]": "ScE66zt0HN",
               "[\"scale\"]": "JeOJHVt8Ks",
               "[\"posY\"]": "PyL_BESvY7",
               "[\"emissiveColor\"]": "nzPOiWR-Pr",
@@ -1177,10 +1152,7 @@
               "[\"posZ\"]": "9eIf5OFh2Q",
               "[\"emissiveIntensity\"]": "7p7Wxm6_Cv",
               "[\"glowSize\"]": "wePn3Md7QU",
-              "[\"glowIntensity\"]": "YyB6nBgKT1",
-              "[\"roughness\"]": "chAD4Ya1h9",
-              "[\"ior\"]": "1k6p6YEXct",
-              "[\"thickness\"]": "NPY8SurIcK"
+              "[\"glowIntensity\"]": "YyB6nBgKT1"
             }
           },
           "Fade": {
