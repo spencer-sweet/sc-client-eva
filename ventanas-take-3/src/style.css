@@ -4,4 +4,5 @@
 *{box-sizing:border-box}
 html,body{margin:0;overflow-x:hidden;color:var(--ink);background:#040718;font-family:ui-monospace,Menlo,Consolas,monospace}
 #star-scene{position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:0}
-[data-fs-card]{height:200vh;width:1px}
+/* svh (not vh) so mobile URL-bar show/hide doesn't shift every card's offsetTop mid-scroll */
+[data-fs-card]{height:200svh;width:1px}
