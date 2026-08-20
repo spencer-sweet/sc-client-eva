@@ -2,7 +2,7 @@
  * Public-asset URLs resolved against THIS module's URL — NOT import.meta.env.BASE_URL.
  *
  * BASE_URL is root-relative ("/ventanas-take-3/…"), so a Webflow host page would
- * request https://<webflow-site>/ventanas-take-3/Broken-Jagged-60f_2026-08-18.glb
+ * request https://<webflow-site>/ventanas-take-3/Broken-Jagged-60f_2026-08-20.glb
  * (404). import.meta.url
  * is the CDN script (…/ventanas-take-3/assets/index-*.js) and public assets sit one
  * directory up.
@@ -12,7 +12,7 @@
  * is this file's own path, so "../" only lands on the public root from /src.
  */
 export const GLB_URL = new URL(
-  /* @vite-ignore */ '../Broken-Jagged-60f_2026-08-18.glb',
+  /* @vite-ignore */ '../Broken-Jagged-60f_2026-08-20.glb',
   import.meta.url,
 ).href;
 /**
