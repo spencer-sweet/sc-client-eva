@@ -16,6 +16,12 @@ export const parallax = {
 
 let mouseNX = 0;
 let mouseNY = 0;
+
+/** NDC pointer: x left/right −1..1, y up/down −1..1 (matches Three.js). */
+export function getPointerNdc(): { x: number; y: number } {
+  return { x: mouseNX, y: -mouseNY };
+}
+
 let paraX = 0;
 let paraY = 0;
 

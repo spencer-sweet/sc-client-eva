@@ -88,10 +88,21 @@ export function makeGlass(tint: number, opacity: number): GlassMaterial {
  */
 export const neonLightU = makeLightUniforms();
 
+/**
+ * One neon stroke.
+ *
+ * `softness` picks the cross-section the fragment shader shades across the ribbon's
+ * width: 0 is a solid band with an antialiased edge (the bright filament), 1 is a
+ * gaussian tube (the halo). Shading the profile analytically is what makes the outline
+ * look like glass tubing rather than two flat quads — and it antialiases itself from
+ * `fwidth`, which matters because the composer target has no MSAA and adaptive
+ * resolution can drop the buffer to 55%, where a hard-edged 2px stroke crawls.
+ */
 export function makeNeonMat(
   colorHex: number,
   opacityBase: number,
   widthBase: number,
+  softness: number,
 ): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -101,27 +112,42 @@ export function makeNeonMat(
       uLayerFade: { value: 1.0 },
       uDissolve: { value: 0.0 },
       uWidth: { value: widthBase },
+      uSoftness: { value: softness },
       ...neonLightU,
     },
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
-    vertexShader: /*glsl*/ `attribute vec3 aOffset; uniform float uWidth; varying vec3 vW;
+    vertexShader: /*glsl*/ `attribute vec3 aOffset; attribute float aSide;
+      uniform float uWidth; varying vec3 vW; varying float vSide;
       void main(){
-        // "aOffset" is the stroke's precomputed perpendicular; width stays fully real-time
+        // "aOffset" is the stroke's precomputed mitered perpendicular; width stays fully real-time
         vec3 pos = position + aOffset*uWidth;
+        vSide = aSide;
         vW=(modelMatrix*vec4(pos,1.0)).xyz;
         gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);
       }`,
-    fragmentShader: /*glsl*/ `precision highp float; varying vec3 vW;
-      uniform vec3 uColor; uniform float uOpacityBase,uBright,uLayerFade,uDissolve; uniform vec3 uLightPos[2]; uniform vec3 uLightColI[2];
+    fragmentShader: /*glsl*/ `precision highp float; varying vec3 vW; varying float vSide;
+      uniform vec3 uColor; uniform float uOpacityBase,uBright,uLayerFade,uDissolve,uSoftness; uniform vec3 uLightPos[2]; uniform vec3 uLightColI[2];
       ${LIGHT_TINT_GLSL}
       void main(){
+        float s = clamp(abs(vSide), 0.0, 1.0);
+        // Screen-space width of one "side" unit -> the edge fades over exactly one pixel
+        // whatever the stroke width, the camera distance or the current resolution step.
+        float aa = clamp(fwidth(vSide)*1.5, 0.004, 1.0);
+        float band = 1.0 - smoothstep(1.0-aa, 1.0, s);
+        // The gaussian is still multiplied by "band" so it is cut cleanly at the quad
+        // edge — exp() alone leaves a ~4% step there, which reads as a hard outline.
+        float profile = mix(band, exp(-s*s*3.2)*band, uSoftness);
         // frame/neon "reflects" the alarm light when nearby
         vec3 col=uColor + alarmTint(vW,uLightPos,uLightColI)*1.4;
-        float a=uOpacityBase*uBright*(1.0-uDissolve)*uLayerFade;
-        gl_FragColor=vec4(col*uBright, a);
+        // uBright is applied ONCE. It used to multiply the colour AND the alpha, and
+        // additive blending multiplies the two — so the pulse was really uBright^2 and
+        // its peak (30x) sat far past where ACES flattens out. The visible part of the
+        // curve was the ramp only, which read as a strobe rather than a breath.
+        float a=uOpacityBase*profile*uBright*(1.0-uDissolve)*uLayerFade;
+        gl_FragColor=vec4(col, a);
       }`,
   });
 }

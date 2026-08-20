@@ -249,6 +249,10 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     nodeBaseOpacity: num(0.65, 0, 1),
     nodePulseBright: num(2.4, 0, 8),
     lineWidth: num(0.01, 0.005, 0.4),
+    vignette: num(1, 0, 1),
+    pulseCount: num(4, 0, 21),
+    mouseRadius: num(2.8, 0.1, 14),
+    mousePulse: num(2.2, 0, 8),
   });
   gridObj.onValuesChange((v) => {
     gridState.color.setRGB(v.color.r, v.color.g, v.color.b);
@@ -259,6 +263,10 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     gridState.nodeBaseOpacity = v.nodeBaseOpacity;
     gridState.nodePulseBright = v.nodePulseBright;
     gridState.lineWidth = v.lineWidth;
+    gridState.vignette = v.vignette;
+    gridState.pulseCount = v.pulseCount;
+    gridState.mouseRadius = v.mouseRadius;
+    gridState.mousePulse = v.mousePulse;
   });
 
   /* ---------- windows ---------- */
@@ -292,7 +300,8 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     ...glassProps(),
     offsetX: num(0, -4, 4),
     offsetY: num(0, -4, 4),
-    scale: num(1, 0.3, 2),
+    scaleX: num(1, 0.2, 3),
+    scaleY: num(1, 0.2, 3),
   });
   winObj.onValuesChange((v) => {
     applyGlass(sideGlass, v);
@@ -302,7 +311,8 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     applyNeon(2, v);
     sideMask.offsetX = v.offsetX;
     sideMask.offsetY = v.offsetY;
-    sideMask.scale = v.scale;
+    sideMask.scX = v.scaleX;
+    sideMask.scY = v.scaleY;
     applyWindowTransform(1);
     applyWindowTransform(2);
   });

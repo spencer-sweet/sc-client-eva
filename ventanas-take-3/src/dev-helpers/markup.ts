@@ -4,7 +4,7 @@ export const HELP_HTML =
   '<b>Center window</b>: nearly invisible at rest (clear for the GLB), but reacts to the alarm. Normal glass on the side windows. <b>Trigger:</b> ✦ Activate star (live preview). ' +
   '<b>Star (GLB) → shatterProgress</b>: scrub the exact explosion frame from the timeline. <b>Load another GLB…</b>: pick any .glb from disk to try it in the same spot. ' +
   '<b>Parallax</b>: button or the timeline boolean; moves wall+glass+neon, star, and background at different depths with the mouse. ' +
-  '<b>Masks</b>: <b>Center Window</b> = its own offset/scale; <b>Side Windows</b> = glass + one offset/scale for both sides. ' +
+  '<b>Masks</b>: <b>Center Window</b> = its own offset/scale; <b>Side Windows</b> = glass + one offset/scaleX/scaleY for both sides. ' +
   '<b>Star background → swingRange</b>: limits how far the stars rotate (they used to spin without a cap). ' +
   '<b>Layer Outliner</b>: fade (0 = full, 1 = gone) or set <b>render</b> to 0 to skip drawing/updating that group. Wall/grid fade keyframes live on wall.fade and grid.fade. The grid already clips itself around whatever window positions you set. ' +
   '<b>Vortex 1 / 2</b>: two independent tunnels. Spines are recalled from <b>ventanasVortexPaths</b> in the Theatre JSON (the points in code are only fallbacks). <b>Save Theatre JSON</b> writes both live spines into that field. The <b>Vortex</b> dropdown picks which one ✎ Draw, ± Point, Tension and Reset path apply to — only that one shows its markers. ' +

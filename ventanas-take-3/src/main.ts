@@ -181,6 +181,8 @@ async function boot(): Promise<void> {
    * animations one enormous delta.
    */
   let canvasOnScreen = true;
+  /** Start of the previous rendered frame, for the adaptive-resolution governor. */
+  let prevFrameStart = 0;
   new IntersectionObserver(
     ([entry]) => {
       canvasOnScreen = entry.isIntersecting;
@@ -197,6 +199,7 @@ async function boot(): Promise<void> {
     requestAnimationFrame(tick);
     if (document.hidden || !canvasOnScreen) {
       clock.getDelta();
+      prevFrameStart = 0;
       return;
     }
     const frameStart = performance.now();
@@ -228,7 +231,10 @@ async function boot(): Promise<void> {
     setVortexGizmoVisible(editable);
 
     if (isLayerRendered('grid')) updateGrid(gridPulseTime);
-    if (isLayerRendered('sideWindows') || isLayerRendered('centerWindow')) updateNeonPulse(gridPulseTime);
+    // Plain wall clock, NOT gridPulseTime: the neon pulse is a fixed-tempo breath, so
+    // it must not be re-timed by the camera distance the grid accumulator compensates
+    // for. See updateNeonPulse.
+    if (isLayerRendered('sideWindows') || isLayerRendered('centerWindow')) updateNeonPulse(time);
     if (isLayerRendered('alarm')) updateAlarmLights(time);
 
     if (orbitState.active) orbitState.controls?.update();
@@ -240,7 +246,10 @@ async function boot(): Promise<void> {
     updateStarHover(time);
     renderFrame();
     statsEnd();
-    reportFrameTime(performance.now() - frameStart);
+    // The DELIVERED interval, not this callback's own duration — the scene is
+    // GPU-bound, so its CPU cost says nothing about whether frames are landing.
+    if (prevFrameStart > 0) reportFrameTime(frameStart - prevFrameStart);
+    prevFrameStart = frameStart;
   }
 
   tick();

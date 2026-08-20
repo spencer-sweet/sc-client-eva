@@ -10,7 +10,13 @@ import { centroid, flattenPath, toWorld, type Point2 } from '../geometry/svg-pat
 export const WINDOW_INDICES = [0, 1, 2] as const;
 export type WindowIndex = (typeof WINDOW_INDICES)[number];
 
-const winFlat = CRISP.map((d) => flattenPath(d, 12));
+/**
+ * 12 steps per cubic left the contour at ~145 points, i.e. roughly an 8px chord on a
+ * desktop viewport — enough to see the neon as a polyline where the star tips curve
+ * hardest. This is a one-time cost at import (a few hundred more verts in a 290-tri
+ * ribbon and one extra triangulation pass), so it buys smooth curves for free.
+ */
+const winFlat = CRISP.map((d) => flattenPath(d, 32));
 
 /** World-space center of each window contour. */
 export const winCentersW: Point2[] = winFlat.map((flat) => toWorld(centroid(flat)));

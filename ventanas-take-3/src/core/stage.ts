@@ -15,7 +15,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { quality } from './quality';
 
 export const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x020410);
+scene.background = new THREE.Color(0x040718);
 
 export const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 500);
 camera.position.set(0, 0, 18);
@@ -44,9 +44,22 @@ export interface PostFxState {
  * hitting a slower GPU clock, and only fewer pixels help.
  */
 const RES_STEPS = [1, 0.85, 0.7, 0.55] as const;
-/** Frame-time budget for 30fps, with headroom for the browser's own work. */
-const SLOW_MS = 30;
-const FAST_MS = 18;
+/**
+ * Thresholds on the DELIVERED frame interval, not on CPU time (see reportFrameTime).
+ * 22ms = missing 60fps often enough to judder; 17.5ms = essentially locked to vsync.
+ */
+const SLOW_MS = 22;
+const FAST_MS = 17.5;
+/** Frames per decision window. */
+const WINDOW_FRAMES = 45;
+/**
+ * Asymmetric hysteresis. Stepping down is cheap insurance so it needs one bad window;
+ * stepping back up reallocates every render target, so it waits for sustained headroom.
+ * Without this the governor ping-pongs between two steps on any scene sitting near a
+ * threshold, and the resolution flip is far more visible than the frame it saves.
+ */
+const SLOW_WINDOWS_TO_DROP = 1;
+const FAST_WINDOWS_TO_RAISE = 4;
 
 export interface Renderer {
   renderer: THREE.WebGLRenderer;
@@ -58,7 +71,7 @@ export interface Renderer {
   /** Apply the current postFx flags and draw one frame. */
   renderFrame(): void;
   setPostFx(partial: Partial<PostFxState>): void;
-  /** Feed the last frame's duration (ms) so resolution can adapt. */
+  /** Feed the interval since the previous frame (ms) so resolution can adapt. */
   reportFrameTime(ms: number): void;
 }
 
@@ -144,6 +157,10 @@ export function createRenderer(): Renderer {
   let resStep = 0;
   let sampleSum = 0;
   let sampleCount = 0;
+  let slowRun = 0;
+  let fastRun = 0;
+  /** Frames to ignore after a resize — the reallocation frame is always a spike. */
+  let settleFrames = 0;
 
   function applySize(): void {
     const pr = basePixelRatio * RES_STEPS[resStep];
@@ -153,16 +170,48 @@ export function createRenderer(): Renderer {
     composer.setSize(innerWidth, innerHeight);
     // After composer.setSize, which resets every pass to the full drawing-buffer size.
     bloom.setSize(innerWidth * bloomScale, innerHeight * bloomScale);
+    sampleSum = 0;
+    sampleCount = 0;
+    slowRun = 0;
+    fastRun = 0;
+    settleFrames = 10;
   }
 
+  /**
+   * `ms` is the interval between frame STARTS, i.e. how long the browser actually took
+   * to present. It used to be the main loop's own CPU duration, which is the one number
+   * that cannot see this problem: the scene is GPU-bound, so a device stuck at 30fps
+   * still reported a comfortable ~5ms of JS and the governor never dropped a step. The
+   * interval is what the eye sees, and it goes up whether the stall is CPU, GPU or
+   * compositor.
+   */
   function reportFrameTime(ms: number): void {
-    sampleSum += ms;
-    if (++sampleCount < 30) return;
+    if (settleFrames > 0) {
+      settleFrames--;
+      return;
+    }
+    // A tab regaining focus, a GC pause or a scroll-anchor reflow can hand us a
+    // hundreds-of-ms outlier; clamp so one of those cannot decide a whole window.
+    sampleSum += Math.min(ms, 100);
+    if (++sampleCount < WINDOW_FRAMES) return;
     const avg = sampleSum / sampleCount;
     sampleSum = 0;
     sampleCount = 0;
-    if (avg > SLOW_MS && resStep < RES_STEPS.length - 1) resStep++;
-    else if (avg < FAST_MS && resStep > 0) resStep--;
+
+    if (avg > SLOW_MS) {
+      fastRun = 0;
+      slowRun++;
+    } else if (avg < FAST_MS) {
+      slowRun = 0;
+      fastRun++;
+    } else {
+      slowRun = 0;
+      fastRun = 0;
+      return;
+    }
+
+    if (slowRun >= SLOW_WINDOWS_TO_DROP && resStep < RES_STEPS.length - 1) resStep++;
+    else if (fastRun >= FAST_WINDOWS_TO_RAISE && resStep > 0) resStep--;
     else return;
     applySize();
   }

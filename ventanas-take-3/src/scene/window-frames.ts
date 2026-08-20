@@ -57,10 +57,15 @@ for (const i of WINDOW_INDICES) {
 
   // Live neon (real-width outline) in the same group -> never misaligns from the hole.
   const ribbon = buildRibbonGeometry(crispLocal[i]);
-  const haloWidthBase = 0.1;
-  const coreWidthBase = 0.035;
-  const haloMat = makeNeonMat(0xcea7fc, 0.35, haloWidthBase);
-  const coreMat = makeNeonMat(0xffffff, 0.9, coreWidthBase);
+  // Both strokes are wider and brighter at rest than they used to be, to land on the
+  // same overall presence now that the shader shades a real cross-section: a gaussian
+  // carries roughly half a flat band's energy over the same width, and uBright is
+  // applied once instead of squared. Net effect is a rim that reads the same from a
+  // distance but no longer clips its own peak. See makeNeonMat.
+  const haloWidthBase = 0.3;
+  const coreWidthBase = 0.04;
+  const haloMat = makeNeonMat(0xcea7fc, 0.7, haloWidthBase, 1.0);
+  const coreMat = makeNeonMat(0xffffff, 1.0, coreWidthBase, 0.2);
   const halo = new THREE.Mesh(ribbon, haloMat);
   halo.renderOrder = 3.5;
   halo.frustumCulled = false;
@@ -165,15 +170,25 @@ export function applyNeon(
   if (v.neonPulseSpeed !== undefined) nm.pulseSpeed = v.neonPulseSpeed;
 }
 
+/** 1 / (2 * sigma^2) for the sigma=0.28 pulse, so the hot loop has no pow(). */
+const PULSE_FALLOFF = 1 / (0.28 * 0.28);
+
 /**
  * Gaussian brightness pulse on the neon rims — all windows share phase0 so they
  * flash in sync (same pattern the old grid nodes used, without stagger).
+ *
+ * `time` MUST be a plain monotonic wall clock. It used to be handed the grid's
+ * `gridPulseTime`, an accumulator whose rate is scaled by camera distance so the grid
+ * pulse keeps a constant PERCEIVED speed — which meant every camera dolly in the
+ * timeline frequency-modulated the neon, and every jitter in the scroll-driven camera
+ * showed up as a hitch in the glow. Brightness is a pure function of wall time now, so
+ * an uneven frame does not knock the pulse off its curve.
  */
 export function updateNeonPulse(time: number): void {
   for (const nm of neonMats) {
     const ph = (nm.phase0 + time * nm.pulseSpeed) % 1.0;
-    const bright =
-      1.0 + nm.pulseBright * Math.exp(-Math.pow((ph - 0.5) / 0.28, 2.0));
+    const d = ph - 0.5;
+    const bright = 1.0 + nm.pulseBright * Math.exp(-d * d * PULSE_FALLOFF);
     nm.halo.uniforms.uBright.value = bright;
     nm.core.uniforms.uBright.value = bright;
   }

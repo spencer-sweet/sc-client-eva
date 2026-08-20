@@ -2,7 +2,8 @@
  * Window mask state: where each window sits and how big it is.
  *
  * The center window has its own offset/scale; the two side windows share one set of
- * controls (mirrored on X). This is now purely transform bookkeeping — the actual
+ * controls (mirrored on X, including non-uniform scale). This is now purely transform
+ * bookkeeping — the actual
  * cutout of the wall and the grid is done by the stencil buffer (see ./stencil.ts),
  * which follows the window groups automatically, so nothing here has to be pushed
  * into shaders or re-triangulated.
@@ -16,7 +17,7 @@ export const centerMask = { offX: 0, offY: 0, scX: 1, scY: 1 };
  * Left (1) / right (2) share this. positive offsetX pushes each window OUTWARD
  * (left goes further left, right further right); offsetY moves both the same way.
  */
-export const sideMask = { offsetX: 0, offsetY: 0, scale: 1 };
+export const sideMask = { offsetX: 0, offsetY: 0, scX: 1, scY: 1 };
 
 export interface WindowTransform {
   ox: number;
@@ -33,7 +34,7 @@ export function winTransform(i: WindowIndex): WindowTransform {
   return {
     ox: dirX * sideMask.offsetX,
     oy: sideMask.offsetY,
-    sx: sideMask.scale,
-    sy: sideMask.scale,
+    sx: sideMask.scX,
+    sy: sideMask.scY,
   };
 }
