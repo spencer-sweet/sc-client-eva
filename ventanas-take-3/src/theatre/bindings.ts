@@ -30,6 +30,7 @@ import { buildStars, starfieldMotion, starUniforms } from '../scene/starfield';
 import { setWallColors } from '../scene/wall';
 import { applyVortexLook, getVortex, VORTEX_IDS, VTX_RADIUS_DEFAULT } from '../scene/vortex';
 import { applyLayerOutliner } from '../scene/layer-outliner';
+import { applyTextInfra } from '../webflow-dom';
 import { applyNeon, applyWindowTransform, centerGlass, sideGlass } from '../scene/window-frames';
 import { winCentersW } from '../windows/geometry';
 import { centerMask, sideMask } from '../windows/mask';
@@ -409,6 +410,34 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
       posZ: num(5, -60, 30),
     },
     (o) => o.onValuesChange(applyEvaLogo),
+  );
+
+  /* ---------- Webflow DOM (page copy outside the canvas) ---------- */
+
+  // Controls always exist so they can be keyed on the timeline. applyTextInfra is a
+  // no-op on localhost / *.pages.dev — it only writes CSS on eva-networks-staging
+  // and evanetworks.com, where #text-infra lives in the Webflow page.
+  safeObject(
+    'Webflow DOM',
+    {
+      textInfra: t.compound(
+        {
+          opacity: t.number(1, { range: [0, 1], label: 'Opacity' }),
+          blur: t.number(0, { range: [0, 40], label: 'Blur (px)' }),
+          scale: t.number(1, { range: [0, 4], label: 'Scale' }),
+          translate: t.compound(
+            {
+              x: t.number(0, { range: [-800, 800], label: 'X' }),
+              y: t.number(0, { range: [-800, 800], label: 'Y' }),
+              z: t.number(0, { range: [-800, 800], label: 'Z' }),
+            },
+            { label: 'Translate (px)' },
+          ),
+        },
+        { label: '#text-infra' },
+      ),
+    },
+    (o) => o.onValuesChange((v) => applyTextInfra(v.textInfra)),
   );
 
   return { camObj, starObj };
