@@ -11,7 +11,7 @@
  */
 import { getProject, onChange, types as t } from '@theatre/core';
 import type { ISheet, ISheetObject, UnknownShorthandCompoundProps } from '@theatre/core';
-import theatreState from '../theatre-state/theatre-state_2026-08-20-1738.json';
+import theatreState from '../theatre-state/theatre-state_2026-08-20-1749.json';
 import { bindTheatreStudio } from '../theatre-ui-api';
 
 export const PROJECT_ID = 'Ventanas 3D SVG';
@@ -27,7 +27,7 @@ export const num = (v: number, a: number, b: number) => t.number(v, { range: [a,
  * then appear to do nothing. Bump this on every theatre-state_*.json swap; that retires
  * the old entry and lets the imported keyframes actually take effect.
  */
-const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v33';
+const PERSISTENCE_KEY = 'theatrejs:ventanas-take-3:en-v34';
 
 let sheetRef: ISheet | null = null;
 let playing = false;
