@@ -327,12 +327,14 @@ export interface DevHelpersApi {
     composerEnabled: boolean;
     renderPassEnabled: boolean;
     bloomEnabled: boolean;
+    antialiasEnabled: boolean;
     outputPassEnabled: boolean;
   };
   setPostFx(partial: {
     composerEnabled?: boolean;
     renderPassEnabled?: boolean;
     bloomEnabled?: boolean;
+    antialiasEnabled?: boolean;
     outputPassEnabled?: boolean;
   }): void;
 }
@@ -497,6 +499,7 @@ function wirePostFxPanel(api: DevHelpersApi): void {
     { id: 'postFxComposer', key: 'composerEnabled' },
     { id: 'postFxRenderPass', key: 'renderPassEnabled' },
     { id: 'postFxBloom', key: 'bloomEnabled' },
+    { id: 'postFxSmaa', key: 'antialiasEnabled' },
     { id: 'postFxOutput', key: 'outputPassEnabled' },
   ];
   for (const { id, key } of bindings) {

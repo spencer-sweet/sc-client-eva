@@ -12,6 +12,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { quality } from './quality';
 
 // No scene.background: it would be drawn into the linear render target and then run
@@ -37,6 +38,8 @@ export interface PostFxState {
   composerEnabled: boolean;
   renderPassEnabled: boolean;
   bloomEnabled: boolean;
+  /** SMAA, after bloom and before OutputPass (linear-srgb). */
+  antialiasEnabled: boolean;
   outputPassEnabled: boolean;
 }
 
@@ -69,6 +72,7 @@ export interface Renderer {
   composer: EffectComposer;
   renderPass: RenderPass;
   bloom: UnrealBloomPass;
+  smaa: SMAAPass;
   outputPass: OutputPass;
   postFx: PostFxState;
   /** Apply the current postFx flags and draw one frame. */
@@ -86,12 +90,14 @@ export function createRenderer(): Renderer {
   // antialias is deliberately off: RenderPass draws into the composer's own target, so
   // an MSAA backbuffer would be allocated and never sampled. stencil is required — the
   // window cutouts for the wall and the grid are stencil tests (windows/stencil.ts).
+  // powerPreference is a context-creation hint only: low-power prefers the iGPU / a
+  // cooler clock on phones; high-performance asks for the discrete GPU on desktops.
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: false,
     stencil: true,
     alpha: true,
-    powerPreference: 'high-performance',
+    powerPreference: quality.tier === 'low' ? 'low-power' : 'high-performance',
   });
   renderer.setClearAlpha(0);
   const basePixelRatio = Math.min(devicePixelRatio, quality.pixelRatioCap);
@@ -125,21 +131,26 @@ export function createRenderer(): Renderer {
     0.7,
     0.1,
   );
+  const smaa = new SMAAPass();
   const outputPass = new OutputPass();
   composer.addPass(renderPass);
   composer.addPass(bloom);
+  // SMAA is linear-srgb — it has to run before OutputPass's ACES tone map.
+  composer.addPass(smaa);
   composer.addPass(outputPass);
 
   const postFx: PostFxState = {
     composerEnabled: true,
     renderPassEnabled: true,
     bloomEnabled: true,
+    antialiasEnabled: quality.tier === 'high',
     outputPassEnabled: true,
   };
 
   function applyPassFlags(): void {
     renderPass.enabled = postFx.renderPassEnabled;
     bloom.enabled = postFx.bloomEnabled;
+    smaa.enabled = postFx.antialiasEnabled;
     outputPass.enabled = postFx.outputPassEnabled;
   }
 
@@ -233,6 +244,7 @@ export function createRenderer(): Renderer {
     composer,
     renderPass,
     bloom,
+    smaa,
     outputPass,
     postFx,
     renderFrame,

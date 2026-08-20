@@ -81,6 +81,9 @@ export const BAR_HTML = /*html*/ `
         ><input type="checkbox" id="postFxBloom" checked /> UnrealBloomPass
       </label>
       <label class="barField barCheck"
+        ><input type="checkbox" id="postFxSmaa" /> SMAAPass
+      </label>
+      <label class="barField barCheck"
         ><input type="checkbox" id="postFxOutput" checked /> OutputPass
       </label>
     </div>
