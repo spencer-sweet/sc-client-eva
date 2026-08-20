@@ -14,8 +14,11 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { quality } from './quality';
 
+// No scene.background: it would be drawn into the linear render target and then run
+// through ACESFilmicToneMapping in OutputPass, which crushes a near-black navy like
+// #040718 toward true black. Leaving the canvas transparent lets the CSS body
+// background (style.css) show the untouched color instead.
 export const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x040718);
 
 export const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 500);
 camera.position.set(0, 0, 18);
@@ -87,8 +90,10 @@ export function createRenderer(): Renderer {
     canvas,
     antialias: false,
     stencil: true,
+    alpha: true,
     powerPreference: 'high-performance',
   });
+  renderer.setClearAlpha(0);
   const basePixelRatio = Math.min(devicePixelRatio, quality.pixelRatioCap);
   renderer.setPixelRatio(basePixelRatio);
   renderer.setSize(innerWidth, innerHeight);
