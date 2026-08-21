@@ -9,7 +9,7 @@ import Stats from 'stats.js';
 import css from './dev-helpers.css?inline';
 import { BAR_HTML, HELP_HTML } from './markup';
 import { ensureStarScene } from '../scene-shell';
-import { cardEls, getTimelineT, scrollState, scrollUi } from '../timeline-scroll';
+import { cardEls, getTimelineT, scrollState, scrollUi, type ScrollSourceInput } from '../timeline-scroll';
 import { getTheatreUiMode, onTheatreUiApplied } from '../theatre-ui-api';
 
 const STYLE_ID = 'ventanas-dev-helpers-style';
@@ -122,7 +122,7 @@ function syncSeekControls(t: number): void {
 
 function applyScrollSourceUi(): void {
   const select = byId<HTMLSelectElement>('scrollSourceSelect');
-  if (select && select.value !== scrollState.source) select.value = scrollState.source;
+  if (select && select.value !== scrollState.input) select.value = scrollState.input;
 }
 
 function updateScrollReadout(progress: Map<string, number> | null, t?: number): void {
@@ -147,7 +147,7 @@ function updateScrollReadout(progress: Map<string, number> | null, t?: number): 
   readout.innerHTML =
     rows.join('') +
     '<div class="readoutMeta">source <b>' +
-    scrollState.source +
+    scrollState.input +
     '</b><br>T <b>' +
     target.toFixed(3) +
     '</b></div>';
@@ -170,7 +170,7 @@ function wireTimelinePanel(): void {
   const number = byId<HTMLInputElement>('seekTNumber');
 
   select?.addEventListener('change', () => {
-    window.setScrollSource(select.value as typeof scrollState.source);
+    window.setScrollSource(select.value as ScrollSourceInput);
   });
   if (syncCheckbox) {
     syncCheckbox.checked = scrollState.syncTheatreToScroll;

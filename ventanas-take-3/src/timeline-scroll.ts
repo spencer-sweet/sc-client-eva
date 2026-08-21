@@ -28,9 +28,11 @@ const SCROLL_SOURCE_ALIASES = {
 export type ScrollSourceAlias = keyof typeof SCROLL_SOURCE_ALIASES;
 export type ScrollSourceInput = ScrollSource | ScrollSourceAlias;
 
+const DEFAULT_DAMPING = 4.5;
+
 /** Resolve a canonical source or convenience alias into {source, damping}, or null if unknown. */
-function resolveScrollSource(v: unknown): { source: ScrollSource; damping?: number } | null {
-  if (isScrollSource(v)) return { source: v };
+function resolveScrollSource(v: unknown): { source: ScrollSource; damping: number } | null {
+  if (isScrollSource(v)) return { source: v, damping: DEFAULT_DAMPING };
   if (typeof v === 'string' && v in SCROLL_SOURCE_ALIASES) {
     return SCROLL_SOURCE_ALIASES[v as ScrollSourceAlias];
   }
@@ -50,18 +52,26 @@ function resolveScrollSource(v: unknown): { source: ScrollSource; damping?: numb
  */
 export const SEQUENCE_LENGTH = 200;
 
-export const scrollState: { source: ScrollSource; damping: number; syncTheatreToScroll: boolean } = {
+export const scrollState: {
+  source: ScrollSource;
+  /** What the host / dropdown last asked for (may be an alias). */
+  input: ScrollSourceInput;
+  damping: number;
+  syncTheatreToScroll: boolean;
+} = {
   source: 'sections',
-  damping: 4.5,
+  input: 'sections',
+  damping: DEFAULT_DAMPING,
   syncTheatreToScroll: true,
 };
 
 {
   const qp = new URLSearchParams(location.search).get('scrollSource');
   const resolved = resolveScrollSource(qp);
-  if (resolved) {
+  if (resolved && qp) {
+    scrollState.input = qp as ScrollSourceInput;
     scrollState.source = resolved.source;
-    if (resolved.damping !== undefined) scrollState.damping = resolved.damping;
+    scrollState.damping = resolved.damping;
   }
 }
 
@@ -240,8 +250,9 @@ window.setScrollSource = function setScrollSource(source: ScrollSourceInput): vo
     console.warn('setScrollSource: "' + source + '" must be one of ' + allowed);
     return;
   }
+  scrollState.input = source;
   scrollState.source = resolved.source;
-  if (resolved.damping !== undefined) scrollState.damping = resolved.damping;
+  scrollState.damping = resolved.damping;
   syncScrollListener();
   scrollUi.onSourceChange?.();
 };

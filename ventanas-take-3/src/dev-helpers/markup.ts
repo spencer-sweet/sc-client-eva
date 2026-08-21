@@ -53,6 +53,7 @@ export const BAR_HTML = /*html*/ `
         <select id="scrollSourceSelect">
           <option value="page">page</option>
           <option value="sections" selected>sections</option>
+          <option value="sections-webflow">sections-webflow</option>
           <option value="external">external</option>
         </select>
       </label>
