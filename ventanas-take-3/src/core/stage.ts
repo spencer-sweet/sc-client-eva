@@ -1,7 +1,7 @@
 /**
  * Scene graph + renderer.
  *
- * `scene` / `camera` / `clock` / `nearLayer` are constructed at import time — none
+ * `scene` / `camera` / `timer` / `nearLayer` are constructed at import time — none
  * of them touch the DOM, so scene modules can safely build their objects while the
  * host page is still parsing. Everything that needs the real <canvas> (WebGL
  * context, PMREM environment, post-processing) is deferred to `createRenderer()`,
@@ -25,7 +25,7 @@ export const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 
 camera.position.set(0, 0, 18);
 camera.rotation.order = 'YXZ';
 
-export const clock = new THREE.Clock();
+export const timer = new THREE.Timer();
 
 /**
  * wall + grid + glass + neon live in ONE group so parallax can never misalign them.

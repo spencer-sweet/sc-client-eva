@@ -10,7 +10,7 @@ import * as THREE from 'three';
 
 import { whenBodyReady, ensureStarScene } from './scene-shell';
 import { startTimelineScroll, tickScroll, useThreeClamp } from './timeline-scroll';
-import { camera, clock, createRenderer } from './core/stage';
+import { camera, timer, createRenderer } from './core/stage';
 // Type-only: erased at build time, so it does not pull the Dev UI back into the bundle.
 import type { DevHelpersApi } from './dev-helpers';
 import { createOrbit, orbitState, setOrbiting } from './interaction/camera-orbit';
@@ -191,21 +191,22 @@ async function boot(): Promise<void> {
   ).observe(renderer.domElement);
 
   document.addEventListener('visibilitychange', () => {
-    // Skipped frames leave getDelta() holding the whole pause; drop it on resume.
-    if (!document.hidden) clock.getDelta();
+    // Skipped frames leave the pending delta holding the whole pause; drop it on resume.
+    if (!document.hidden) timer.update();
   });
 
   function tick(): void {
     requestAnimationFrame(tick);
     if (document.hidden || !canvasOnScreen) {
-      clock.getDelta();
+      timer.update();
       prevFrameStart = 0;
       return;
     }
     const frameStart = performance.now();
     statsBegin();
-    const dt = clock.getDelta();
-    const time = clock.elapsedTime;
+    timer.update(frameStart);
+    const dt = timer.getDelta();
+    const time = timer.getElapsed();
 
     // The grid pulse advances at a constant PERCEIVED speed: closer to the wall than the
     // reference distance, the accumulator grows slower (up close the same physical speed
