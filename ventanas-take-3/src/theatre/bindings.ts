@@ -395,45 +395,49 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     exitGlow: num(0.25, 0, 2),
   });
 
-  for (const id of VORTEX_IDS) {
+  const onVortexChange = (id: (typeof VORTEX_IDS)[number]) => {
     const uniforms = getVortex(id).uniforms;
-    const transform =
-      id === 2
-        ? {
-            translate: t.compound(
-              {
-                x: num(0, -80, 80),
-                y: num(0, -80, 80),
-                z: num(0, -80, 80),
-              },
-              { label: 'Translate' },
-            ),
-            rotation: t.compound(
-              {
-                x: num(0, -Math.PI, Math.PI),
-                y: num(0, -Math.PI, Math.PI),
-                z: num(0, -Math.PI, Math.PI),
-              },
-              { label: 'Rotation' },
-            ),
-            scaleXYZ: t.compound(
-              {
-                x: num(1, 0.05, 8),
-                y: num(1, 0.05, 8),
-                z: num(1, 0.05, 8),
-              },
-              { label: 'Scale' },
-            ),
-          }
-        : {};
-    safeObject('Vortex ' + id, { ...vortexProps(), ...transform }, (o) =>
-      o.onValuesChange((v) => {
-        uniforms.uTrimStart.value = Math.min(v.pathTrim.trimStart, v.pathTrim.trimEnd);
-        uniforms.uTrimEnd.value = Math.max(v.pathTrim.trimStart, v.pathTrim.trimEnd);
-        applyVortexLook(id, v);
-      }),
-    );
-  }
+    return (v: {
+      pathTrim: { trimStart: number; trimEnd: number };
+    } & import('../scene/vortex').VortexLook) => {
+      uniforms.uTrimStart.value = Math.min(v.pathTrim.trimStart, v.pathTrim.trimEnd);
+      uniforms.uTrimEnd.value = Math.max(v.pathTrim.trimStart, v.pathTrim.trimEnd);
+      applyVortexLook(id, v);
+    };
+  };
+
+  safeObject('Vortex 1', vortexProps(), (o) => o.onValuesChange(onVortexChange(1)));
+  safeObject(
+    'Vortex 2',
+    {
+      ...vortexProps(),
+      translate: t.compound(
+        {
+          x: num(0, -80, 80),
+          y: num(0, -80, 80),
+          z: num(0, -80, 80),
+        },
+        { label: 'Translate' },
+      ),
+      rotation: t.compound(
+        {
+          x: num(0, -Math.PI, Math.PI),
+          y: num(0, -Math.PI, Math.PI),
+          z: num(0, -Math.PI, Math.PI),
+        },
+        { label: 'Rotation' },
+      ),
+      scaleXYZ: t.compound(
+        {
+          x: num(1, 0.05, 8),
+          y: num(1, 0.05, 8),
+          z: num(1, 0.05, 8),
+        },
+        { label: 'Scale' },
+      ),
+    },
+    (o) => o.onValuesChange(onVortexChange(2)),
+  );
 
   /* ---------- logo ---------- */
 
