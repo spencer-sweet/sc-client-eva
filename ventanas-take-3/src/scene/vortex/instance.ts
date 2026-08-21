@@ -61,6 +61,10 @@ export interface VortexLook {
   detail: number;
   fill: number;
   exitGlow: number;
+  translate?: { x: number; y: number; z: number };
+  rotation?: { x: number; y: number; z: number };
+  /** Per-axis scale (Vortex 2). Multiplies the uniform `scale`. */
+  scaleXYZ?: { x: number; y: number; z: number };
 }
 
 export interface VortexInstance {
@@ -112,10 +116,10 @@ export function createVortexInstance(
   const exitGlowSprite = new THREE.Sprite(exitGlowMat);
   exitGlowSprite.scale.set(6, 6, 1);
   exitGlowSprite.renderOrder = 0.05;
-  scene.add(exitGlowSprite);
 
   const group = new THREE.Group();
   scene.add(group);
+  group.add(exitGlowSprite);
 
   let radius = VTX_RADIUS_DEFAULT;
 
@@ -161,7 +165,15 @@ export function createVortexInstance(
       enabled = v.enabled >= 0.5;
       lastExitGlow = v.exitGlow;
       mesh.visible = enabled && layerRender;
-      group.scale.setScalar(v.scale);
+      const tx = v.translate?.x ?? 0;
+      const ty = v.translate?.y ?? 0;
+      const tz = v.translate?.z ?? 0;
+      group.position.set(tx, ty, tz);
+      group.rotation.set(v.rotation?.x ?? 0, v.rotation?.y ?? 0, v.rotation?.z ?? 0, 'YXZ');
+      const ax = v.scaleXYZ?.x ?? 1;
+      const ay = v.scaleXYZ?.y ?? 1;
+      const az = v.scaleXYZ?.z ?? 1;
+      group.scale.set(v.scale * ax, v.scale * ay, v.scale * az);
       if (v.radius !== radius) {
         radius = v.radius;
         inst.rebuildTube();
