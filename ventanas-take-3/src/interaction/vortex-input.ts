@@ -25,6 +25,11 @@ let gizmo: TransformControls | null = null;
 let drawing = false;
 let stroke: THREE.Vector2[] = [];
 
+/** Where a non-draw pointerdown started, so pointerup can tell a click from an orbit drag. */
+let pointerDownAt: THREE.Vector2 | null = null;
+/** Past this NDC distance, a pointerdown→up pair is a drag (orbiting the camera), not a click. */
+const CLICK_MOVE_THRESHOLD = 0.01;
+
 const ray = new THREE.Raycaster();
 const ndc = (ev: PointerEvent) =>
   new THREE.Vector2((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
@@ -62,8 +67,21 @@ export function installVortexInput(domElement: HTMLElement): void {
       ev.preventDefault();
       return;
     }
-    if (orbitState.active || gizmo?.dragging) return;
-    ray.setFromCamera(ndc(ev), camera);
+    // Orbiting stays a candidate click until pointerup proves it was a drag — see below.
+    // That lets markers stay pickable while orbit mode is on, instead of blocking every
+    // click just because a drag *could* start.
+    pointerDownAt = ndc(ev);
+  });
+
+  domElement.addEventListener('pointerup', (ev) => {
+    if (isVortexDrawMode()) return;
+    const down = pointerDownAt;
+    pointerDownAt = null;
+    if (!down || gizmo?.dragging) return;
+    const up = ndc(ev);
+    // Moved past the threshold: this was an orbit drag, not a click on a marker.
+    if (Math.hypot(up.x - down.x, up.y - down.y) > CLICK_MOVE_THRESHOLD) return;
+    ray.setFromCamera(up, camera);
     // Only the active vortex's markers are pickable — see setActiveVortexId.
     const hit = ray.intersectObjects(activeVortexMarkers(), false)[0];
     // Click a path point to select it; click empty space to deselect.
