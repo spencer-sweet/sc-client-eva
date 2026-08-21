@@ -427,7 +427,10 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
   // Controls always exist so they can be keyed on the timeline. applyWebflowDom is a
   // no-op on localhost / *.pages.dev — it only writes CSS on eva-networks-staging
   // and evanetworks.com, where these ids live in the Webflow page.
-  const webflowLayer = (label: string) =>
+  const webflowLayer = (
+    label: string,
+    translate: { unit: 'px' | '%'; x?: number; y?: number; z?: number } = { unit: 'px' },
+  ) =>
     t.compound(
       {
         opacity: t.number(1, { range: [0, 1], label: 'Opacity' }),
@@ -435,11 +438,12 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
         scale: t.number(1, { range: [0, 4], label: 'Scale' }),
         translate: t.compound(
           {
-            x: t.number(0, { range: [-800, 800], label: 'X' }),
-            y: t.number(0, { range: [-800, 800], label: 'Y' }),
-            z: t.number(0, { range: [-800, 800], label: 'Z' }),
+            unit: t.stringLiteral(translate.unit, { px: 'px', '%': '%' }, { as: 'switch', label: 'Unit' }),
+            x: t.number(translate.x ?? 0, { range: [-800, 800], label: 'X' }),
+            y: t.number(translate.y ?? 0, { range: [-800, 800], label: 'Y' }),
+            z: t.number(translate.z ?? 0, { range: [-800, 800], label: 'Z' }),
           },
-          { label: 'Translate (px)' },
+          { label: 'Translate' },
         ),
       },
       { label },
@@ -449,7 +453,7 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     'Webflow DOM',
     {
       textInfra: webflowLayer('#text-infra'),
-      indicatorScroll: webflowLayer('#indicator-scroll'),
+      indicatorScroll: webflowLayer('#indicator-scroll', { unit: '%', x: -50 }),
     },
     (o) => o.onValuesChange(applyWebflowDom),
   );

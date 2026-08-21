@@ -22,7 +22,13 @@ export interface WebflowLayerStyle {
   blur: number;
   /** CSS `transform: scale()`. */
   scale: number;
-  translate: { x: number; y: number; z: number };
+  translate: {
+    /** `'px'` or `'%'` for X/Y. Z is always px (percent is invalid on translateZ). */
+    unit: 'px' | '%';
+    x: number;
+    y: number;
+    z: number;
+  };
 }
 
 /** `undefined` = not looked up yet; then cached (including `null` if missing). */
@@ -51,8 +57,9 @@ function applyLayer(id: string, v: WebflowLayerStyle): void {
   el.style.opacity = String(v.opacity);
   const px = Math.max(0, v.blur);
   el.style.filter = px > 0.001 ? `blur(${px}px)` : 'none';
-  const { x, y, z } = v.translate;
-  el.style.transform = `translate3d(${x}px, ${y}px, ${z}px) scale(${v.scale})`;
+  const { unit, x, y, z } = v.translate;
+  const u = unit === '%' ? '%' : 'px';
+  el.style.transform = `translate3d(${x}${u}, ${y}${u}, ${z}px) scale(${v.scale})`;
 }
 
 /** Push opacity + blur + transform onto Webflow layers when embedded on EVA. */
