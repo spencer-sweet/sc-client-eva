@@ -101,6 +101,83 @@ fi
 if [ -d "$ROOT/assets" ]; then
   echo "==> Copying assets"
   cp -r "$ROOT/assets" "$DIST/assets"
+  rm -f "$DIST/assets/.DS_Store"
+
+  echo "==> Generating asset browser"
+  generate_asset_index() {
+    local dir="$1"
+    local rel="$2" # path relative to dist root, e.g. "assets" or "assets/star-shatter"
+
+    {
+      cat <<HTML
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>/$rel/</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      background: #000;
+      color: #33ff33;
+      min-height: 100vh;
+      padding: 2rem;
+      text-shadow: 0 0 6px rgba(51, 255, 51, 0.5);
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.25) 0px, rgba(0, 0, 0, 0.25) 1px, transparent 1px, transparent 3px);
+    }
+    .line { margin: 0.35rem 0; }
+    .prompt { color: #1aff8c; }
+    .dim { color: #1c8f1c; }
+    a {
+      color: #33ff33;
+      text-decoration: none;
+      display: inline-block;
+      padding: 0.15rem 0;
+    }
+    a::before { content: "> "; color: #1c8f1c; }
+    a:hover, a:focus {
+      background: #33ff33;
+      color: #000;
+      text-shadow: none;
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="line"><span class="prompt">visitor@demos:~$</span> ls /$rel/</div>
+HTML
+      if [ "$rel" != "assets" ]; then
+        echo '  <div class="line"><a href="../">.. (parent)</a></div>'
+      fi
+      find "$dir" -mindepth 1 -maxdepth 1 -type d ! -name ".*" | sort | while IFS= read -r sub; do
+        name="$(basename "$sub")"
+        printf '  <div class="line"><a href="%s/">%s/</a></div>\n' "$name" "$name"
+      done
+      find "$dir" -mindepth 1 -maxdepth 1 -type f ! -name ".*" ! -name "index.html" | sort | while IFS= read -r f; do
+        name="$(basename "$f")"
+        ext="${name##*.}"
+        size="$(du -h "$f" | cut -f1 | tr -d ' \t')"
+        printf '  <div class="line"><a href="%s">%s</a> <span class="dim">[%s, %s]</span></div>\n' "$name" "$name" "$ext" "$size"
+      done
+      cat <<'HTML'
+</body>
+</html>
+HTML
+    } > "$dir/index.html"
+  }
+
+  find "$DIST/assets" -type d | while IFS= read -r d; do
+    rel="assets${d#"$DIST/assets"}"
+    generate_asset_index "$d" "$rel"
+  done
 fi
 
 echo "==> Generating root index"
