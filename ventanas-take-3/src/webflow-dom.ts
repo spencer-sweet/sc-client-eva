@@ -16,7 +16,7 @@ export function isEvaWebflowHost(): boolean {
   return ON_WEBFLOW;
 }
 
-export interface TextInfraStyle {
+export interface WebflowLayerStyle {
   opacity: number;
   /** CSS `filter: blur(Xpx)`. */
   blur: number;
@@ -26,31 +26,40 @@ export interface TextInfraStyle {
 }
 
 /** `undefined` = not looked up yet; then cached (including `null` if missing). */
-let textInfra: HTMLElement | null | undefined;
-let warnedMissing = false;
+const els = new Map<string, HTMLElement | null>();
+const warned = new Set<string>();
 
 /**
- * Resolve `#text-infra` once. Safe after `whenBodyReady()` — the entry module is
- * deferred, so the Webflow page HTML (including this id) is already parsed.
+ * Resolve an id once. Safe after `whenBodyReady()` — the entry module is
+ * deferred, so the Webflow page HTML is already parsed.
  */
-function resolveTextInfra(): HTMLElement | null {
-  if (textInfra !== undefined) return textInfra;
-  textInfra = document.getElementById('text-infra');
-  if (!textInfra && !warnedMissing) {
-    warnedMissing = true;
-    console.warn('[webflow-dom] #text-infra not found on', location.hostname);
+function resolveEl(id: string): HTMLElement | null {
+  if (els.has(id)) return els.get(id)!;
+  const el = document.getElementById(id);
+  els.set(id, el);
+  if (!el && !warned.has(id)) {
+    warned.add(id);
+    console.warn('[webflow-dom] #' + id + ' not found on', location.hostname);
   }
-  return textInfra;
+  return el;
 }
 
-/** Push opacity + blur onto `#text-infra` when embedded on the EVA Webflow site. */
-export function applyTextInfra(v: TextInfraStyle): void {
+function applyLayer(id: string, v: WebflowLayerStyle): void {
   if (!ON_WEBFLOW) return;
-  const el = resolveTextInfra();
+  const el = resolveEl(id);
   if (!el) return;
   el.style.opacity = String(v.opacity);
   const px = Math.max(0, v.blur);
   el.style.filter = px > 0.001 ? `blur(${px}px)` : 'none';
   const { x, y, z } = v.translate;
   el.style.transform = `translate3d(${x}px, ${y}px, ${z}px) scale(${v.scale})`;
+}
+
+/** Push opacity + blur + transform onto Webflow layers when embedded on EVA. */
+export function applyWebflowDom(v: {
+  textInfra: WebflowLayerStyle;
+  indicatorScroll: WebflowLayerStyle;
+}): void {
+  applyLayer('text-infra', v.textInfra);
+  applyLayer('indicator-scroll', v.indicatorScroll);
 }

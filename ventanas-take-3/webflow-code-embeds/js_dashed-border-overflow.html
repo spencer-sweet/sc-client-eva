@@ -1,0 +1,159 @@
+<script>
+document.addEventListener(`DOMContentLoaded`, function () {
+	// corner configs: where each line anchors and which way its fade points
+	const cornerConfig = new Map();
+	cornerConfig.set(`top-left`, {
+		h: { side: `right`, edge: `top`, maskDir: `to left` },
+		v: { side: `bottom`, edge: `left`, maskDir: `to top` }
+	});
+	cornerConfig.set(`top-right`, {
+		h: { side: `left`, edge: `top`, maskDir: `to right` },
+		v: { side: `bottom`, edge: `right`, maskDir: `to top` }
+	});
+	cornerConfig.set(`bottom-left`, {
+		h: { side: `right`, edge: `bottom`, maskDir: `to left` },
+		v: { side: `top`, edge: `left`, maskDir: `to bottom` }
+	});
+	cornerConfig.set(`bottom-right`, {
+		h: { side: `left`, edge: `bottom`, maskDir: `to right` },
+		v: { side: `top`, edge: `right`, maskDir: `to bottom` }
+	});
+
+	const defaultColor = `var(--brand--blue-light-stroke, #2f3551)`;
+
+	// root font-size in px, used to convert measured px values into rem
+	const rootFontSize = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+
+	function pxToRem(px) {
+		return px / rootFontSize;
+	}
+
+	// line thickness as a true single device pixel, expressed in rem so it
+	// stays crisp even when the page uses a non-16px rem base (e.g. 62.5%)
+	const lineThicknessRem = pxToRem(1);
+
+	// inject the shared stylesheet once (dash-march keyframes + base line rules)
+	if (!document.getElementById(`fx-corner-lines-style`)) {
+		const style = document.createElement(`style`);
+		style.id = `fx-corner-lines-style`;
+		style.textContent = `
+			.fx-corner-line {
+				position: absolute;
+				top: auto;
+				right: auto;
+				bottom: auto;
+				left: auto;
+				pointer-events: none;
+				background-repeat: repeat;
+			}
+			.fx-corner-line--h {
+				background-image: repeating-linear-gradient(to right, currentColor 0 0.375rem, transparent 0.375rem 0.75rem);
+				background-size: 200% 100%;
+				animation: fx-dash-march-h 1.1s linear infinite;
+			}
+			.fx-corner-line--v {
+				background-image: repeating-linear-gradient(to bottom, currentColor 0 0.375rem, transparent 0.375rem 0.75rem);
+				background-size: 100% 200%;
+				animation: fx-dash-march-v 1.1s linear infinite;
+			}
+			@keyframes fx-dash-march-h {
+				from { background-position: 0 0; }
+				to { background-position: -1.5rem 0; }
+			}
+			@keyframes fx-dash-march-v {
+				from { background-position: 0 0; }
+				to { background-position: 0 -1.5rem; }
+			}
+		`;
+		document.head.appendChild(style);
+	}
+
+	// read the target's real border widths (converted to rem) so lines can be
+	// pushed out to the true outer edge instead of the padding box
+	function getBorderMap(target) {
+		const cs = window.getComputedStyle(target);
+		const borderMap = new Map();
+		borderMap.set(`top`, pxToRem(parseFloat(cs.borderTopWidth) || 0));
+		borderMap.set(`right`, pxToRem(parseFloat(cs.borderRightWidth) || 0));
+		borderMap.set(`bottom`, pxToRem(parseFloat(cs.borderBottomWidth) || 0));
+		borderMap.set(`left`, pxToRem(parseFloat(cs.borderLeftWidth) || 0));
+		return borderMap;
+	}
+
+	// build the two dash lines for one target element at one corner
+	function buildCornerLines(target, cornerName, length, color, borderMap, offsetRem) {
+		const config = cornerConfig.get(cornerName);
+		if (!config) {
+			console.warn(`fx-corner-lines: unrecognized corner "${cornerName}" on`, target);
+			return;
+		}
+
+		// a line only flows outward by default when it extends left/up;
+		// lines extending right/down need the animation reversed to still
+		// read as flowing away from the element
+		const hReverse = config.h.side === `left`;
+		const vReverse = config.v.side === `top`;
+
+		// horizontal line: sits on the h.edge, extends off the h.side
+		const hLine = document.createElement(`div`);
+		hLine.className = `fx-corner-line fx-corner-line--h`;
+		hLine.style.width = length;
+		hLine.style.height = `${lineThicknessRem}rem`;
+		hLine.style[config.h.edge] = `${-1 * (borderMap.get(config.h.edge) + offsetRem)}rem`;
+		hLine.style[config.h.side] = `calc(100% + ${borderMap.get(config.h.side) + offsetRem}rem)`;
+		hLine.style.maskImage = `linear-gradient(${config.h.maskDir}, black 0%, transparent 100%)`;
+		hLine.style.webkitMaskImage = hLine.style.maskImage;
+		hLine.style.color = color;
+		if (hReverse) {
+			hLine.style.animationDirection = `reverse`;
+		}
+		target.appendChild(hLine);
+
+		// vertical line: sits on the v.edge, extends off the v.side
+		const vLine = document.createElement(`div`);
+		vLine.className = `fx-corner-line fx-corner-line--v`;
+		vLine.style.height = length;
+		vLine.style.width = `${lineThicknessRem}rem`;
+		vLine.style[config.v.edge] = `${-1 * (borderMap.get(config.v.edge) + offsetRem)}rem`;
+		vLine.style[config.v.side] = `calc(100% + ${borderMap.get(config.v.side) + offsetRem}rem)`;
+		vLine.style.maskImage = `linear-gradient(${config.v.maskDir}, black 0%, transparent 100%)`;
+		vLine.style.webkitMaskImage = vLine.style.maskImage;
+		vLine.style.color = color;
+		if (vReverse) {
+			vLine.style.animationDirection = `reverse`;
+		}
+		target.appendChild(vLine);
+	}
+
+	// find every opted-in element and build lines for each of its listed corners
+	// (converted to a real array and walked with an indexed loop — a for...in
+	// over a NodeList/array can misfire if another script on the page has
+	// added enumerable properties to Array.prototype or NodeList.prototype)
+	const targets = Array.from(document.querySelectorAll(`[data-fx-corner-lines]`));
+	console.log(`fx-corner-lines: found ${targets.length} target element(s)`);
+
+	for (let i = 0; i < targets.length; i++) {
+		const target = targets[i];
+		const length = target.getAttribute(`data-fx-length`) || `12rem`;
+		const color = target.getAttribute(`data-fx-color`) || defaultColor;
+		const offsetPx = parseFloat(target.getAttribute(`data-fx-offset`)) || 0;
+		const offsetRem = pxToRem(offsetPx);
+
+		// the element needs a positioning context for the absolute lines
+		const computedPosition = window.getComputedStyle(target).position;
+		if (computedPosition === `static`) {
+			target.style.position = `relative`;
+		}
+
+		const borderMap = getBorderMap(target);
+
+		// split on commas so one element can carry multiple corners, e.g.
+		// data-fx-corner-lines="top-left,top-right,bottom-right,bottom-left"
+		const corners = target.getAttribute(`data-fx-corner-lines`).split(`,`);
+		for (let j = 0; j < corners.length; j++) {
+			const cornerName = corners[j].trim();
+			buildCornerLines(target, cornerName, length, color, borderMap, offsetRem);
+		}
+	}
+});
+</script>

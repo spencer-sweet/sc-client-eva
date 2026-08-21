@@ -30,6 +30,7 @@ export function setOrbiting(on: boolean): void {
   if (!controls) return;
   orbitState.active = on;
   controls.enabled = on;
+  document.documentElement.classList.toggle('is-orbiting', on);
   if (on) {
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     controls.target.copy(camera.position).add(forward.multiplyScalar(18));
