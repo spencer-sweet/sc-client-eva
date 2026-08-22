@@ -18,8 +18,8 @@ export function isEvaWebflowHost(): boolean {
 
 export interface WebflowLayerStyle {
   opacity: number;
-  /** CSS `filter: blur(Xpx)`. */
-  blur: number;
+  /** CSS `filter: blur(Xpx)`. Omitted for layers that leave filter alone (e.g. #how-*). */
+  blur?: number;
   /** CSS `transform: scale()`. */
   scale: number;
   translate: {
@@ -55,8 +55,10 @@ function applyLayer(id: string, v: WebflowLayerStyle): void {
   const el = resolveEl(id);
   if (!el) return;
   el.style.opacity = String(v.opacity);
-  const px = Math.max(0, v.blur);
-  el.style.filter = px > 0.001 ? `blur(${px}px)` : 'none';
+  if (v.blur !== undefined) {
+    const px = Math.max(0, v.blur);
+    el.style.filter = px > 0.001 ? `blur(${px}px)` : 'none';
+  }
   const { unit, x, y, z } = v.translate;
   const u = unit === '%' ? '%' : 'px';
   el.style.transform = `translate3d(${x}${u}, ${y}${u}, ${z}px) scale(${v.scale})`;

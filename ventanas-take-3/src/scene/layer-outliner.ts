@@ -1,7 +1,7 @@
 /**
  * Theatre "Layer Outliner": fade (look) + render (draw/update) per visual group.
  *
- * fade=0 is full strength; render=0 skips the GPU draw and matching per-frame work.
+ * fade=0 is full strength; render Off skips the GPU draw and matching per-frame work.
  */
 import { setAlarmLayer } from './alarm-lights';
 import { setLogoLayer } from './eva-logo';
@@ -28,7 +28,8 @@ export type LayerId =
 
 export interface LayerPair {
   fade: number;
-  render: number;
+  /** Theatre switch — was a 0/1 number; still accept that from old saved state. */
+  render: 'on' | 'off' | number;
 }
 
 const rendered: Record<LayerId, boolean> = {
@@ -50,8 +51,14 @@ export function isLayerRendered(id: LayerId): boolean {
   return rendered[id];
 }
 
-function remember(id: LayerId, render: number): void {
-  rendered[id] = render >= 0.5;
+function renderFlag(render: LayerPair['render']): number {
+  if (render === 'on') return 1;
+  if (render === 'off') return 0;
+  return render >= 0.5 ? 1 : 0;
+}
+
+function remember(id: LayerId, render: LayerPair['render']): void {
+  rendered[id] = renderFlag(render) >= 0.5;
 }
 
 export function applyLayerOutliner(v: {
@@ -68,40 +75,35 @@ export function applyLayerOutliner(v: {
   logo: LayerPair;
   alarm: LayerPair;
 }): void {
-  remember('wall', v.wall.render);
-  setWallLayer(v.wall.fade, v.wall.render);
+  const apply = (id: LayerId, pair: LayerPair, set: (fade: number, render: number) => void) => {
+    const r = renderFlag(pair.render);
+    remember(id, pair.render);
+    set(pair.fade, r);
+  };
 
-  remember('grid', v.grid.render);
-  setGridLayer(v.grid.fade, v.grid.render);
+  apply('wall', v.wall, setWallLayer);
+  apply('grid', v.grid, setGridLayer);
 
   remember('sideWindows', v.sideWindows.render);
-  setWindowLayer(1, v.sideWindows.fade, v.sideWindows.render);
-  setWindowLayer(2, v.sideWindows.fade, v.sideWindows.render);
+  {
+    const r = renderFlag(v.sideWindows.render);
+    setWindowLayer(1, v.sideWindows.fade, r);
+    setWindowLayer(2, v.sideWindows.fade, r);
+  }
 
   remember('centerWindow', v.centerWindow.render);
-  setWindowLayer(0, v.centerWindow.fade, v.centerWindow.render);
+  setWindowLayer(0, v.centerWindow.fade, renderFlag(v.centerWindow.render));
 
-  remember('starGlb', v.starGlb.render);
-  setStarGlbLayer(v.starGlb.fade, v.starGlb.render);
-
-  remember('starGlow', v.starGlow.render);
-  setStarGlowLayer(v.starGlow.fade, v.starGlow.render);
-
-  remember('starBackground', v.starBackground.render);
-  setStarfieldLayer(v.starBackground.fade, v.starBackground.render);
+  apply('starGlb', v.starGlb, setStarGlbLayer);
+  apply('starGlow', v.starGlow, setStarGlowLayer);
+  apply('starBackground', v.starBackground, setStarfieldLayer);
 
   remember('vortex', v.vortex.render);
-  setVortexLayer(1, v.vortex.fade, v.vortex.render);
-
+  setVortexLayer(1, v.vortex.fade, renderFlag(v.vortex.render));
   remember('vortex2', v.vortex2.render);
-  setVortexLayer(2, v.vortex2.fade, v.vortex2.render);
+  setVortexLayer(2, v.vortex2.fade, renderFlag(v.vortex2.render));
 
-  remember('vortexHelpers', v.vortexHelpers.render);
-  setVortexHelpersLayer(v.vortexHelpers.fade, v.vortexHelpers.render);
-
-  remember('logo', v.logo.render);
-  setLogoLayer(v.logo.fade, v.logo.render);
-
-  remember('alarm', v.alarm.render);
-  setAlarmLayer(v.alarm.fade, v.alarm.render);
+  apply('vortexHelpers', v.vortexHelpers, setVortexHelpersLayer);
+  apply('logo', v.logo, setLogoLayer);
+  apply('alarm', v.alarm, setAlarmLayer);
 }

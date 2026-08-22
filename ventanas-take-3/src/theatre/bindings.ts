@@ -138,7 +138,10 @@ const starProps = () => ({
 export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindings {
   /* ---------- layer outliner ---------- */
 
-  const layerPair = () => ({ fade: num(0, 0, 1), render: num(1, 0, 1) });
+  const layerPair = () => ({
+    fade: num(0, 0, 1),
+    render: t.stringLiteral('on', { on: 'On', off: 'Off' }, { as: 'switch', label: 'Render' }),
+  });
   safeObject(
     'Layer Outliner',
     {
@@ -155,7 +158,10 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
       logo: layerPair(),
       alarm: layerPair(),
     },
-    (o) => o.onValuesChange(applyLayerOutliner),
+    (o) =>
+      o.onValuesChange((v) =>
+        applyLayerOutliner(v as Parameters<typeof applyLayerOutliner>[0]),
+      ),
   );
 
   /* ---------- scene general (bloom + parallax) ---------- */
@@ -460,40 +466,54 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
   // Controls always exist so they can be keyed on the timeline. applyWebflowDom is a
   // no-op on localhost / *.pages.dev — it only writes CSS on eva-networks-staging
   // and evanetworks.com, where these ids live in the Webflow page.
-  const webflowLayer = (
-    label: string,
+  const webflowTranslate = (
     translate: { unit: 'px' | '%'; x?: number; y?: number; z?: number } = { unit: 'px' },
   ) =>
     t.compound(
       {
-        opacity: t.number(1, { range: [0, 1], label: 'Opacity' }),
-        blur: t.number(0, { range: [0, 40], label: 'Blur (px)' }),
-        scale: t.number(1, { range: [0, 4], label: 'Scale' }),
-        translate: t.compound(
-          {
-            unit: t.stringLiteral(translate.unit, { px: 'px', '%': '%' }, { as: 'switch', label: 'Unit' }),
-            x: t.number(translate.x ?? 0, { range: [-800, 800], label: 'X' }),
-            y: t.number(translate.y ?? 0, { range: [-800, 800], label: 'Y' }),
-            z: t.number(translate.z ?? 0, { range: [-800, 800], label: 'Z' }),
-          },
-          { label: 'Translate' },
-        ),
+        unit: t.stringLiteral(translate.unit, { px: 'px', '%': '%' }, { as: 'switch', label: 'Unit' }),
+        x: t.number(translate.x ?? 0, { range: [-800, 800], label: 'X' }),
+        y: t.number(translate.y ?? 0, { range: [-800, 800], label: 'Y' }),
+        z: t.number(translate.z ?? 0, { range: [-800, 800], label: 'Z' }),
       },
+      { label: 'Translate' },
+    );
+
+  const webflowLayer = (
+    label: string,
+    opts: {
+      translate?: { unit: 'px' | '%'; x?: number; y?: number; z?: number };
+      /** When false, omit Blur — Webflow keeps ownership of filter (e.g. #how-*). Default true. */
+      blur?: boolean;
+    } = {},
+  ) => {
+    const base = {
+      opacity: t.number(1, { range: [0, 1], label: 'Opacity' }),
+      scale: t.number(1, { range: [0, 4], label: 'Scale' }),
+      translate: webflowTranslate(opts.translate ?? { unit: 'px' }),
+    };
+    if (opts.blur === false) return t.compound(base, { label });
+    return t.compound(
+      { ...base, blur: t.number(0, { range: [0, 40], label: 'Blur (px)' }) },
       { label },
     );
+  };
 
   safeObject(
     'Webflow DOM',
     {
       textInfra: webflowLayer('#text-infra'),
-      indicatorScroll: webflowLayer('#indicator-scroll', { unit: '%', x: -50 }),
-      how1: webflowLayer('#how-1'),
-      how2: webflowLayer('#how-2'),
-      how3: webflowLayer('#how-3'),
-      how4: webflowLayer('#how-4'),
-      how5: webflowLayer('#how-5'),
+      indicatorScroll: webflowLayer('#indicator-scroll', { translate: { unit: '%', x: -50 } }),
+      how1: webflowLayer('#how-1', { blur: false }),
+      how2: webflowLayer('#how-2', { blur: false }),
+      how3: webflowLayer('#how-3', { blur: false }),
+      how4: webflowLayer('#how-4', { blur: false }),
+      how5: webflowLayer('#how-5', { blur: false }),
     },
-    (o) => o.onValuesChange(applyWebflowDom),
+    (o) =>
+      o.onValuesChange((v) =>
+        applyWebflowDom(v as Parameters<typeof applyWebflowDom>[0]),
+      ),
   );
 
   return { camObj, starObj };
