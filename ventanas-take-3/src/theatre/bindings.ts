@@ -487,6 +487,11 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     {
       textInfra: webflowLayer('#text-infra'),
       indicatorScroll: webflowLayer('#indicator-scroll', { unit: '%', x: -50 }),
+      how1: webflowLayer('#how-1'),
+      how2: webflowLayer('#how-2'),
+      how3: webflowLayer('#how-3'),
+      how4: webflowLayer('#how-4'),
+      how5: webflowLayer('#how-5'),
     },
     (o) => o.onValuesChange(applyWebflowDom),
   );

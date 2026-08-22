@@ -66,7 +66,17 @@ function applyLayer(id: string, v: WebflowLayerStyle): void {
 export function applyWebflowDom(v: {
   textInfra: WebflowLayerStyle;
   indicatorScroll: WebflowLayerStyle;
+  how1: WebflowLayerStyle;
+  how2: WebflowLayerStyle;
+  how3: WebflowLayerStyle;
+  how4: WebflowLayerStyle;
+  how5: WebflowLayerStyle;
 }): void {
   applyLayer('text-infra', v.textInfra);
   applyLayer('indicator-scroll', v.indicatorScroll);
+  applyLayer('how-1', v.how1);
+  applyLayer('how-2', v.how2);
+  applyLayer('how-3', v.how3);
+  applyLayer('how-4', v.how4);
+  applyLayer('how-5', v.how5);
 }
