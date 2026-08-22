@@ -17,10 +17,7 @@ export function isEvaWebflowHost(): boolean {
 }
 
 export interface WebflowLayerStyle {
-  /**
-   * 0..1. Applied as CSS `opacity` for most layers, but as the `--card-fade`
-   * custom property for `fade: 'card'` layers — see FadeMode.
-   */
+  /** 0..1. Applied as CSS `opacity`, or as `--card-fade` for 'card' layers. */
   opacity: number;
   /** CSS `filter: blur(Xpx)`. Omitted for layers that leave filter alone (e.g. #how-*). */
   blur?: number;
@@ -36,54 +33,22 @@ export interface WebflowLayerStyle {
 }
 
 /**
- * How a layer's 0..1 fade value reaches CSS.
+ * How a layer's 0..1 fade reaches CSS.
  *
- * `'opacity'` is the obvious one and is right for ordinary copy.
- *
- * `'card'` writes a `--card-fade` custom property instead, and exists for one
- * specific reason: the #how-* cards contain an element with `backdrop-filter`
- * (`.how_card`, blurring the WebGL canvas behind it). Per CSS Filter Effects 2 an
- * element with `opacity < 1` becomes a **Backdrop Root**, and a backdrop-filter can
- * only sample pixels painted INSIDE its backdrop root. The canvas is `position: fixed`
- * in a completely different subtree, so the instant we wrote `opacity: 0.999` onto a
- * card wrapper there was nothing left behind the card to blur — the frosted panel went
- * flat. Worse, Chromium keeps the promoted layer after the tween lands back on exactly
- * 1, so the blur stayed dead until something forced a re-composite (resizing the
- * window was the usual accidental cure).
- *
- * Measured on the staging page, stripe contrast through a card over a striped
- * backdrop (~2 = blurred, >150 = blur dead):
- *
- *   wrapper opacity: 1                ->    2   blur alive
- *   wrapper opacity: 0.999            ->  166   blur dead
- *   card's own opacity: 0.99          ->  167   blur dead
- *   wrapper will-change: opacity      ->  166   blur dead (opacity still exactly 1)
- *   DESCENDANT opacity: 0.4           ->    2   blur alive
- *
- * A custom property promotes nothing, so the Webflow CSS fades the card by driving
- * alpha and blur radius off `--card-fade` instead:
- *
- *   .how_card {
- *     background-color: rgb(from var(--brand--blue-dark) r g b / calc(.4 * var(--card-fade, 1)));
- *     border-color:     rgb(from var(--brand--blue-light-stroke) r g b / var(--card-fade, 1));
- *     backdrop-filter:  blur(calc(.5rem * var(--card-fade, 1)));
- *   }
- *   .how_card > * { opacity: var(--card-fade, 1); }
- *
- * The children keep plain `opacity` — a descendant cannot form a backdrop root for
- * its own ancestor, so that is safe and covers the texts and the image in one rule.
+ * `'card'` writes a `--card-fade` custom property instead of `opacity`, because the
+ * #how-* cards contain a `backdrop-filter` panel. Any `opacity < 1` on an ancestor
+ * makes it a Backdrop Root, and a backdrop-filter can only sample inside its backdrop
+ * root — the canvas is `position: fixed` elsewhere, so the frost went flat and stayed
+ * flat (Chromium keeps the layer even back at opacity 1; a window resize was the cure).
+ * Descendant opacity is fine, so the Webflow CSS fades children that way and drives the
+ * panel's alpha + blur radius off the same property. See css_how-card-fade.html.
  */
 type FadeMode = 'opacity' | 'card';
 
 /**
- * At or below this the layer is invisible, so it is taken out of painting entirely
- * with `visibility: hidden`.
- *
- * This is not just tidiness. `backdrop-filter: blur(0px)` is still a backdrop-filter:
- * the compositor allocates and resolves a pass for it every frame, on an element
- * covering a good part of the screen, whether or not the result is visible. Five cards
- * spend most of the timeline faded out, so skipping them is most of their cost gone.
- * `visibility` (not `display`) so nothing reflows and Webflow's layout is untouched.
+ * Below this the layer is taken out of painting. `backdrop-filter: blur(0px)` is still
+ * a full compositor pass on a large element, and the cards are faded out for most of
+ * the timeline. `visibility`, not `display`, so nothing reflows.
  */
 const HIDE_AT = 0.001;
 
@@ -107,14 +72,9 @@ function resolveEl(id: string): HTMLElement | null {
 }
 
 /**
- * Does the page's CSS actually respond to `--card-fade`?
- *
- * The custom property only does anything if the Webflow stylesheet has been updated to
- * consume it. If it has not, writing `--card-fade` would silently do nothing and the
- * cards would sit at full strength for the whole timeline — a much louder bug than the
- * one it fixes. So probe once per card: drive the property to both ends and see whether
- * the card's computed backdrop-filter moves. Two forced style recalcs per card, once,
- * at first apply.
+ * Does the stylesheet actually consume `--card-fade`? If it does not, writing the
+ * property would silently do nothing and the cards would never fade at all — worse than
+ * the bug it fixes. Drive it to both ends once and see if the card's blur moves.
  */
 function detectCardFadeSupport(wrap: HTMLElement): boolean {
   const card = wrap.querySelector<HTMLElement>('.how_card');
@@ -129,7 +89,6 @@ function detectCardFadeSupport(wrap: HTMLElement): boolean {
   return at0 !== at1;
 }
 
-/** Resolved once per id on first apply: 'card' downgrades to 'opacity' if unsupported. */
 const fadeModes = new Map<string, FadeMode>();
 
 function resolveFadeMode(id: string, el: HTMLElement, wanted: FadeMode): FadeMode {
@@ -139,9 +98,8 @@ function resolveFadeMode(id: string, el: HTMLElement, wanted: FadeMode): FadeMod
   if (wanted === 'card' && !detectCardFadeSupport(el)) {
     mode = 'opacity';
     console.warn(
-      '[webflow-dom] #' + id + ' has no --card-fade CSS; falling back to opacity. ' +
-        'The card will animate but its backdrop-filter will drop out mid-fade — ' +
-        'add the --card-fade rules to the Webflow stylesheet (see FadeMode).',
+      '[webflow-dom] #' + id + ' has no --card-fade CSS; using opacity, so its ' +
+        'backdrop-filter will drop out mid-fade. Add css_how-card-fade.html in Webflow.',
     );
   }
   fadeModes.set(id, mode);
@@ -149,11 +107,9 @@ function resolveFadeMode(id: string, el: HTMLElement, wanted: FadeMode): FadeMod
 }
 
 /**
- * Last values actually WRITTEN to each element.
- *
- * Theatre fires onValuesChange on every sequence move, so without this a scrolled frame
- * rewrites five elements' styles whether or not anything changed. Style writes are not
- * free — and for these layers each one can retrigger compositing.
+ * Last values actually written. Theatre fires onValuesChange on every sequence move, so
+ * without diffing a scrolled frame restyles five elements whether or not anything
+ * changed — and each write can retrigger compositing.
  */
 interface LayerWrite {
   hidden: boolean;
@@ -171,13 +127,13 @@ function applyLayer(id: string, v: WebflowLayerStyle, wanted: FadeMode = 'opacit
   const prev = lastWrite.get(id);
 
   const fade = Math.min(1, Math.max(0, v.opacity));
-  const hidden = fade <= HIDE_AT;
+  const blur = v.blur === undefined ? undefined : Math.max(0, v.blur);
 
-  if (hidden) {
+  if (fade <= HIDE_AT) {
     if (!prev?.hidden) {
       el.style.visibility = 'hidden';
-      // Forget everything else: nothing was written while hidden, so the next visible
-      // frame has to write the whole style back rather than diff against stale values.
+      // Nothing else is written while hidden, so drop the cache: the next visible frame
+      // must rewrite in full rather than diff against values it never applied.
       lastWrite.set(id, { hidden: true });
     }
     return;
@@ -188,10 +144,8 @@ function applyLayer(id: string, v: WebflowLayerStyle, wanted: FadeMode = 'opacit
     if (mode === 'card') el.style.setProperty('--card-fade', String(fade));
     else el.style.opacity = String(fade);
   }
-
-  if (v.blur !== undefined) {
-    const px = Math.max(0, v.blur);
-    if (prev?.blur !== px) el.style.filter = px > 0.001 ? `blur(${px}px)` : 'none';
+  if (blur !== undefined && prev?.blur !== blur) {
+    el.style.filter = blur > 0.001 ? `blur(${blur}px)` : 'none';
   }
 
   const { unit, x, y, z } = v.translate;
@@ -199,7 +153,7 @@ function applyLayer(id: string, v: WebflowLayerStyle, wanted: FadeMode = 'opacit
   const transform = `translate3d(${x}${u}, ${y}${u}, ${z}px) scale(${v.scale})`;
   if (prev?.transform !== transform) el.style.transform = transform;
 
-  lastWrite.set(id, { hidden: false, fade, blur: v.blur === undefined ? undefined : Math.max(0, v.blur), transform });
+  lastWrite.set(id, { hidden: false, fade, blur, transform });
 }
 
 /** Push fade + blur + transform onto Webflow layers when embedded on EVA. */

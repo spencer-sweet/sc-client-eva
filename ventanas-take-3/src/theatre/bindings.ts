@@ -485,13 +485,7 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
       translate?: { unit: 'px' | '%'; x?: number; y?: number; z?: number };
       /** When false, omit Blur — Webflow keeps ownership of filter (e.g. #how-*). Default true. */
       blur?: boolean;
-      /**
-       * Label for the 0..1 fade knob. The PROP KEY stays `opacity` whatever this says —
-       * renaming it would orphan every keyframe in theatre-state. The #how-* cards call
-       * it "Fade" because their value is written as a `--card-fade` custom property
-       * rather than CSS opacity, which would kill the card's backdrop-filter (see
-       * FadeMode in webflow-dom.ts).
-       */
+      /** Label only — the prop KEY stays `opacity` or every keyframe is orphaned. */
       fadeLabel?: string;
     } = {},
   ) => {
