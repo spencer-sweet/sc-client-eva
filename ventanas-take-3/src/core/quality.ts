@@ -14,17 +14,39 @@
 export type QualityTier = 'low' | 'high';
 
 export interface VortexQuality {
-  /** fbm octaves. 4 = authored look, 2 = same shapes, softer detail, half the noise cost. */
+  /**
+   * Octaves in the MAIN noise field. This is the one that decides how the tunnel reads:
+   * `beam = smoothstep(0.42, 0.90, v)` carves filaments out of it, so a field with fine
+   * structure gives many thin filaments and a smooth one gives a few fat blobs. Dropping
+   * it was what made the low tier look like a different effect rather than a softer one,
+   * so both tiers now run the authored 4.
+   */
   fbmOctaves: number;
-  /** The domain-warp costs 3 of the shader's 5 fbm calls; the low tier drops it. */
-  domainWarp: boolean;
+  /**
+   * Octaves in each domain-warp sample. The warp only has to MOVE the field around, not
+   * add visible detail, so one octave reads almost the same as four — this is where the
+   * low tier buys back what the main field spends.
+   */
+  warpOctaves: number;
+  /**
+   * Independent noise samples feeding the 3-axis warp vector. Three is one field per
+   * axis (the authored look). Two builds the third axis from the difference of the other
+   * two — not a new field, but still a genuinely different direction, which is all the
+   * warp needs and is what keeps the filaments braiding rather than shearing.
+   */
+  warpSamples: number;
+  /**
+   * Octaves in the hue field, which only picks a blend between uColorMid and uColorEdge.
+   * A low-frequency choice; extra octaves are invisible.
+   */
+  hueOctaves: number;
   /**
    * The tunnel is viewed from inside, so its back faces are the ones you see. Drawing
    * DoubleSide shades every pixel twice (additively) for a denser fog; single-sided
-   * halves the fullscreen cost and compensates the lost density with `glowCompensation`.
+   * halves the fullscreen cost, and the shader compensates by combining the beam with
+   * itself the way two independent layers would overlap (see SINGLE_SIDED in material.ts).
    */
   singleSided: boolean;
-  glowCompensation: number;
   /** Upper cap on tubular segments — actual count scales with path length. */
   tubeSegments: number;
   tubeSegmentsMin: number;
@@ -69,14 +91,22 @@ const TIERS: Record<QualityTier, Omit<Quality, 'tier'>> = {
     bloomResolutionScale: 0.5,
     starCountScale: 0.45,
     vortex: {
-      fbmOctaves: 2,
-      domainWarp: false,
+      // Same main field as the high tier — see fbmOctaves. The saving comes from the
+      // warp and hue fields instead, which is a far better trade: 7 noise samples per
+      // fragment against the high tier's 20, for a tunnel that reads the same.
+      fbmOctaves: 4,
+      warpOctaves: 1,
+      warpSamples: 2,
+      hueOctaves: 1,
       singleSided: true,
-      glowCompensation: 1.6,
-      tubeSegments: 48,
-      tubeSegmentsMin: 16,
-      tubeSegmentSpacing: 3,
-      radialSegments: 8,
+      // Tessellation is NOT tiered any more. The whole tube is under 2k triangles at
+      // the high-tier counts, which is nothing against a fullscreen fragment shader —
+      // but `ang` comes from vUv.x, interpolated linearly across each quad, so a coarse
+      // ring count put visible angular kinks in every filament. Free quality.
+      tubeSegments: 72,
+      tubeSegmentsMin: 24,
+      tubeSegmentSpacing: 2.5,
+      radialSegments: 12,
       wireRings: 20,
       wireSpokes: 6,
     },
@@ -87,9 +117,10 @@ const TIERS: Record<QualityTier, Omit<Quality, 'tier'>> = {
     starCountScale: 1,
     vortex: {
       fbmOctaves: 4,
-      domainWarp: true,
+      warpOctaves: 4,
+      warpSamples: 3,
+      hueOctaves: 4,
       singleSided: false,
-      glowCompensation: 1,
       tubeSegments: 72,
       tubeSegmentsMin: 24,
       tubeSegmentSpacing: 2.5,

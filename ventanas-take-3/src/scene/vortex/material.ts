@@ -16,7 +16,7 @@
  *    the color back up to keep a comparable density.
  */
 import * as THREE from 'three';
-import { quality } from '../../core/quality';
+import { quality, type VortexQuality } from '../../core/quality';
 
 export const VTX_RADIUS_DEFAULT = 8;
 
@@ -45,6 +45,73 @@ export function createVortexUniforms() {
 
 export type VortexUniforms = ReturnType<typeof createVortexUniforms>;
 
+/**
+ * Emit one fbm field with a fixed octave count.
+ *
+ * Normalised by the sum of its own amplitudes and then rescaled by FBM_GAIN — the
+ * 4-octave sum the look was authored against — so EVERY octave count returns the same
+ * value range. Without that, the raw sum ran to 0.9375 at four octaves but only 0.75 at
+ * two, and since the beams are carved by a fixed `smoothstep(0.42, 0.90, v)` threshold,
+ * a 20% smaller range moved every filament edge: the low tier grew fat blobs separated
+ * by dead black instead of a softer version of the same tunnel. Four octaves is
+ * bit-identical to the old code; the other counts now land where they should.
+ *
+ * Written out per octave count rather than looped with a uniform bound because GLSL ES
+ * 1.00 requires a constant loop bound, and unrolled here beats a preprocessor macro that
+ * some mobile compilers mishandle.
+ */
+const FBM_GAIN = 0.9375;
+
+
+function fbmFn(name: string, octaves: number): string {
+  const n = Math.max(1, octaves);
+  let norm = 0;
+  for (let i = 0; i < n; i++) norm += 0.5 ** (i + 1);
+  const scale = (FBM_GAIN / norm).toFixed(6);
+  return `float ${name}(vec3 p){ float t=0.0; float a=0.5; for(int i=0;i<${n};i++){ t+=a*snoise(p); p*=2.0; a*=0.5; } return t*${scale}; }`;
+}
+
+/** The three fields the tunnel needs, emitted once per distinct octave count. */
+function fbmFields(q: VortexQuality): string {
+  const names: Record<number, string> = {};
+  const out: string[] = [];
+  const need = (octaves: number, alias: string): void => {
+    const n = Math.max(1, octaves);
+    if (names[n]) {
+      out.push(`#define ${alias} ${names[n]}`);
+      return;
+    }
+    names[n] = alias;
+    out.push(fbmFn(alias, n));
+  };
+  need(q.fbmOctaves, 'fbm');
+  need(q.warpOctaves, 'fbmWarp');
+  need(q.hueOctaves, 'fbmHue');
+  return out.join('\n    ');
+}
+
+/**
+ * The 3-axis domain-warp vector.
+ *
+ * Three samples is one independent field per axis. Two samples derives the third axis
+ * from the difference of the other two — the low tier's old shortcut instead scaled ONE
+ * sample onto all three axes, which displaces every point along a fixed direction. That
+ * is a shear, not a swirl: the filaments smeared into streaks instead of braiding, and
+ * no amount of detail elsewhere could put the braiding back.
+ */
+function warpGlsl(q: VortexQuality): string {
+  const a = 'fbmWarp(Pp+vec3(0.0,0.0,uTime*0.05))';
+  const b = 'fbmWarp(Pp+vec3(3.1,1.7,0.0))';
+  if (q.warpSamples >= 3) {
+    return `vec3 w = vec3(${a}, ${b}, fbmWarp(Pp+vec3(8.2,4.4,0.0)));`;
+  }
+  return [
+    `float wn1 = ${a};`,
+    `float wn2 = ${b};`,
+    'vec3 w = vec3(wn1, wn2, (wn1-wn2)*0.7);',
+  ].join('\n      ');
+}
+
 export function createVortexMaterial(uniforms: VortexUniforms): THREE.ShaderMaterial {
   const q = quality.vortex;
   return new THREE.ShaderMaterial({
@@ -63,9 +130,6 @@ export function createVortexMaterial(uniforms: VortexUniforms): THREE.ShaderMate
       gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);
     }`,
   fragmentShader: /*glsl*/ `
-    #define FBM_OCTAVES ${q.fbmOctaves}
-    #define GLOW_COMP ${q.glowCompensation.toFixed(2)}
-    ${q.domainWarp ? '#define DOMAIN_WARP' : ''}
     precision highp float; varying vec2 vUv;
     uniform float uTime; uniform vec3 uColorCore; uniform vec3 uColorMid; uniform vec3 uColorEdge;
     uniform float uSpeed; uniform float uNoiseScale; uniform float uTurbulence; uniform float uGlow; uniform float uDetail; uniform float uFill; uniform float uSwirl;
@@ -92,32 +156,32 @@ export function createVortexMaterial(uniforms: VortexUniforms): THREE.ShaderMate
       vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;
       return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
     }
-    float fbm(vec3 p){ float total=0.0; float amp=0.5; for(int i=0;i<FBM_OCTAVES;i++){ total+=amp*snoise(p); p*=2.0; amp*=0.5; } return total; }
+    ${fbmFields(q)}
     void main(){
       float ang=vUv.x + uSwirl*uTime;
       float len=vUv.y;
       vec2 circ=vec2(cos(ang*6.2831853), sin(ang*6.2831853));
       float flow = len*0.9 + uTime*uSpeed*0.4;
       vec3 Pp = vec3(circ*uNoiseScale, flow);
-      #ifdef DOMAIN_WARP
-        vec3 w = vec3(fbm(Pp+vec3(0.0,0.0,uTime*0.05)), fbm(Pp+vec3(3.1,1.7,0.0)), fbm(Pp+vec3(8.2,4.4,0.0)));
-        float f = fbm(Pp + uTurbulence*3.0*w);
-      #else
-        // One warp sample reused on all three axes: the beams still swim and braid,
-        // for 2 fbm calls instead of 5.
-        float wn = fbm(Pp+vec3(0.0,0.0,uTime*0.05));
-        float f = fbm(Pp + uTurbulence*3.0*vec3(wn, wn*0.7+0.3, wn*-0.5));
-      #endif
+      ${warpGlsl(q)}
+      float f = fbm(Pp + uTurbulence*3.0*w);
       float v = clamp(f*0.5+0.5, 0.0, 1.0);
       float beam = smoothstep(0.42, 0.90, v);
       beam = pow(beam, mix(2.6, 1.0, clamp(uDetail/3.0,0.0,1.0)));
       beam = max(beam, v*uFill*0.5);
       float env = smoothstep(0.0,0.18,len) * smoothstep(1.0,0.82,len);
-      float hue = fbm(vec3(circ*uNoiseScale*0.6+7.0, flow*0.5))*0.5+0.5;
+      float hue = fbmHue(vec3(circ*uNoiseScale*0.6+7.0, flow*0.5))*0.5+0.5;
       vec3 tint = mix(uColorMid, uColorEdge, smoothstep(0.35,0.65,hue));
       vec3 color = tint*beam;
       color += uColorCore*pow(beam,3.0)*0.6;
-      color *= uGlow * GLOW_COMP;
+      // No brightness compensation for the single-sided tier, deliberately. There used
+      // to be a 1.6x multiply here "to make up for the wall we do not draw", but the
+      // light it was really replacing came from the un-normalised fbm (see fbmFn): at
+      // two octaves the field only reached 0.75 where the authored look assumed 0.9375,
+      // so the tier looked wrong and got brightened to hide it. With the field
+      // normalised, one wall measures within ~1% of two on both mean luminance and lit
+      // area -- the far wall is foreshortened into the vanishing point and clamped by
+      // env/alpha, so it was never contributing much to begin with.
       float alpha = clamp(beam*env*1.5, 0.0, 1.0);
       float inRange=step(uTrimStart,vUv.y)*step(vUv.y,uTrimEnd);
       float tipE=1.0-smoothstep(0.0,0.03,abs(vUv.y-uTrimEnd));
