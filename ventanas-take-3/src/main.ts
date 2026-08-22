@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { whenBodyReady, ensureStarScene } from './scene-shell';
 import { startTimelineScroll, tickScroll, useThreeClamp } from './timeline-scroll';
 import { camera, timer, createRenderer } from './core/stage';
+import { probeRefreshRate } from './core/refresh-rate';
 // Type-only: erased at build time, so it does not pull the Dev UI back into the bundle.
 import type { DevHelpersApi } from './dev-helpers';
 import { createOrbit, orbitState, setOrbiting } from './interaction/camera-orbit';
@@ -68,6 +69,12 @@ useThreeClamp(THREE);
  * rendered, with an empty console. Keeping evaluation synchronous breaks the cycle.
  */
 async function boot(): Promise<void> {
+  // FIRST, before anything heavy is on screen: measure how fast this display actually
+  // refreshes. The resolution governor needs it to tell "the panel is 30Hz" apart from
+  // "we are missing every other vsync", and those look identical once the scene is up.
+  // See core/refresh-rate.ts.
+  probeRefreshRate();
+
   // Webflow can evaluate this module before <body> exists.
   await whenBodyReady();
   ensureStarScene();

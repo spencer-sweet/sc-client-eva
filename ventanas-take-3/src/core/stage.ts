@@ -14,6 +14,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { quality } from './quality';
+import { refreshPeriodMs } from './refresh-rate';
 
 // No scene.background: it would be drawn into the linear render target and then run
 // through ACESFilmicToneMapping in OutputPass, which crushes a near-black navy like
@@ -51,11 +52,38 @@ export interface PostFxState {
  */
 const RES_STEPS = [1, 0.85, 0.7, 0.55] as const;
 /**
- * Thresholds on the DELIVERED frame interval, not on CPU time (see reportFrameTime).
- * 22ms = missing 60fps often enough to judder; 17.5ms = essentially locked to vsync.
+ * Thresholds on the DELIVERED frame interval, not on CPU time (see reportFrameTime),
+ * and expressed as MULTIPLES of the frame budget rather than in absolute ms.
+ *
+ * They used to be a flat 22ms / 17.5ms, which silently assumed a 60Hz panel. On a
+ * 30Hz-capped device — iOS Low Power Mode is the common one — a perfectly delivered
+ * frame arrives every 33.3ms, so every window read as "slow": the governor fell to the
+ * bottom step within two seconds and could never climb back, because recovery needed
+ * an average under 17.5ms that a 30Hz vsync cannot produce. The result was a scene
+ * permanently rendering at 55% resolution while hitting its target frame rate.
+ *
+ * 1.32x and 1.05x of the budget reproduce the original 22 / 17.5 exactly at 60Hz, so
+ * behaviour on a normal display is unchanged.
  */
-const SLOW_MS = 22;
-const FAST_MS = 17.5;
+const SLOW_FACTOR = 1.32;
+const FAST_FACTOR = 1.05;
+/**
+ * The governor chases 60fps at most, even on a 120Hz panel: a scene that cannot hit
+ * 120 no matter how few pixels it draws would otherwise walk down to the bottom step
+ * chasing a target that was never available. On a slower display the panel's own
+ * period wins, since nothing can be delivered faster than it can be presented.
+ */
+const MAX_TARGET_FPS = 60;
+
+/**
+ * The frame budget the governor is currently judging against, and the two thresholds
+ * derived from it. Exported so the policy can be inspected rather than inferred: on a
+ * 60Hz panel this must read back 22.0 / 17.5 — the exact constants it replaced.
+ */
+export function frameBudget(): { budgetMs: number; slowMs: number; fastMs: number } {
+  const budgetMs = Math.max(refreshPeriodMs(), 1000 / MAX_TARGET_FPS);
+  return { budgetMs, slowMs: budgetMs * SLOW_FACTOR, fastMs: budgetMs * FAST_FACTOR };
+}
 /** Frames per decision window. */
 const WINDOW_FRAMES = 45;
 /**
@@ -214,10 +242,11 @@ export function createRenderer(): Renderer {
     sampleSum = 0;
     sampleCount = 0;
 
-    if (avg > SLOW_MS) {
+    const { slowMs, fastMs } = frameBudget();
+    if (avg > slowMs) {
       fastRun = 0;
       slowRun++;
-    } else if (avg < FAST_MS) {
+    } else if (avg < fastMs) {
       slowRun = 0;
       fastRun++;
     } else {

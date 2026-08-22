@@ -1,5 +1,5 @@
 /**
- * The wall: an SVG-faithful painted texture on a plain quad, with the window openings
+ * The wall: an SVG-faithful radial gradient on a plain quad, with the window openings
  * cut out by the stencil buffer (see windows/stencil.ts).
  *
  * This used to be a ShapeGeometry carrying 3 real holes, re-triangulated from scratch
@@ -9,8 +9,14 @@
  * per-frame CPU, so a window can now be moved or scaled purely by transforming its own
  * group.
  *
- * Note the neon/glow/flares for the windows are NOT baked into the texture — they live
- * as real 3D objects, see scene/window-frames.ts.
+ * The gradient itself used to be PAINTED, into a canvas the full size of the source SVG
+ * at 2x supersample — 2880 x 3254, about 47MB of VRAM once mipped, and re-uploaded in
+ * full every time `setWallColors` ran. For three colour stops. It is three `mix`es, so
+ * it is computed in the fragment shader now: no texture, no upload, no memory, and no
+ * 8-bit banding across a very large smooth ramp. Recolouring is a uniform write.
+ *
+ * Note the neon/glow/flares for the windows are NOT baked in here — they live as real
+ * 3D objects, see scene/window-frames.ts.
  */
 import * as THREE from 'three';
 import { SVG_H, SVG_W } from '../data/svg-window-set';
@@ -28,31 +34,32 @@ export interface WallColors {
  * Center matches the muted indigo from the still; mid/edge stay in the same family
  * so the wall does not vignette to black.
  */
-let wallColors: WallColors = { center: '#202454', mid: '#1c1f48', edge: '#191c40' };
+const DEFAULT_COLORS: WallColors = { center: '#202454', mid: '#1c1f48', edge: '#191c40' };
 
-function buildWallTexture(): THREE.CanvasTexture {
-  const SS = 2; // supersample
-  const c = document.createElement('canvas');
-  c.width = SVG_W * SS;
-  c.height = SVG_H * SS;
-  const ctx = c.getContext('2d')!;
-  ctx.scale(SS, SS);
-  const cx0 = SVG_W * 0.5;
-  const cy0 = SVG_H * 0.46;
-  const rad = Math.max(SVG_W, SVG_H) * 0.75;
-  const g = ctx.createRadialGradient(cx0, cy0, 0, cx0, cy0, rad);
-  g.addColorStop(0.0, wallColors.center);
-  g.addColorStop(0.55, wallColors.mid);
-  g.addColorStop(1.0, wallColors.edge);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, SVG_W, SVG_H);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  return tex;
+/** Gradient geometry, in the SVG's own coordinate space — the values the canvas used. */
+const GRAD_CX = SVG_W * 0.5;
+const GRAD_CY = SVG_H * 0.46;
+const GRAD_RADIUS = Math.max(SVG_W, SVG_H) * 0.75;
+/** Where the mid stop sits between center (0) and edge (1). */
+const GRAD_MID_STOP = 0.55;
+
+/**
+ * Colour stops are held as RAW sRGB triples, NOT as three's usual linear working
+ * values: a canvas gradient interpolates in sRGB, so to land on the same pixels the
+ * shader has to mix in sRGB and convert once at the end. `LinearSRGBColorSpace` here
+ * means "the input is already in the working space", i.e. don't convert on the way in —
+ * which leaves the literal 0..1 sRGB numerals in r/g/b.
+ */
+function srgbTriple(hex: string): THREE.Color {
+  return new THREE.Color().setStyle(hex, THREE.LinearSRGBColorSpace);
 }
 
-let wallTex = buildWallTexture();
+const uniforms = {
+  uCenter: { value: srgbTriple(DEFAULT_COLORS.center) },
+  uMid: { value: srgbTriple(DEFAULT_COLORS.mid) },
+  uEdge: { value: srgbTriple(DEFAULT_COLORS.edge) },
+  uOpacity: { value: 1 },
+};
 
 /**
  * Starts TRULY opaque. The fade (see setWallLayer) flips `transparent` on only
@@ -60,40 +67,51 @@ let wallTex = buildWallTexture();
  * to the GLB's glass and can erase it.
  */
 export const wallMat = cutOutWindows(
-  new THREE.MeshBasicMaterial({ map: wallTex, transparent: false, opacity: 1 }),
+  new THREE.ShaderMaterial({
+    uniforms,
+    transparent: false,
+    depthWrite: true,
+    // Position -> SVG pixel space, exactly the mapping the baked UVs used to carry.
+    // The quad has four vertices, so this interpolates the gradient coordinate exactly.
+    vertexShader: /*glsl*/ `varying vec2 vSvg;
+      void main(){
+        vSvg = vec2(position.x / ${WSCALE.toFixed(8)} + ${(SVG_W * 0.5).toFixed(1)},
+                    ${(SVG_H * 0.5).toFixed(1)} - position.y / ${WSCALE.toFixed(8)});
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /*glsl*/ `precision mediump float; varying vec2 vSvg;
+      uniform vec3 uCenter, uMid, uEdge; uniform float uOpacity;
+      // The scene renders into a linear half-float target, so the sRGB-space mix has to
+      // be decoded on the way out — the same thing sampling an sRGB-tagged texture did.
+      vec3 srgbToLinear(vec3 c){
+        return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+      }
+      void main(){
+        float t = clamp(distance(vSvg, vec2(${GRAD_CX.toFixed(1)}, ${GRAD_CY.toFixed(1)})) / ${GRAD_RADIUS.toFixed(1)}, 0.0, 1.0);
+        const float mid = ${GRAD_MID_STOP.toFixed(2)};
+        vec3 srgb = t < mid
+          ? mix(uCenter, uMid, t / mid)
+          : mix(uMid, uEdge, (t - mid) / (1.0 - mid));
+        gl_FragColor = vec4(srgbToLinear(srgb), uOpacity);
+      }`,
+  }),
 );
 
 const WALL_W = 52;
 const WALL_H = 44;
 
-/** UVs come from world position so the painted SVG stays pinned to the wall. */
-function buildWallGeometry(): THREE.BufferGeometry {
-  const geo = new THREE.PlaneGeometry(WALL_W, WALL_H);
-  const uv = geo.attributes.uv;
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const sx = pos.getX(i) / WSCALE + SVG_W / 2;
-    const sy = SVG_H / 2 - pos.getY(i) / WSCALE;
-    uv.setXY(i, sx / SVG_W, 1 - sy / SVG_H);
-  }
-  uv.needsUpdate = true;
-  return geo;
-}
-
-export const wall = new THREE.Mesh(buildWallGeometry(), wallMat);
+export const wall = new THREE.Mesh(new THREE.PlaneGeometry(WALL_W, WALL_H), wallMat);
 wall.position.z = 0;
 wall.renderOrder = 1;
 // One quad that always covers the view; culling it per frame buys nothing.
 wall.frustumCulled = false;
 nearLayer.add(wall);
 
+/** Recolour the gradient. Three uniform writes — nothing is rebuilt or re-uploaded. */
 export function setWallColors(next: WallColors): void {
-  wallColors = next;
-  const old = wallTex;
-  wallTex = buildWallTexture();
-  wallMat.map = wallTex;
-  wallMat.needsUpdate = true;
-  old.dispose();
+  uniforms.uCenter.value.setStyle(next.center, THREE.LinearSRGBColorSpace);
+  uniforms.uMid.value.setStyle(next.mid, THREE.LinearSRGBColorSpace);
+  uniforms.uEdge.value.setStyle(next.edge, THREE.LinearSRGBColorSpace);
 }
 
 /**
@@ -113,7 +131,7 @@ export function setWallLayer(fade: number, render: number): void {
 
 function applyWallFade(): void {
   const blackout = outlinerFade;
-  wallMat.opacity = 1 - blackout;
+  uniforms.uOpacity.value = 1 - blackout;
   const shouldBeTransparent = blackout > 0.001;
   if (wallMat.transparent !== shouldBeTransparent) {
     wallMat.transparent = shouldBeTransparent;

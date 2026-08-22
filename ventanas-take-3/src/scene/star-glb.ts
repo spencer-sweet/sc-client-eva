@@ -128,6 +128,19 @@ export const glbMat = new THREE.MeshMatcapMaterial({
   opacity: 0.9,
   side: THREE.DoubleSide,
 });
+/**
+ * DoubleSide + transparent makes three render the mesh TWICE — back faces, then front —
+ * so the shards were costing two draw calls each. Measured on the low tier, that pair
+ * was 112 of the scene's 144 draw calls, and switching to a single pass cut total frame
+ * time by ~60%: the star was draw-call bound, not fill bound (shrinking it to a dot
+ * saved nothing at all).
+ *
+ * The two-pass order exists to layer a surface's own back faces behind its front faces.
+ * These shards are thin, near-flat fragments of glass whose two sides land within a
+ * fraction of a unit of each other, so the pass split was buying almost no visible
+ * depth ordering for its price.
+ */
+glbMat.forceSinglePass = true;
 addMatcapGlassAlpha(glbMat);
 
 export const starState = {
@@ -208,6 +221,14 @@ const HOVER_SPIN_PER_UNIT = 1.2;
 
 interface Shard {
   mesh: THREE.Object3D;
+  /** Slot in `batched` this shard draws through. */
+  instanceId: number;
+  /**
+   * Ancestors between glbRoot and this shard, outermost first. Empty for the flat
+   * layout every export so far has produced; walked per frame when it is not, because
+   * a BatchedMesh instance matrix is relative to the batch, not to the shard's parent.
+   */
+  chain: THREE.Object3D[];
   /** Per-shard phase + frequency, so 56 fragments never bob in unison. */
   phase: THREE.Vector3;
   freq: THREE.Vector3;
@@ -220,6 +241,19 @@ const shards: Shard[] = [];
 const hoverPos = new THREE.Vector3();
 const hoverQuat = new THREE.Quaternion();
 const spinQuat = new THREE.Quaternion();
+const _local = new THREE.Matrix4();
+const _rel = new THREE.Matrix4();
+
+/**
+ * Every shard drawn through ONE draw call.
+ *
+ * The shatter is 56 separate meshes sharing a single material, which is the exact shape
+ * THREE.BatchedMesh exists for: the geometries go into one pair of buffers and each
+ * shard becomes an instance whose transform is a matrix slot. The AnimationMixer still
+ * animates the original Object3Ds — it just drives matrices we copy in, instead of
+ * driving 56 draw calls.
+ */
+let batched: THREE.BatchedMesh | null = null;
 
 /** Stable seeded random: a reload always gives every shard the same wobble. */
 function hoverRandom(seed: number): () => number {
@@ -230,18 +264,80 @@ function hoverRandom(seed: number): () => number {
   };
 }
 
+/** Ancestors from just under `root` down to `o`'s parent, outermost first. */
+function ancestorChain(o: THREE.Object3D, root: THREE.Object3D): THREE.Object3D[] {
+  const chain: THREE.Object3D[] = [];
+  for (let p = o.parent; p && p !== root; p = p.parent) chain.unshift(p);
+  return chain;
+}
+
+/**
+ * Only position + normal, which is all MeshMatcapMaterial reads (the matcap lookup is
+ * built from the normal, not from a uv). BatchedMesh requires every geometry to share
+ * one attribute layout, and a GLB shard may arrive carrying uv/tangent/colour sets that
+ * differ between fragments — stripping to the two attributes that matter makes the
+ * layout uniform AND keeps the shared buffers small.
+ */
+function batchableGeometry(src: THREE.BufferGeometry): THREE.BufferGeometry {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', src.getAttribute('position'));
+  geo.setAttribute('normal', src.getAttribute('normal'));
+  if (src.index) geo.setIndex(src.index);
+  return geo;
+}
+
+function disposeBatched(): void {
+  if (!batched) return;
+  batched.removeFromParent();
+  batched.dispose();
+  batched = null;
+}
+
 function collectShards(root: THREE.Object3D): void {
   shards.length = 0;
-  const rand = hoverRandom(0x51a2d3e7);
+  disposeBatched();
+
+  const meshes: THREE.Mesh[] = [];
   root.traverse((o) => {
-    if (!(o as THREE.Mesh).isMesh) return;
+    if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
+  });
+  if (meshes.length === 0) return;
+
+  const geometries = meshes.map((m) => batchableGeometry(m.geometry));
+  let vertexCount = 0;
+  let indexCount = 0;
+  for (const g of geometries) {
+    vertexCount += g.getAttribute('position').count;
+    indexCount += g.index ? g.index.count : 0;
+  }
+
+  batched = new THREE.BatchedMesh(meshes.length, vertexCount, indexCount, glbMat);
+  // The star is always on screen when it is enabled, and per-instance culling would
+  // walk 56 bounding spheres a frame to conclude exactly that.
+  batched.frustumCulled = false;
+  batched.perObjectFrustumCulled = false;
+  // > wall.renderOrder (1): without this the wall (transparent while fading) drew
+  // afterwards and erased the glass except where a hole happened to line up.
+  batched.renderOrder = 6;
+  root.add(batched);
+
+  const rand = hoverRandom(0x51a2d3e7);
+  for (let i = 0; i < meshes.length; i++) {
+    const o = meshes[i];
     // The hover composes this matrix by hand every frame (see updateStarHover), so
     // three must not recompose it from position/quaternion/scale and wipe the offset.
     o.matrixAutoUpdate = false;
+    // The shard Object3D stays in the graph purely as the AnimationMixer's target; the
+    // BatchedMesh is what actually draws.
+    o.visible = false;
+    const geometryId = batched.addGeometry(geometries[i]);
+    const instanceId = batched.addInstance(geometryId);
     const axis = new THREE.Vector3(rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1);
     if (axis.lengthSq() < 1e-6) axis.set(0, 1, 0);
     shards.push({
       mesh: o,
+      instanceId,
+      chain: ancestorChain(o, root),
       phase: new THREE.Vector3(rand(), rand(), rand()).multiplyScalar(Math.PI * 2),
       // Irrational-ish spread keeps the three axes from re-syncing into a straight line.
       freq: new THREE.Vector3(0.7 + rand() * 0.6, 0.9 + rand() * 0.7, 0.6 + rand() * 0.5),
@@ -249,7 +345,7 @@ function collectShards(root: THREE.Object3D): void {
       spinPhase: rand() * Math.PI * 2,
       spinFreq: 0.5 + rand() * 0.6,
     });
-  });
+  }
 }
 
 /**
@@ -277,14 +373,14 @@ function collectShards(root: THREE.Object3D): void {
  * run EVERY frame, since matrixAutoUpdate is off: see the call site in main.ts.
  */
 export function updateStarHover(time: number): void {
+  if (!batched) return;
   const drift = starState.hoverAmount;
   const t = time * starState.hoverSpeed;
   const spin = drift * HOVER_SPIN_PER_UNIT;
   for (const s of shards) {
     const mesh = s.mesh;
     if (drift <= 0) {
-      // Still hand three a correctly composed matrix — matrixAutoUpdate is off.
-      mesh.matrix.compose(mesh.position, mesh.quaternion, mesh.scale);
+      _local.compose(mesh.position, mesh.quaternion, mesh.scale);
     } else {
       hoverPos.set(
         mesh.position.x + Math.sin(t * s.freq.x + s.phase.x) * drift,
@@ -293,9 +389,21 @@ export function updateStarHover(time: number): void {
       );
       spinQuat.setFromAxisAngle(s.axis, Math.sin(t * s.spinFreq + s.spinPhase) * spin);
       hoverQuat.copy(mesh.quaternion).multiply(spinQuat);
-      mesh.matrix.compose(hoverPos, hoverQuat, mesh.scale);
+      _local.compose(hoverPos, hoverQuat, mesh.scale);
     }
-    mesh.matrixWorldNeedsUpdate = true;
+    // An instance matrix is relative to the BatchedMesh, which sits at glbRoot. For the
+    // flat layout that is the shard's own matrix; a nested one has to fold its
+    // ancestors in first.
+    if (s.chain.length === 0) {
+      batched.setMatrixAt(s.instanceId, _local);
+    } else {
+      _rel.identity();
+      for (const anc of s.chain) {
+        anc.updateMatrix();
+        _rel.multiply(anc.matrix);
+      }
+      batched.setMatrixAt(s.instanceId, _rel.multiply(_local));
+    }
   }
 }
 
@@ -351,14 +459,11 @@ function parseGlb(buf: ArrayBuffer): void {
         const mesh = o as THREE.Mesh;
         // Jagged shards are hard-faceted; smoothed normals read as glass instead of tiles.
         mesh.geometry.computeVertexNormals();
-        mesh.material = glbMat;
-        mesh.frustumCulled = false;
-        // > wall.renderOrder (1): without this the wall (transparent while fading) drew
-        // afterwards and erased the glass except where a hole happened to line up.
-        mesh.renderOrder = 6;
       });
       starGroup.add(glbRoot);
       applyStarState();
+      // Builds the BatchedMesh the shards actually draw through, and hides the
+      // originals — material, render order and culling now live on the batch.
       collectShards(glbRoot);
 
       mixer = null;
