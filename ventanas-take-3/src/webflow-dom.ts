@@ -159,6 +159,9 @@ function applyLayer(id: string, v: WebflowLayerStyle, wanted: FadeMode = 'opacit
 /** Push fade + blur + transform onto Webflow layers when embedded on EVA. */
 export function applyWebflowDom(v: {
   textInfra: WebflowLayerStyle;
+  gridRisk: WebflowLayerStyle;
+  howIntroTitle: WebflowLayerStyle;
+  howIntroEyebrow: WebflowLayerStyle;
   indicatorScroll: WebflowLayerStyle;
   how1: WebflowLayerStyle;
   how2: WebflowLayerStyle;
@@ -167,6 +170,9 @@ export function applyWebflowDom(v: {
   how5: WebflowLayerStyle;
 }): void {
   applyLayer('text-infra', v.textInfra);
+  applyLayer('grid_risk', v.gridRisk);
+  applyLayer('how-intro-title', v.howIntroTitle);
+  applyLayer('how-intro-eyebrow', v.howIntroEyebrow);
   applyLayer('indicator-scroll', v.indicatorScroll);
   // 'card': these wrap a backdrop-filter panel, so their fade must not be `opacity`.
   applyLayer('how-1', v.how1, 'card');

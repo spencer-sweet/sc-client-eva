@@ -505,6 +505,9 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     'Webflow DOM',
     {
       textInfra: webflowLayer('#text-infra'),
+      gridRisk: webflowLayer('#grid_risk'),
+      howIntroTitle: webflowLayer('#how-intro-title'),
+      howIntroEyebrow: webflowLayer('#how-intro-eyebrow'),
       indicatorScroll: webflowLayer('#indicator-scroll', { translate: { unit: '%', x: -50 } }),
       how1: webflowLayer('#how-1', { blur: false, fadeLabel: 'Fade' }),
       how2: webflowLayer('#how-2', { blur: false, fadeLabel: 'Fade' }),
