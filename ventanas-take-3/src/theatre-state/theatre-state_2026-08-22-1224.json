@@ -155,7 +155,7 @@
           },
           "Layer Outliner": {
             "vortexHelpers": {
-              "render": 1
+              "render": 0
             },
             "vortex": {
               "render": 1
@@ -178,6 +178,23 @@
               "translate": {
                 "y": -60.76249814567571
               },
+              "opacity": 0
+            },
+            "how4": {
+              "translate": {
+                "unit": "%",
+                "x": -50
+              },
+              "opacity": 0
+            },
+            "how5": {
+              "translate": {
+                "unit": "%",
+                "x": -50
+              },
+              "opacity": 0
+            },
+            "how3": {
               "opacity": 0
             }
           }
@@ -4404,6 +4421,586 @@
                     "value": 0
                   }
                 ]
+              },
+              "QC4fHHhlTK": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Webflow DOM:[\"how1\",\"opacity\"]",
+                "keyframes": [
+                  {
+                    "id": "RlZrmqoxhA",
+                    "position": 87.9,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "CveLcztAkV",
+                    "position": 90,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "dr6aCkuZjQ",
+                    "position": 106.1,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "CW4ZaAkoft",
+                    "position": 107.2,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  }
+                ]
+              },
+              "dxAOriKi8h": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Webflow DOM:[\"how1\",\"translate\",\"y\"]",
+                "keyframes": [
+                  {
+                    "id": "Ma9yKxdYVe",
+                    "position": 87.9,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 32
+                  },
+                  {
+                    "id": "vdFbmK-Gh_",
+                    "position": 90,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "1txG4oTO7T",
+                    "position": 106.1,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "EFMaVdZO3K",
+                    "position": 107.2,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": -32
+                  }
+                ]
+              },
+              "hE4BpTgO36": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Webflow DOM:[\"how2\",\"opacity\"]",
+                "keyframes": [
+                  {
+                    "id": "ZItJayTtZ2",
+                    "position": 108.667,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "KgLjuErl9z",
+                    "position": 110.067,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "-Sya5wyWIl",
+                    "position": 128.933,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "96Btshvqvo",
+                    "position": 130.533,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  }
+                ]
+              },
+              "1kewFrtoLe": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Webflow DOM:[\"how2\",\"translate\",\"y\"]",
+                "keyframes": [
+                  {
+                    "id": "h3QZy216cU",
+                    "position": 108.667,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 32
+                  },
+                  {
+                    "id": "rVczrIRSnf",
+                    "position": 110.067,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "VGUJGX2vJ4",
+                    "position": 128.933,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "kPd6yABkJk",
+                    "position": 130.533,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": -32
+                  }
+                ]
+              },
+              "YyzffbGeX4": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Webflow DOM:[\"how3\",\"translate\",\"y\"]",
+                "keyframes": [
+                  {
+                    "id": "h3y0ssn7a",
+                    "position": 128.233,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 10
+                  },
+                  {
+                    "id": "h3y1nd2vv",
+                    "position": 130.333,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "h3y2t94yj",
+                    "position": 146.433,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "h3y31ol5n",
+                    "position": 147.533,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": -10
+                  }
+                ]
+              },
+              "3Sepx6rlDr": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Webflow DOM:[\"how4\",\"translate\",\"y\"]",
+                "keyframes": [
+                  {
+                    "id": "h4y08w2xs",
+                    "position": 148.067,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 10
+                  },
+                  {
+                    "id": "h4y17i0db",
+                    "position": 150.167,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "h4y23xapy",
+                    "position": 165.767,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "h4y3u111y",
+                    "position": 167.3,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": -10
+                  }
+                ]
+              },
+              "mtZhwCdi3F": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Webflow DOM:[\"how5\",\"translate\",\"y\"]",
+                "keyframes": [
+                  {
+                    "id": "h5y0eqjif",
+                    "position": 166.867,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 32
+                  },
+                  {
+                    "id": "h5y171lwh",
+                    "position": 168.967,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "h5y2550cb",
+                    "position": 180.5,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "h5y34524o",
+                    "position": 182.667,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": -32
+                  }
+                ]
+              },
+              "EgiFJYpMfc": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Webflow DOM:[\"how3\",\"opacity\"]",
+                "keyframes": [
+                  {
+                    "id": "h3o0vai7n",
+                    "position": 128.233,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "h3o16rjww",
+                    "position": 130.333,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "h3o2kfqor",
+                    "position": 146.433,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "h3o3dfbv3",
+                    "position": 147.533,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  }
+                ]
+              },
+              "8GjNnTtefc": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Webflow DOM:[\"how4\",\"opacity\"]",
+                "keyframes": [
+                  {
+                    "id": "h4o0jbcbn",
+                    "position": 148.067,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "h4o1cge47",
+                    "position": 150.167,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "h4o2lfuxi",
+                    "position": 165.767,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "h4o37jf84",
+                    "position": 167.3,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  }
+                ]
+              },
+              "QGJDhW3vmd": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "Webflow DOM:[\"how5\",\"opacity\"]",
+                "keyframes": [
+                  {
+                    "id": "h5o0vy068",
+                    "position": 166.867,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  },
+                  {
+                    "id": "h5o1nvgcm",
+                    "position": 168.967,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "h5o29im8t",
+                    "position": 180.5,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 1
+                  },
+                  {
+                    "id": "h5o3k4uw0",
+                    "position": 182.667,
+                    "connectedRight": true,
+                    "handles": [
+                      0.5,
+                      1,
+                      0.5,
+                      0
+                    ],
+                    "type": "bezier",
+                    "value": 0
+                  }
+                ]
               }
             },
             "trackIdByPropPath": {
@@ -4411,7 +5008,17 @@
               "[\"textInfra\",\"blur\"]": "FtirDvNyDe",
               "[\"textInfra\",\"scale\"]": "x0Tm214k09",
               "[\"textInfra\",\"translate\",\"y\"]": "F7TmKiYB9D",
-              "[\"indicatorScroll\",\"opacity\"]": "Y5LgS-BcO_"
+              "[\"indicatorScroll\",\"opacity\"]": "Y5LgS-BcO_",
+              "[\"how1\",\"opacity\"]": "QC4fHHhlTK",
+              "[\"how1\",\"translate\",\"y\"]": "dxAOriKi8h",
+              "[\"how2\",\"opacity\"]": "hE4BpTgO36",
+              "[\"how2\",\"translate\",\"y\"]": "1kewFrtoLe",
+              "[\"how3\",\"translate\",\"y\"]": "YyzffbGeX4",
+              "[\"how4\",\"translate\",\"y\"]": "3Sepx6rlDr",
+              "[\"how5\",\"translate\",\"y\"]": "mtZhwCdi3F",
+              "[\"how3\",\"opacity\"]": "EgiFJYpMfc",
+              "[\"how4\",\"opacity\"]": "8GjNnTtefc",
+              "[\"how5\",\"opacity\"]": "QGJDhW3vmd"
             }
           },
           "Vortex 2": {
@@ -4709,6 +5316,8 @@
   },
   "definitionVersion": "0.4.0",
   "revisionHistory": [
+    "UDYn9mjtu2jCxHoq",
+    "i3roSD_kR8rPiGWh",
     "6NqRsFrK3BbncMFl",
     "erUZKO2o-roJUo_Q",
     "QVZJ9o-H8lpLGeEa",
