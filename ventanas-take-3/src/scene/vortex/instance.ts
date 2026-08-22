@@ -18,10 +18,65 @@ import {
   type VortexUniforms,
 } from './material';
 
-/** Tube tessellation — halved on the low tier; the noise shader hides the difference. */
-const TSEG = quality.vortex.tubeSegments;
+/** Tube tessellation caps — actual tubular count scales with path length (see tubularSegments). */
 const RSEG = quality.vortex.radialSegments;
-const PATH_LINE_SEGMENTS = 140;
+const PATH_LINE_SEGMENTS = 64;
+
+const _up = new THREE.Vector3(0, 1, 0);
+const _tangent = new THREE.Vector3();
+const _binormal = new THREE.Vector3();
+const _bitangent = new THREE.Vector3();
+const _pt = new THREE.Vector3();
+
+function tubularSegments(curve: THREE.Curve<THREE.Vector3>): number {
+  const q = quality.vortex;
+  const n = Math.round(curve.getLength() / q.tubeSegmentSpacing);
+  return Math.max(q.tubeSegmentsMin, Math.min(q.tubeSegments, n));
+}
+
+/** Sparse ring+spoke lines — much cheaper than wireframe:true on a dense TubeGeometry. */
+function buildWireGeometry(curve: THREE.Curve<THREE.Vector3>, radius: number): THREE.BufferGeometry {
+  const rings = quality.vortex.wireRings;
+  const spokes = quality.vortex.wireSpokes;
+  const pos: number[] = [];
+  let prevRing: THREE.Vector3[] | null = null;
+
+  for (let i = 0; i <= rings; i++) {
+    const t = i / rings;
+    const center = curve.getPointAt(t);
+    curve.getTangentAt(t, _tangent).normalize();
+    _binormal.crossVectors(_tangent, _up);
+    if (_binormal.lengthSq() < 1e-4) _binormal.set(1, 0, 0);
+    else _binormal.normalize();
+    _bitangent.crossVectors(_tangent, _binormal);
+    const ring: THREE.Vector3[] = [];
+    for (let j = 0; j < spokes; j++) {
+      const a = (j / spokes) * Math.PI * 2;
+      _pt
+        .copy(center)
+        .addScaledVector(_binormal, Math.cos(a) * radius)
+        .addScaledVector(_bitangent, Math.sin(a) * radius);
+      ring.push(_pt.clone());
+    }
+    for (let j = 0; j < spokes; j++) {
+      const a = ring[j];
+      const b = ring[(j + 1) % spokes];
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    }
+    if (prevRing) {
+      const step = Math.max(1, Math.floor(spokes / 4));
+      for (let j = 0; j < spokes; j += step) {
+        const a = prevRing[j];
+        const b = ring[j];
+        pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      }
+    }
+    prevRing = ring;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  return geo;
+}
 
 /* ---------- glow at the end of the tunnel ("light at the far end") ---------- */
 
@@ -77,6 +132,7 @@ export interface VortexInstance {
   isEnabled(): boolean;
   applyLook(v: VortexLook): void;
   setLayer(fade: number, render: number): void;
+  setWireframe(on: boolean): void;
   setHelpersLayer(fade: number, render: number): void;
   setEditorVisible(visible: boolean): void;
   rebuildTube(): void;
@@ -122,13 +178,39 @@ export function createVortexInstance(
   group.add(exitGlowSprite);
 
   let radius = VTX_RADIUS_DEFAULT;
+  let wireframe = false;
 
   const mesh = new THREE.Mesh(
-    new THREE.TubeGeometry(path.buildCurve(), TSEG, radius, RSEG, false),
+    new THREE.BufferGeometry(),
     material,
   );
   mesh.renderOrder = 0.1;
   group.add(mesh);
+
+  const wireLines = new THREE.LineSegments(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({
+      color: 0x66d2ff,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+    }),
+  );
+  wireLines.renderOrder = 0.1;
+  wireLines.visible = false;
+  group.add(wireLines);
+
+  function syncTubeVisibility(): void {
+    const show = enabled && layerRender;
+    mesh.visible = show && !wireframe;
+    wireLines.visible = show && wireframe;
+    exitGlowSprite.visible = show && !wireframe;
+  }
+
+  function rebuildWire(): void {
+    wireLines.geometry.dispose();
+    wireLines.geometry = buildWireGeometry(path.buildCurve(), radius);
+  }
 
   const pathLine = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(path.buildCurve().getPoints(PATH_LINE_SEGMENTS)),
@@ -164,7 +246,7 @@ export function createVortexInstance(
     applyLook(v) {
       enabled = v.enabled >= 0.5;
       lastExitGlow = v.exitGlow;
-      mesh.visible = enabled && layerRender;
+      syncTubeVisibility();
       const tx = v.translate?.x ?? 0;
       const ty = v.translate?.y ?? 0;
       const tz = v.translate?.z ?? 0;
@@ -194,15 +276,13 @@ export function createVortexInstance(
       uniforms.uFill.value = v.fill;
       exitGlowMat.opacity = v.exitGlow * (1 - layerFade);
       exitGlowSprite.scale.setScalar(6 * Math.max(0.001, v.exitGlow));
-      exitGlowSprite.visible = enabled && layerRender;
     },
 
     setLayer(fade, render) {
       layerFade = fade;
       layerRender = render >= 0.5;
       uniforms.uLayerFade.value = 1 - layerFade;
-      mesh.visible = enabled && layerRender;
-      exitGlowSprite.visible = enabled && layerRender;
+      syncTubeVisibility();
       exitGlowMat.opacity = lastExitGlow * (1 - layerFade);
     },
 
@@ -210,6 +290,12 @@ export function createVortexInstance(
       helpersFade = fade;
       helpersRender = render >= 0.5;
       applyHelpers();
+    },
+
+    setWireframe(on) {
+      wireframe = on;
+      syncTubeVisibility();
+      if (on) rebuildWire();
     },
 
     /** Show markers / path line only while not drawing, not playing, and the outliner allows it. */
@@ -220,13 +306,15 @@ export function createVortexInstance(
 
     rebuildTube() {
       const curve = path.buildCurve();
+      const tseg = tubularSegments(curve);
       mesh.geometry.dispose();
-      mesh.geometry = new THREE.TubeGeometry(curve, TSEG, radius, RSEG, false);
+      mesh.geometry = new THREE.TubeGeometry(curve, tseg, radius, RSEG, false);
       pathLine.geometry.dispose();
       pathLine.geometry = new THREE.BufferGeometry().setFromPoints(
         curve.getPoints(PATH_LINE_SEGMENTS),
       );
       exitGlowSprite.position.copy(path.ctrl[path.ctrl.length - 1]);
+      if (wireframe) rebuildWire();
     },
 
     rebuildMarkers() {
@@ -238,7 +326,7 @@ export function createVortexInstance(
       markers.length = 0;
       for (let i = 0; i < path.ctrl.length; i++) {
         const m = new THREE.Mesh(
-          new THREE.SphereGeometry(0.6, 18, 14),
+          new THREE.SphereGeometry(0.6, 12, 8),
           new THREE.MeshBasicMaterial({
             color: i === selected ? 0xffffff : 0x66d2ff,
             depthTest: false,

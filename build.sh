@@ -272,13 +272,13 @@ PAGES_SHA="${CF_PAGES_COMMIT_SHA:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null ||
   <div class="line dim">last login: never — access granted</div>
   <div class="line"><span class="prompt">visitor@demos:~$</span> ls ./demos</div>
 HTML
+  # Not a site (no package.json) but copied straight into dist/ above — list it first.
+  if [ -d "$DIST/assets" ]; then
+    echo "  <div class=\"line\"><a href=\"/assets/\">assets/</a></div>"
+  fi
   for name in "${sites[@]}"; do
     echo "  <div class=\"line\"><a href=\"/$name/\">$name</a></div>"
   done
-  # Not a site (no package.json) but copied straight into dist/ above — list it too.
-  if [ -d "$DIST/assets" ]; then
-    echo "  <div class=\"line\"><a href=\"/assets/\">assets</a></div>"
-  fi
   cat <<'HTML'
   <div class="line"><span class="cursor"></span></div>
 HTML

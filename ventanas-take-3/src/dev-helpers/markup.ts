@@ -8,7 +8,8 @@ export const HELP_HTML =
   '<b>Star background → swingRange</b>: limits how far the stars rotate (they used to spin without a cap). ' +
   '<b>Layer Outliner</b>: fade (0 = full, 1 = gone) or set <b>render</b> to 0 to skip drawing/updating that group. Wall/grid fade keyframes live on wall.fade and grid.fade. The grid already clips itself around whatever window positions you set. ' +
   '<b>Vortex 1 / 2</b>: two independent tunnels. Spines are recalled from <b>ventanasVortexPaths</b> in the Theatre JSON (the points in code are only fallbacks). <b>Save Theatre JSON</b> writes both live spines into that field. The <b>Vortex</b> dropdown picks which one ✎ Draw, ± Point, Tension and Reset path apply to — only that one shows its markers. ' +
-  '<b>Orbit</b> = free-look; <b>Capture</b> = camera keyframe; <b>Reset camera</b> if it drifted too far/near.';
+  '<b>Orbit</b> = free-look; <b>Capture</b> = camera keyframe; <b>Reset camera</b> if it drifted too far/near. ' +
+  '<b>Vortex wire</b>: skip the noise shader and draw both tunnels as a wireframe.';
 
 export const BAR_HTML = /*html*/ `
 <div id="bar" data-dev-bar="minified">
@@ -26,6 +27,7 @@ export const BAR_HTML = /*html*/ `
       <button id="loadGlbBtn">Load another GLB…</button>
       <input type="file" id="glbFileInput" accept=".glb" style="display:none" />
       <button id="paraxBtn">Parallax: ON</button>
+      <button id="vortexWireBtn" type="button" title="Skip the vortex noise shader; draw the tube as a wireframe">Vortex wire: OFF</button>
       <label class="barField" title="Which vortex path the draw / point / tension controls edit"
         >Vortex
         <select id="vortexTargetSelect">

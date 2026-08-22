@@ -322,6 +322,8 @@ export interface DevHelpersApi {
   addVortexPoint(): void;
   removeVortexPoint(): void;
   resetVortexPath(): void;
+  isVortexWireframe(): boolean;
+  setVortexWireframe(on: boolean): void;
   /** Live post-FX flags (EffectComposer + passes). */
   getPostFx(): {
     composerEnabled: boolean;
@@ -473,6 +475,18 @@ function wireVortexButtons(api: DevHelpersApi): void {
     api.setVortexDrawMode(on);
     setVortexDrawButton(on);
   });
+  const wireBtn = byId('vortexWireBtn');
+  const syncWire = () => {
+    const on = api.isVortexWireframe();
+    if (!wireBtn) return;
+    wireBtn.textContent = 'Vortex wire: ' + (on ? 'ON' : 'OFF');
+    wireBtn.classList.toggle('on', on);
+  };
+  wireBtn?.addEventListener('click', () => {
+    api.setVortexWireframe(!api.isVortexWireframe());
+    syncWire();
+  });
+  syncWire();
   tensionInput?.addEventListener('input', (ev) => {
     api.setVortexPathTension(parseFloat((ev.target as HTMLInputElement).value));
     api.rebuildVortexTube();

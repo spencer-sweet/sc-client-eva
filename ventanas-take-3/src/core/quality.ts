@@ -25,8 +25,15 @@ export interface VortexQuality {
    */
   singleSided: boolean;
   glowCompensation: number;
+  /** Upper cap on tubular segments — actual count scales with path length. */
   tubeSegments: number;
+  tubeSegmentsMin: number;
+  /** Target world-units between tubular samples along the spine. */
+  tubeSegmentSpacing: number;
   radialSegments: number;
+  /** Dev wireframe: rings along the path × spokes per ring (LineSegments, not mesh wireframe). */
+  wireRings: number;
+  wireSpokes: number;
 }
 
 export interface Quality {
@@ -66,8 +73,12 @@ const TIERS: Record<QualityTier, Omit<Quality, 'tier'>> = {
       domainWarp: false,
       singleSided: true,
       glowCompensation: 1.6,
-      tubeSegments: 96,
-      radialSegments: 24,
+      tubeSegments: 48,
+      tubeSegmentsMin: 16,
+      tubeSegmentSpacing: 3,
+      radialSegments: 8,
+      wireRings: 20,
+      wireSpokes: 6,
     },
   },
   high: {
@@ -79,8 +90,12 @@ const TIERS: Record<QualityTier, Omit<Quality, 'tier'>> = {
       domainWarp: true,
       singleSided: false,
       glowCompensation: 1,
-      tubeSegments: 240,
-      radialSegments: 48,
+      tubeSegments: 72,
+      tubeSegmentsMin: 24,
+      tubeSegmentSpacing: 2.5,
+      radialSegments: 12,
+      wireRings: 28,
+      wireSpokes: 8,
     },
   },
 };

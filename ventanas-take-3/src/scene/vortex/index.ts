@@ -103,6 +103,18 @@ export function setVortexHelpersLayer(fade: number, render: number): void {
   for (const id of VORTEX_IDS) instances[id].setHelpersLayer(fade, render);
 }
 
+let vortexWireframe = false;
+
+export function isVortexWireframe(): boolean {
+  return vortexWireframe;
+}
+
+/** Swap the noise shader for a cheap tube wireframe (both vortices). */
+export function setVortexWireframe(on: boolean): void {
+  vortexWireframe = on;
+  for (const id of VORTEX_IDS) instances[id].setWireframe(on);
+}
+
 /** Show the editor for the active vortex only; the other one's helpers stay hidden. */
 export function setVortexEditorVisible(visible: boolean): void {
   for (const id of VORTEX_IDS) instances[id].setEditorVisible(visible && id === activeId);
