@@ -5140,7 +5140,7 @@
                 "keyframes": [
                   {
                     "id": "ssv2ojxE7I",
-                    "position": 106.1,
+                    "position": 93.8,
                     "connectedRight": true,
                     "handles": [
                       0.5,
@@ -5153,7 +5153,7 @@
                   },
                   {
                     "id": "9vFia7KAl5",
-                    "position": 107.2,
+                    "position": 94.9,
                     "connectedRight": true,
                     "handles": [
                       0.5,
@@ -5550,6 +5550,7 @@
   },
   "definitionVersion": "0.4.0",
   "revisionHistory": [
+    "v8KVMpuzEyk0Kt60",
     "61Hit6FPNsDL4tRG",
     "UDYn9mjtu2jCxHoq",
     "i3roSD_kR8rPiGWh",
