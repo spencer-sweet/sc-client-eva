@@ -485,10 +485,18 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
       translate?: { unit: 'px' | '%'; x?: number; y?: number; z?: number };
       /** When false, omit Blur — Webflow keeps ownership of filter (e.g. #how-*). Default true. */
       blur?: boolean;
+      /**
+       * Label for the 0..1 fade knob. The PROP KEY stays `opacity` whatever this says —
+       * renaming it would orphan every keyframe in theatre-state. The #how-* cards call
+       * it "Fade" because their value is written as a `--card-fade` custom property
+       * rather than CSS opacity, which would kill the card's backdrop-filter (see
+       * FadeMode in webflow-dom.ts).
+       */
+      fadeLabel?: string;
     } = {},
   ) => {
     const base = {
-      opacity: t.number(1, { range: [0, 1], label: 'Opacity' }),
+      opacity: t.number(1, { range: [0, 1], label: opts.fadeLabel ?? 'Opacity' }),
       scale: t.number(1, { range: [0, 4], label: 'Scale' }),
       translate: webflowTranslate(opts.translate ?? { unit: 'px' }),
     };
@@ -504,11 +512,11 @@ export function bindTheatre(sheet: ISheet, bloom: UnrealBloomPass): TheatreBindi
     {
       textInfra: webflowLayer('#text-infra'),
       indicatorScroll: webflowLayer('#indicator-scroll', { translate: { unit: '%', x: -50 } }),
-      how1: webflowLayer('#how-1', { blur: false }),
-      how2: webflowLayer('#how-2', { blur: false }),
-      how3: webflowLayer('#how-3', { blur: false }),
-      how4: webflowLayer('#how-4', { blur: false }),
-      how5: webflowLayer('#how-5', { blur: false }),
+      how1: webflowLayer('#how-1', { blur: false, fadeLabel: 'Fade' }),
+      how2: webflowLayer('#how-2', { blur: false, fadeLabel: 'Fade' }),
+      how3: webflowLayer('#how-3', { blur: false, fadeLabel: 'Fade' }),
+      how4: webflowLayer('#how-4', { blur: false, fadeLabel: 'Fade' }),
+      how5: webflowLayer('#how-5', { blur: false, fadeLabel: 'Fade' }),
     },
     (o) =>
       o.onValuesChange((v) =>
