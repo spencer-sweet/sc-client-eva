@@ -125,7 +125,7 @@ export function createRenderer(): Renderer {
     antialias: false,
     stencil: true,
     alpha: true,
-    powerPreference: quality.tier === 'low' ? 'low-power' : 'high-performance',
+    powerPreference: quality.tier === 'high' ? 'high-performance' : 'low-power',
   });
   renderer.setClearAlpha(0);
   const basePixelRatio = Math.min(devicePixelRatio, quality.pixelRatioCap);
@@ -139,7 +139,8 @@ export function createRenderer(): Renderer {
   // it only cost VRAM and a startup stall.
 
   // EffectComposer's default target has no stencil buffer, and the window cutouts need
-  // one, so supply our own.
+  // one, so supply our own. `samples` is geometric MSAA (mid/high) — canvas antialias
+  // stays off because RenderPass never draws to the backbuffer.
   const drawSize = renderer.getDrawingBufferSize(new THREE.Vector2());
   const composerTarget = new THREE.WebGLRenderTarget(drawSize.x, drawSize.y, {
     type: THREE.HalfFloatType,
@@ -147,6 +148,7 @@ export function createRenderer(): Renderer {
     magFilter: THREE.LinearFilter,
     depthBuffer: true,
     stencilBuffer: true,
+    samples: quality.msaaSamples,
   });
   const composer = new EffectComposer(renderer, composerTarget);
   const renderPass = new RenderPass(scene, camera);
@@ -171,7 +173,7 @@ export function createRenderer(): Renderer {
     composerEnabled: true,
     renderPassEnabled: true,
     bloomEnabled: true,
-    antialiasEnabled: quality.tier === 'high',
+    antialiasEnabled: quality.antialias,
     outputPassEnabled: true,
   };
 

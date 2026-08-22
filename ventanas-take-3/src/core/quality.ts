@@ -7,11 +7,11 @@
  * `#define`s (so the cost disappears at compile time rather than being branched over
  * per fragment), and the tube takes its segment counts.
  *
- * Override with `?quality=low` / `?quality=high` — the low tier is the only way to
- * see on a desktop what a phone actually renders.
+ * Override with `?quality=low` / `?quality=mid` / `?quality=high` — low/mid are the
+ * only way to preview phone-tier rendering on a desktop (`mid` = low shaders + MSAA/SMAA).
  */
 
-export type QualityTier = 'low' | 'high';
+export type QualityTier = 'low' | 'mid' | 'high';
 
 export interface VortexQuality {
   /**
@@ -66,12 +66,19 @@ export interface Quality {
   bloomResolutionScale: number;
   /** Multiplier on the authored starfield count — 14k additive sprites is a lot of fill. */
   starCountScale: number;
+  /** Default SMAAPass on/off (Post FX panel can still toggle it). */
+  antialias: boolean;
+  /**
+   * MSAA sample count on the EffectComposer render targets (0 = off). Geometric AA
+   * for thin glass silhouettes — SMAA alone cannot clean those at 1× DPR.
+   */
+  msaaSamples: number;
   vortex: VortexQuality;
 }
 
 function detectTier(): QualityTier {
   const forced = new URLSearchParams(location.search).get('quality');
-  if (forced === 'low' || forced === 'high') return forced;
+  if (forced === 'low' || forced === 'mid' || forced === 'high') return forced;
 
   const nav = navigator as Navigator & { deviceMemory?: number };
   const touchFirst = matchMedia('(pointer: coarse)').matches;
@@ -85,36 +92,54 @@ function detectTier(): QualityTier {
   return fewCores || lowMemory ? 'low' : 'high';
 }
 
+const LOW_VORTEX: VortexQuality = {
+  // Same main field as the high tier — see fbmOctaves. The saving comes from the
+  // warp and hue fields instead, which is a far better trade: 7 noise samples per
+  // fragment against the high tier's 20, for a tunnel that reads the same.
+  fbmOctaves: 4,
+  warpOctaves: 1,
+  warpSamples: 2,
+  hueOctaves: 1,
+  singleSided: true,
+  // Tessellation is NOT tiered any more. The whole tube is under 2k triangles at
+  // the high-tier counts, which is nothing against a fullscreen fragment shader —
+  // but `ang` comes from vUv.x, interpolated linearly across each quad, so a coarse
+  // ring count put visible angular kinks in every filament. Free quality.
+  tubeSegments: 72,
+  tubeSegmentsMin: 24,
+  tubeSegmentSpacing: 2.5,
+  radialSegments: 12,
+  wireRings: 20,
+  wireSpokes: 6,
+};
+
 const TIERS: Record<QualityTier, Omit<Quality, 'tier'>> = {
   low: {
     pixelRatioCap: 1,
     bloomResolutionScale: 0.5,
     starCountScale: 0.45,
-    vortex: {
-      // Same main field as the high tier — see fbmOctaves. The saving comes from the
-      // warp and hue fields instead, which is a far better trade: 7 noise samples per
-      // fragment against the high tier's 20, for a tunnel that reads the same.
-      fbmOctaves: 4,
-      warpOctaves: 1,
-      warpSamples: 2,
-      hueOctaves: 1,
-      singleSided: true,
-      // Tessellation is NOT tiered any more. The whole tube is under 2k triangles at
-      // the high-tier counts, which is nothing against a fullscreen fragment shader —
-      // but `ang` comes from vUv.x, interpolated linearly across each quad, so a coarse
-      // ring count put visible angular kinks in every filament. Free quality.
-      tubeSegments: 72,
-      tubeSegmentsMin: 24,
-      tubeSegmentSpacing: 2.5,
-      radialSegments: 12,
-      wireRings: 20,
-      wireSpokes: 6,
-    },
+    antialias: false,
+    msaaSamples: 0,
+    vortex: LOW_VORTEX,
+  },
+  /**
+   * Phone-cost shaders/stars/bloom, but real AA: 4× MSAA on the composer target,
+   * SMAA cleanup, and a 1.5 DPR cap so thin glass edges aren’t 1× stair-steps.
+   */
+  mid: {
+    pixelRatioCap: 1.5,
+    bloomResolutionScale: 0.5,
+    starCountScale: 0.45,
+    antialias: true,
+    msaaSamples: 2,
+    vortex: LOW_VORTEX,
   },
   high: {
     pixelRatioCap: 2,
     bloomResolutionScale: 1,
     starCountScale: 1,
+    antialias: true,
+    msaaSamples: 4,
     vortex: {
       fbmOctaves: 4,
       warpOctaves: 4,
@@ -135,4 +160,5 @@ const tier = detectTier();
 
 export const quality: Quality = { tier, ...TIERS[tier] };
 
-export const isLowQuality = tier === 'low';
+/** True for the cheap scene tiers (low + mid) — not whether SMAA is on. */
+export const isLowQuality = tier === 'low' || tier === 'mid';
